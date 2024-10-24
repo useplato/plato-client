@@ -14,7 +14,7 @@ setup(
     description="Plato Python Client",  # A short description
     long_description=open("../README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/useplato/plato-python-client",  # Project's URL (if applicable)
+    url="https://github.com/useplato/plato-client",  # Project's URL (if applicable)
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
