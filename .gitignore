@@ -54,3 +54,6 @@ markdown.md
 screenshots/
 
 *.egg-info/
+
+python/dist
+python/build

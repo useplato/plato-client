@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "potato-python-client"
+name = "plato-python-client"
 version = "0.1.0"
 description = ""
 authors = ["Robert Farlow <robfarlow@gmail.com>"]
