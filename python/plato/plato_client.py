@@ -6,8 +6,10 @@ import requests
 from functools import wraps
 from datetime import datetime
 
-BASE_URL = "https://api.plato.so"
-# BASE_URL = "http://api.localhost:25565"
+# BASE_URL = "https://api.plato.so"
+# BROWSER_BASE_URL = "https://chrome.plato.so"
+BASE_URL = "http://api.localhost:25565"
+BROWSER_BASE_URL = "ws://chrome.localhost:25565"
 
 
 class PlatoConfig(BaseModel):
@@ -20,8 +22,9 @@ class PlatoSession:
     self.config = config
     self.session_id = None
 
-  def make_request(self, method: str, path: str, **kwargs):
-    pass
+  @property
+  def browser_ws_url(self):
+    return f"{BROWSER_BASE_URL}/socket.io/?session_id={self.session_id}"
 
   def start(self) -> 'PlatoSession':
     # get a browser connection
