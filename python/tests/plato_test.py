@@ -7,19 +7,15 @@ async def test_plato_client_start_session():
   session = PlatoClient.start_session(config)
 
   try:
-    session.navigate("https://www.amazon.com")
-    print("navigated")
-    session.act("click the search bar")
-    print("clicked the search bar")
-    session.type("chocolate soylent [Enter]")
-    print("typed in the search bar")
-    session.act("click the first result")
-    print("clicked the first result")
-    session.act("click add to cart")
-    print("clicked add to cart")
+    print(session.navigate("https://www.amazon.com"))
+    print(session.click("the search bar"))
+    print(session.type("chocolate soylent [Enter]"))
+    print(session.click("the first result"))
+    print(session.click("the \"add to cart\" button"))
 
   except Exception as e:
-    print(e)
+    import traceback
+    traceback.print_exc()
   finally:
     session.end()
 
@@ -34,7 +30,7 @@ async def test_plato_client_start_session():
 #       page.goto("https://www.amazon.com")
 #       page.screenshot(path="screenshot.png")
 #   except Exception as e:
-#     print(e)
+#     print('ERROR',e)
 #   finally:
 #     session.end()
 

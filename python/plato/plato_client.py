@@ -1,15 +1,34 @@
 
+import enum
 from typing import Optional
 from urllib import response
+import uuid
 from pydantic import BaseModel
 import requests
 from functools import wraps
 from datetime import datetime
 
-BASE_URL = "https://api.plato.so"
-BROWSER_BASE_URL = "https://chrome.plato.so"
-# BASE_URL = "http://api.localhost:25565"
-# BROWSER_BASE_URL = "ws://localhost:25565"
+# BASE_URL = "https://api.plato.so"
+# BROWSER_BASE_URL = "https://chrome.plato.so"
+BASE_URL = "http://api.localhost:25565"
+BROWSER_BASE_URL = "ws://localhost:25565"
+
+
+class ParamType(str, enum.Enum):
+  TEXT = 'text'
+  NUMBER = 'number'
+  BOOLEAN = 'boolean'
+  OBJECT = 'object'
+  DATE = 'date'
+  IMAGE = 'image'
+
+class ExtractParameter(BaseModel):
+  name: str
+  description: Optional[str] = ""
+  type: ParamType
+  isArray: bool = False
+  elementHint: Optional[dict] = None
+  subParameters: Optional[list['ExtractParameter']]
 
 
 class PlatoConfig(BaseModel):
@@ -46,73 +65,58 @@ class PlatoSession:
       json={"session_id": self.session_id}
     )
     response.raise_for_status()
+    return response.json()
 
   def navigate(self, url: str):
-    action = {
-      "id": f'{int(datetime.now().timestamp() * 1000)}-navigate',
-      "type": "navigate",
-      "parameter": {
-        "type": "navigate",
-        "name": url,
-        "isArray": False
-      }
-    }
     response = requests.post(
-      f"{self.config.base_url}/run-action",
+      f"{self.config.base_url}/navigate",
       headers={"Authorization": f"Bearer {self.config.api_key}"},
       json={
         "session_id": self.session_id,
-        "action": action
+        "url": url
       }
     )
     response.raise_for_status()
     return response.json()
 
-  def act(self, action: str, **kwargs):
-    action = {
-      "id": f'{int(datetime.now().timestamp() * 1000)}-act',
-      "type": "act",
-      "parameter": {
-        "type": "act",
-        "name": action,
-        "isArray": False
-      }
-    }
+  def click(self, description: str):
     response = requests.post(
-      f"{self.config.base_url}/run-action",
+      f"{self.config.base_url}/click",
       headers={"Authorization": f"Bearer {self.config.api_key}"},
       json={
         "session_id": self.session_id,
-        "action": action
-      },
-      timeout=360
+        "description": description
+      }
     )
     response.raise_for_status()
     return response.json()
+
 
   def type(self, text: str):
-    action = {
-      "id": f'{int(datetime.now().timestamp() * 1000)}-input',
-      "type": "action",
-      "parameter": {
-        "type": "input",
-        "name": text,
-        "isArray": False
-      }
-    }
     response = requests.post(
-      f"{self.config.base_url}/run-action",
+      f"{self.config.base_url}/type",
       headers={"Authorization": f"Bearer {self.config.api_key}"},
       json={
         "session_id": self.session_id,
-        "action": action
-      },
-      timeout=60
+        "text": text
+      }
     )
     response.raise_for_status()
     return response.json()
-  def extract(self, url: str, **kwargs):
-    pass
+
+  def extract(self, description: str, schema: ExtractParameter):
+    response = requests.post(
+      f"{self.config.base_url}/extract",
+      headers={"Authorization": f"Bearer {self.config.api_key}"},
+      json={
+        "session_id": self.session_id,
+        "description": description,
+        "schema": schema.model_dump()
+      }
+    )
+    response.raise_for_status()
+    return response.json()
+
 
   def monitor(self, url: str, **kwargs):
     pass
