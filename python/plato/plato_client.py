@@ -27,9 +27,10 @@ class ExtractParameter(BaseModel):
 
 
 class Plato:
-  def __init__(self, api_key: str, base_url: Optional[str] = BASE_URL):
+  def __init__(self, api_key: str, base_url: Optional[str] = BASE_URL, cookies: Optional[dict] = None):
     self.api_key = api_key
     self.base_url = base_url
+    self.cookies = cookies
 
   class PlatoSession:
     def __init__(self, plato: 'Plato'):
@@ -58,7 +59,9 @@ class Plato:
       response = requests.post(
         f"{self.api_url}/start-session",
         headers={"Authorization": f"Bearer {self.plato.api_key}"},
-        json={}
+        json={
+          "cookies": self.plato.cookies
+        }
       )
       response.raise_for_status()
       self.session_id = response.json()["session_id"]
