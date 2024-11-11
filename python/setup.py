@@ -6,9 +6,12 @@ os.system("rm -rf ./dist")
 
 setup(
     name="plato-cli",  # Your package name
-    version="0.1.7",  # Version number
+    version="0.1.8",  # Version number
     packages=find_packages(),  # Finds and includes all packages
-    install_requires=[],  # External dependencies (if any)
+    install_requires=[
+      "pydantic",
+      "requests"
+    ],
     author="Rob Farlow",  # Your name
     author_email="rob@plato.so",  # Your email
     description="Plato Python Client",  # A short description
