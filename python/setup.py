@@ -6,7 +6,7 @@ os.system("rm -rf ./dist")
 
 setup(
     name="plato-cli",  # Your package name
-    version="0.1.6",  # Version number
+    version="0.1.7",  # Version number
     packages=find_packages(),  # Finds and includes all packages
     install_requires=[],  # External dependencies (if any)
     author="Rob Farlow",  # Your name
