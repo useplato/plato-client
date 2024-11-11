@@ -1,5 +1,5 @@
 import asyncio
-from plato.plato_client import Plato
+from plato import Plato
 
 plato = Plato(api_key="22493513-f909-4fef-8aaf-8af2c46dcf1c", base_url="http://localhost:25565")
 
