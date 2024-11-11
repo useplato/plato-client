@@ -77,7 +77,7 @@ class Plato:
 
     def navigate(self, url: str):
       response = requests.post(
-        f"{self.base_url}/navigate",
+        f"{self.plato.base_url}/navigate",
         headers={"Authorization": f"Bearer {self.plato.api_key}"},
         json={
           "session_id": self.session_id,
