@@ -6,7 +6,7 @@ os.system("rm -rf ./dist")
 
 setup(
     name="plato-cli",  # Your package name
-    version="0.1.8",  # Version number
+    version="0.1.9",  # Version number
     packages=find_packages(),  # Finds and includes all packages
     install_requires=[
       "pydantic",
