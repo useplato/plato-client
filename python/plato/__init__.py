@@ -1,4 +1,4 @@
-from .plato_client import PlatoClient
+from .plato_client import Plato
 
-__all__ = ['PlatoClient']
-__version__ = '0.1.4'
+__all__ = ['Plato']
+__version__ = '0.1.5'

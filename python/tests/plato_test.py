@@ -1,10 +1,10 @@
 import asyncio
-from plato.plato_client import PlatoClient, PlatoConfig
+from plato.plato_client import Plato
 
-config = PlatoConfig(api_key="22493513-f909-4fef-8aaf-8af2c46dcf1c", base_url="http://localhost:25565")
+plato = Plato(api_key="22493513-f909-4fef-8aaf-8af2c46dcf1c", base_url="http://localhost:25565")
 
 async def test_plato_client_start_session():
-  session = PlatoClient.start_session(config)
+  session = plato.start_session()
 
   try:
     print(session.navigate("https://www.amazon.com"))
@@ -21,7 +21,7 @@ async def test_plato_client_start_session():
 
 
 async def test_plato_client_task():
-  session = PlatoClient.start_session(config)
+  session = plato.start_session()
 
   try:
     print(session.task("add chocolate soylent to cart", "https://www.amazon.com"))
@@ -35,10 +35,10 @@ async def test_plato_client_task():
 
 # def test_playwright():
 #   from playwright.sync_api import sync_playwright
-#   session = PlatoClient.start_session(PlatoConfig(api_key="22493513-f909-4fef-8aaf-8af2c46dcf1c"))
+#   session = plato.start_session()
 #   try:
 #     with sync_playwright() as p:
-#       browser = p.chromium.connect_over_cdp(session.browser_ws_url)
+#       browser = p.chromium.connect_over_cdp(session.chrome_ws_url)
 #       page = browser.new_page()
 #       page.goto("https://www.amazon.com")
 #       page.screenshot(path="screenshot.png")
