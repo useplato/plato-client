@@ -1,9 +1,9 @@
 import asyncio
 from plato.plato_client import PlatoClient, PlatoConfig
 
+config = PlatoConfig(api_key="22493513-f909-4fef-8aaf-8af2c46dcf1c", base_url="http://localhost:25565")
 
 async def test_plato_client_start_session():
-  config = PlatoConfig(api_key="22493513-f909-4fef-8aaf-8af2c46dcf1c")
   session = PlatoClient.start_session(config)
 
   try:
@@ -12,6 +12,19 @@ async def test_plato_client_start_session():
     print(session.type("chocolate soylent [Enter]"))
     print(session.click("the first result"))
     print(session.click("the \"add to cart\" button"))
+
+  except Exception as e:
+    import traceback
+    traceback.print_exc()
+  finally:
+    session.end()
+
+
+async def test_plato_client_task():
+  session = PlatoClient.start_session(config)
+
+  try:
+    print(session.task("add chocolate soylent to cart", "https://www.amazon.com"))
 
   except Exception as e:
     import traceback
@@ -37,5 +50,5 @@ async def test_plato_client_start_session():
 
 
 if __name__ == "__main__":
-  asyncio.run(test_plato_client_start_session())
+  asyncio.run(test_plato_client_task())
   # test_playwright()
