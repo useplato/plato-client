@@ -16,6 +16,8 @@ requests = "^2.32.3"
 
 [tool.poetry.group.dev.dependencies]
 playwright = "^1.48.0"
+ruff = "^0.7.3"
+pre-commit = "^4.0.1"
 
 [build-system]
 requires = ["poetry-core"]
