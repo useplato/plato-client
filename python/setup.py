@@ -1,17 +1,16 @@
-from setuptools import setup, find_packages
+"""This script sets up the Plato Python Client package using setuptools."""
 
 import os
-os.system("rm -rf ./dist")
 
+from setuptools import find_packages, setup
+
+os.system("rm -rf ./dist")
 
 setup(
     name="plato-cli",  # Your package name
-    version="0.1.10",  # Version number
+    version="0.1.11",  # Version number
     packages=find_packages(),  # Finds and includes all packages
-    install_requires=[
-      "pydantic",
-      "requests"
-    ],
+    install_requires=["pydantic", "requests"],
     author="Rob Farlow",  # Your name
     author_email="rob@plato.so",  # Your email
     description="Plato Python Client",  # A short description

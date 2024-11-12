@@ -46,7 +46,7 @@ next-env.d.ts
 # pycache
 *.pyc
 
-/venv
+venv
 
 
 markdown.md
