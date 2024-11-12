@@ -2,11 +2,19 @@
 
 import asyncio
 
+from pydantic import BaseModel
+
 from plato import Plato
 
 plato = Plato(
     api_key="22493513-f909-4fef-8aaf-8af2c46dcf1c", base_url="http://localhost:25565"
 )
+
+class Company(BaseModel):
+    name: str
+    description: str
+class Companies(BaseModel):
+    companies: list[Company]
 
 
 async def test_plato_client_start_session():
@@ -22,7 +30,40 @@ async def test_plato_client_start_session():
 
     except Exception:
         import traceback
+        traceback.print_exc()
+    finally:
+        session.end()
 
+
+async def test_plato_client_extract():
+    """Test the Plato client by starting a session and performing a series of actions on a website, such as navigating, clicking, and typing."""
+    session = plato.start_session()
+
+    try:
+        print(session.navigate("https://ycombinator.com/companies"))
+        companies = session.extract(description="the companies on the page", response_format=Companies)
+        for company in companies.companies:
+            print(company.name, company.description)
+
+    except Exception:
+        import traceback
+        traceback.print_exc()
+    finally:
+        session.end()
+
+
+async def test_plato_client_task_extract():
+    """Test the Plato client by starting a session and performing a series of actions on a website, such as navigating, clicking, and typing."""
+    session = plato.start_session()
+
+    try:
+        print(session.navigate("https://ycombinator.com/companies"))
+        companies = session.task(task="extract the companies on the page", response_format=Companies)
+        for company in companies.companies:
+            print(company.name, company.description)
+
+    except Exception:
+        import traceback
         traceback.print_exc()
     finally:
         session.end()
@@ -41,7 +82,6 @@ async def test_plato_client_task():
 
     except Exception:
         import traceback
-
         traceback.print_exc()
     finally:
         session.end()
@@ -63,5 +103,5 @@ async def test_plato_client_task():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_plato_client_task())
+    asyncio.run(test_plato_client_task_extract())
     # test_playwright()

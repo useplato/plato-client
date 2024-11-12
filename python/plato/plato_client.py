@@ -1,13 +1,17 @@
 """This module provides classes and methods for interacting with the Plato API."""
 
 import enum
-from typing import Optional
+from typing import Optional, TypeVar
 from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel
 
 BASE_URL = "https://plato.so"
+
+T = TypeVar('T', bound=BaseModel)
+
+_type = type
 
 
 class ParamType(str, enum.Enum):
@@ -108,7 +112,7 @@ class Plato:
             :param url: The URL to navigate to.
             """
             response = requests.post(
-                f"{self.plato.base_url}/navigate",
+                f"{self.api_url}/navigate",
                 headers={"Authorization": f"Bearer {self.plato.api_key}"},
                 json={"session_id": self.session_id, "url": url},
             )
@@ -141,29 +145,35 @@ class Plato:
             response.raise_for_status()
             return response.json()
 
-        def extract(self, description: str, schema: ExtractParameter):
-            """Extract data based on a description and schema.
+        def extract(self, description: str, response_format: _type[T]) -> T:
+            """Extract data based on a description and response format.
 
             :param description: Description of the data to extract.
-            :param schema: Schema defining the structure of the data.
+            :param response_format: A Pydantic model class defining the structure of the data to be extracted.
+            :return: An instance of the provided Pydantic model containing the extracted data.
+            :type T: Type parameter that extends BaseModel
             """
             response = requests.post(
-                f"{self.base_url}/extract",
+                f"{self.api_url}/extract",
                 headers={"Authorization": f"Bearer {self.plato.api_key}"},
                 json={
                     "session_id": self.session_id,
                     "description": description,
-                    "schema": schema.model_dump(),
+                    "response_format": response_format.model_json_schema(),
                 },
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            return response_format(**data)
 
-        def task(self, task: str, start_url: Optional[str] = None):
+        def task(self, task: str, start_url: Optional[str] = None, response_format: Optional[_type[T]] = None) -> T:
             """Execute a task within the session.
 
             :param task: The task to execute.
             :param start_url: Optional starting URL for the task.
+            :param response_format: Optional Pydantic model class defining the structure of the data to be extracted.
+            :return: An instance of the provided Pydantic model containing the extracted data.
+            :type T: Type parameter that extends BaseModel
             """
             response = requests.post(
                 f"{self.api_url}/task",
@@ -172,10 +182,12 @@ class Plato:
                     "session_id": self.session_id,
                     "task": task,
                     "start_url": start_url,
+                    "response_format": response_format.model_json_schema() if response_format else None,
                 },
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            return response_format(**data) if response_format else data
 
         def monitor(self, url: str, **kwargs):
             """Monitor a specified URL for changes.
