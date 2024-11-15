@@ -1,7 +1,14 @@
 {
   "name": "plato-cli",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "A client for the Plato API",
+  "keywords": [
+    "plato",
+    "web automation",
+    "browser automation",
+    "web scraping",
+    "structured data extraction"
+  ],
   "author": "Plato Technologies, Inc. <rob@plato.so>",
   "license": "MIT",
   "type": "module",
