@@ -13,29 +13,6 @@ T = TypeVar("T", bound=BaseModel)
 
 _type = type
 
-
-class ParamType(str, enum.Enum):
-    """Enumeration of possible parameter types for extraction."""
-
-    TEXT = "text"
-    NUMBER = "number"
-    BOOLEAN = "boolean"
-    OBJECT = "object"
-    DATE = "date"
-    IMAGE = "image"
-
-
-class ExtractParameter(BaseModel):
-    """Model representing a parameter to be extracted."""
-
-    name: str
-    description: Optional[str] = ""
-    type: ParamType
-    isArray: bool = False
-    elementHint: Optional[dict] = None
-    subParameters: Optional[list["ExtractParameter"]]
-
-
 class Plato:
     """Main class for interacting with the Plato API."""
 
