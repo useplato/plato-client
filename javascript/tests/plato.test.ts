@@ -5,17 +5,18 @@ import { z } from 'zod';
 
 jest.setTimeout(30000);
 
-const Company = z.object({
-  name: z.string(),
-  description: z.string()
-});
 
-const Companies = z.object({
-  companies: z.array(Company)
+const ResponseFormat = z.object({
+  companies: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    imgUrl: z.string(),
+    tags: z.array(z.string())
+  }))
 });
 
 describe('Plato Client Tests', async () => {
-  const plato = new Plato('22493513-f909-4fef-8aaf-8af2c46dcf1c', 'http://localhost:25565');
+  const plato = new Plato({ apiKey: '22493513-f909-4fef-8aaf-8af2c46dcf1c', baseUrl: 'http://localhost:25565' });
   let session = new PlatoSession(plato)
 
   beforeEach(async () => {
@@ -34,18 +35,20 @@ describe('Plato Client Tests', async () => {
 
   test('should extract companies from a page', async () => {
     await session.navigate('https://ycombinator.com/companies');
-    const companies = await session.extract('the companies on the page', { responseFormat: Companies });
+    const companies = await session.extract('the companies on the page', { responseFormat: ResponseFormat });
 
     console.log(companies);
-    // Add assertions based on expected outcomes
+    expect(Array.isArray(companies.companies)).toBe(true);
+    expect(companies.companies.length).toBe(20);
   });
 
   test('should perform a task and extract companies', async () => {
     await session.navigate('https://ycombinator.com/companies');
-    const companies = await session.task('extract the companies on the page', { responseFormat: Companies });
+    const companies = await session.task('extract the companies on the page', { responseFormat: ResponseFormat });
 
     console.log(companies);
-    // Add assertions based on expected outcomes
+    expect(Array.isArray(companies.companies)).toBe(true);
+    expect(companies.companies.length).toBe(20);
   });
 
   test('should perform a task to add item to cart', async () => {

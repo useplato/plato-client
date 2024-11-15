@@ -12,7 +12,7 @@ export default class Plato {
   baseUrl: string;
   cookies?: Record<string, any>;
 
-  constructor(apiKey: string, baseUrl: string = BASE_URL, cookies?: Record<string, any>) {
+  constructor({ apiKey, baseUrl = BASE_URL, cookies }: { apiKey: string, baseUrl?: string, cookies?: Record<string, any> }) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.cookies = cookies;
