@@ -54,7 +54,10 @@ class Plato:
         self.api_key = api_key
         self.base_url = base_url
         self.cookies = cookies
-        self.session = self.PlatoSession(self)
+
+    def start_session(self):
+        """Start a new session with the Plato API."""
+        return self.PlatoSession(self)
 
     class PlatoSession:
         """Handles a session with the Plato API."""
