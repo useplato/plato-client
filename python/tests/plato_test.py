@@ -1,5 +1,4 @@
 """This module contains tests for the Plato client, including session management and task execution."""
-
 import asyncio
 
 from plato import Plato
@@ -15,7 +14,6 @@ class Company(BaseModel):
 
     name: str
     description: str
-
 
 class Companies(BaseModel):
     """Model representing a list of companies."""
