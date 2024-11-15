@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 BASE_URL = "https://plato.so"
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
 
 _type = type
 
@@ -65,6 +65,15 @@ class Plato:
             """
             self.plato = plato
             self.session_id = None
+
+        def __enter__(self):
+            """Enter the runtime context related to this object."""
+            self.start()
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            """Exit the runtime context related to this object."""
+            self.end()
 
         @property
         def api_url(self):
@@ -166,7 +175,12 @@ class Plato:
             data = response.json()
             return response_format(**data)
 
-        def task(self, task: str, start_url: Optional[str] = None, response_format: Optional[_type[T]] = None) -> T:
+        def task(
+            self,
+            task: str,
+            start_url: Optional[str] = None,
+            response_format: Optional[_type[T]] = None,
+        ) -> T:
             """Execute a task within the session.
 
             :param task: The task to execute.
@@ -182,7 +196,9 @@ class Plato:
                     "session_id": self.session_id,
                     "task": task,
                     "start_url": start_url,
-                    "response_format": response_format.model_json_schema() if response_format else None,
+                    "response_format": response_format.model_json_schema()
+                    if response_format
+                    else None,
                 },
             )
             response.raise_for_status()
