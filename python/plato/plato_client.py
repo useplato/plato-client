@@ -54,6 +54,7 @@ class Plato:
         self.api_key = api_key
         self.base_url = base_url
         self.cookies = cookies
+        self.session = self.PlatoSession(self)
 
     class PlatoSession:
         """Handles a session with the Plato API."""
@@ -218,9 +219,3 @@ class Plato:
             :param job_id: The ID of the job to retrieve.
             """
             pass
-
-    def start_session(self) -> "PlatoSession":
-        """Start a new Plato session."""
-        session = self.PlatoSession(self)
-        session.start()
-        return session
