@@ -25,7 +25,7 @@ export default class Plato {
   }
 }
 
-class PlatoSession {
+export class PlatoSession {
   private plato: Plato;
   private sessionId: string | null = null;
 
@@ -100,8 +100,8 @@ class PlatoSession {
     return response.data;
   }
 
-  async extract<T>(description: string, schema: ZodSchema<T>): Promise<T> {
-    const jsonSchema = zodToJsonSchema(schema);
+  async extract<T>(description: string, { responseFormat }: { responseFormat: ZodSchema<T> }): Promise<T> {
+    const jsonSchema = zodToJsonSchema(responseFormat);
     const response: AxiosResponse = await axios.post(`${this.apiUrl}/extract`, {
       session_id: this.sessionId,
       description: description,
@@ -109,11 +109,11 @@ class PlatoSession {
     }, {
       headers: { Authorization: `Bearer ${this.plato.apiKey}` }
     });
-    return schema.parse(response.data);
+    return responseFormat.parse(response.data);
   }
 
-  async task<T>(task: string, startUrl?: string, schema?: ZodSchema<T>): Promise<T | any> {
-    const jsonSchema = schema ? zodToJsonSchema(schema) : undefined;
+  async task<T>(task: string, { startUrl, responseFormat }: { startUrl?: string, responseFormat?: ZodSchema<T> }): Promise<T | any> {
+    const jsonSchema = responseFormat ? zodToJsonSchema(responseFormat) : undefined;
     const response: AxiosResponse = await axios.post(`${this.apiUrl}/task`, {
       session_id: this.sessionId,
       task: task,
@@ -122,7 +122,7 @@ class PlatoSession {
     }, {
       headers: { Authorization: `Bearer ${this.plato.apiKey}` }
     });
-    return schema ? schema.parse(response.data) : response.data;
+    return responseFormat ? responseFormat.parse(response.data) : response.data;
   }
 
   monitor(url: string, ...args: any[]): void {

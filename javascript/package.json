@@ -1,14 +1,34 @@
 {
   "name": "plato-cli",
-  "module": "src/index.ts",
+  "version": "0.0.1",
+  "description": "A client for the Plato API",
+  "author": "Plato Technologies, Inc. <rob@plato.so>",
+  "license": "MIT",
   "type": "module",
+  "module": "./dist/index.js",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "import": "./dist/index.js",
+    "require": "./dist/index.cjs"
+  },
+  "scripts": {
+    "build": "bun build.ts"
+  },
+  "files": [
+    "dist"
+  ],
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/jest": "^29.5.14",
+    "bun-plugin-dts": "^0.3.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "axios": "^1.7.7"
+    "axios": "^1.7.7",
+    "zod-to-json-schema": "^3.23.5"
   }
 }
