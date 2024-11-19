@@ -16,7 +16,7 @@ const ResponseFormat = z.object({
 });
 
 describe('Plato Client Tests', async () => {
-  const plato = new Plato({ apiKey: '22493513-f909-4fef-8aaf-8af2c46dcf1c', baseUrl: 'http://localhost:25565' });
+  const plato = new Plato({ apiKey: 'dea0966d-3fc0-4fa2-a54e-6b24e8a6b0f9', baseUrl: 'http://localhost:25565' });
   let session = new PlatoSession(plato)
 
   beforeEach(async () => {

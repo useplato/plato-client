@@ -42,13 +42,13 @@ export class PlatoSession {
   private get chromeWsUrl(): string {
     const url = new URL(this.plato.baseUrl);
     const port = url.port ? `:${url.port}` : '';
-    return `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.hostname}${port}/ws?session_id=${this.sessionId}`;
+    return `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.hostname}${port}/ws?browserSessionId=${this.sessionId}`;
   }
 
   private get browserUrl(): string {
     const url = new URL(this.plato.baseUrl);
     const port = url.port ? `:${url.port}` : '';
-    return `${url.protocol}//browser.${url.hostname}${port}/plato?session_id=${this.sessionId}`;
+    return `${url.protocol}//browser.${url.hostname}${port}/plato?browserSessionId=${this.sessionId}`;
   }
 
   async start(): Promise<void> {

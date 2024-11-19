@@ -66,13 +66,13 @@ class Plato:
         def chrome_ws_url(self):
             """Construct the WebSocket URL for Chrome based on the base URL."""
             url = urlparse(self.plato.base_url)
-            return f"{'wss' if url.scheme == 'https' else 'ws'}://{url.netloc}/ws?session_id={self.session_id}"
+            return f"{'wss' if url.scheme == 'https' else 'ws'}://{url.netloc}/ws?browserSessionId={self.session_id}"
 
         @property
         def browser_url(self):
             """Construct the browser URL based on the base URL."""
             url = urlparse(self.plato.base_url)
-            return f"{url.scheme}://browser.{url.netloc}/plato?session_id={self.session_id}"
+            return f"{url.scheme}://browser.{url.netloc}/plato?browserSessionId={self.session_id}"
 
         def start(self):
             """Start a new session with the Plato API."""
