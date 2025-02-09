@@ -14,15 +14,42 @@ interface TestCase {
   outputSchema: z.ZodSchema;
 }
 
+interface PlatoInitOptions {
+  baseUrl?: string;
+}
+
 export default class Plato {
   apiKey: string;
   baseUrl: string;
   version: string;
 
-  constructor({ apiKey, baseUrl = BASE_URL, version = '1.0.0' }: { apiKey: string, baseUrl?: string, version?: string }) {
+  runBatchId: string;
+
+  constructor(apiKey: string, baseUrl = BASE_URL, version: string, runBatchId: string) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.version = version;
+    this.runBatchId = runBatchId;
+  }
+
+  static async init(apiKey: string, version: string, options: PlatoInitOptions = {}): Promise<Plato> {
+    const baseUrl = options.baseUrl || BASE_URL;
+    const response = await fetch(`${baseUrl}/api/runs/group`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to initialize Plato: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const plato = new Plato(apiKey, baseUrl, version, data.publicId);
+    plato.runBatchId = data.publicId;
+    return plato;
   }
 
   async startSimulationSession(testCase: TestCase, options = {}): Promise<PlatoSession> {
@@ -45,7 +72,7 @@ export class PlatoSession {
   }
 
   static async start(plato: Plato, testCase: TestCase): Promise<PlatoSession> {
-    const response = await fetch(`${plato.baseUrl}/api/runs/from-test-case-descriptor`, {
+    const response = await fetch(`${plato.baseUrl}/api/runs/group/${plato.runBatchId}/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
