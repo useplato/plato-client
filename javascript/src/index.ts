@@ -1,7 +1,7 @@
 /** This module provides classes and methods for interacting with the Plato API. */
 
 import { URL } from 'url';
-import { ZodSchema } from 'zod';
+import { ZodBigInt, ZodSchema } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
 
@@ -92,7 +92,27 @@ export class PlatoSession {
     }
 
     const data = await response.json();
-    const session = new PlatoSession(plato, testCase, data.cdp_url, data.session_id);
+
+    const sessionId = data.session_id;
+    let cdpUrl;
+
+    // poll /api/runs/{session_id} until it has a cdp url. max timeout of 120s
+    const timeoutAt = Date.now() + 120000;
+    while (Date.now() < timeoutAt) {
+      const response = await fetch(`${plato.baseUrl}/api/runs/${sessionId}`);
+      const data = await response.json();
+      if (data.cdpUrl) {
+        cdpUrl = data.cdpUrl;
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    if (!cdpUrl) {
+      throw new Error('Failed to start browser session');
+    }
+
+    const session = new PlatoSession(plato, testCase, cdpUrl, sessionId);
     return session;
   }
 
