@@ -197,8 +197,8 @@ export class PlatoSession {
     const sessionId = data.session_id;
     let cdpUrl;
 
-    // poll /api/runs/{session_id} until it has a cdp url. max timeout of 120s
-    const timeoutAt = Date.now() + 120000;
+    // poll /api/runs/{session_id} until it has a cdp url. max timeout of 10m
+    const timeoutAt = Date.now() + 600000;
     while (Date.now() < timeoutAt) {
       const response = await fetch(`${plato.baseUrl}/api/runs/${sessionId}`);
       const data = await response.json();
