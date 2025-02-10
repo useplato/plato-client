@@ -135,6 +135,9 @@ export default class Plato {
 
     const response = await fetch(`${baseUrl}/api/runs/group`, {
       method: 'POST',
+      body: JSON.stringify({
+        name: evaluator.name,
+      }),
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey
@@ -203,7 +206,7 @@ export class PlatoSession {
         cdpUrl = data.cdpUrl;
         break;
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     if (!cdpUrl) {
