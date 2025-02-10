@@ -1,7 +1,4 @@
 /** This module provides classes and methods for interacting with the Plato API. */
-
-import { URL } from 'url';
-import { ZodBigInt, ZodSchema } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
 
@@ -10,30 +7,132 @@ const BASE_URL = "https://plato.so";
 interface TestCase {
   name: string;
   prompt: string;
-  startUrl: string;
-  outputSchema: z.ZodSchema;
+  startUrl?: string;
+  outputSchema?: z.ZodSchema;
+  [key: string]: any;
 }
-
 interface PlatoInitOptions {
   baseUrl?: string;
+  apiKey?: string;
+}
+
+interface Evaluator {
+  data: TestCase[];
+  task: (input: TestCase, simulatorSession: PlatoSession) => Promise<any>;
+  customScores: ((args: {input: TestCase, output: any, expected: any}) => Promise<number>)[];
+  name: string;
+  trialCount?: number;
+  timeout?: number;
+  maxConcurrency?: number;
+}
+
+interface EvalSummary {
+  total: number;
+  success: number;
+  failure: number;
+  score: number;
+}
+
+interface EvalResult {
+  summary: EvalSummary;
+  results: any[];
 }
 
 export default class Plato {
   apiKey: string;
   baseUrl: string;
-  version: string;
-
+  name: string;
   runBatchId: string;
+  evaluator: Evaluator;
+  maxConcurrency: number;
+  trialCount: number;
+  timeout: number;
 
-  constructor(apiKey: string, baseUrl = BASE_URL, version: string, runBatchId: string) {
+  constructor(apiKey: string, baseUrl = BASE_URL, name: string, runBatchId: string, evaluator: Evaluator) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
-    this.version = version;
+    this.name = name;
     this.runBatchId = runBatchId;
+    this.evaluator = evaluator;
+
+    this.maxConcurrency = evaluator.maxConcurrency || 15;
+    this.trialCount = evaluator.trialCount || 1;
+    this.timeout = evaluator.timeout || 600000;
   }
 
-  static async init(apiKey: string, version: string, options: PlatoInitOptions = {}): Promise<Plato> {
+  async _runTask(input: TestCase): Promise<any> {
+    const simulatorSession = await PlatoSession.start(this, input);
+    try {
+      const output = await this.evaluator.task(input, simulatorSession);
+      const customScores = await Promise.all((this.evaluator.customScores ||[]).map(score => score({input, output, expected: input.expected})));
+      return { input, output, customScores };
+    } finally {
+      await simulatorSession.close();
+    }
+  }
+
+  async run(): Promise<EvalResult> {
+    const results: any[] = [];
+    const tasks = this.evaluator.data.flatMap(input =>
+      Array(this.trialCount).fill(input)
+    );
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Evaluation timeout')), this.timeout);
+    });
+
+    try {
+      const queue = [...tasks];
+
+      const processTask = async () => {
+        while (queue.length > 0) {
+          const input = queue.shift()!;
+          try {
+            const result = await this._runTask(input);
+            results.push(result);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      };
+
+      await Promise.race([
+        Promise.all([
+          ...Array(Math.min(this.maxConcurrency, tasks.length))
+            .fill(null)
+            .map(() => processTask())
+        ]),
+        timeoutPromise
+      ]);
+
+      const summary: EvalSummary = {
+        total: results.length,
+        success: results.filter(r => r.score > 0).length,
+        failure: results.filter(r => r.score <= 0).length,
+        score: results.reduce((acc, r) => acc + r.score, 0) / results.length
+      };
+
+      return {
+        summary,
+        results
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Evaluation timeout') {
+        throw new Error(`Evaluation timed out after ${this.timeout}ms`);
+      }
+      throw error;
+    }
+  }
+
+
+  static async Eval(name: string, evaluator: Evaluator, options: PlatoInitOptions = {}) {
     const baseUrl = options.baseUrl || BASE_URL;
+    const apiKey = options.apiKey || process.env.PLATO_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('PLATO_API_KEY is not set');
+    }
+
     const response = await fetch(`${baseUrl}/api/runs/group`, {
       method: 'POST',
       headers: {
@@ -47,15 +146,14 @@ export default class Plato {
     }
 
     const data = await response.json();
-    const plato = new Plato(apiKey, baseUrl, version, data.publicId);
-    plato.runBatchId = data.publicId;
-    return plato;
+
+    const plato = new Plato(apiKey, baseUrl, name, data.publicId, evaluator);
+
+    return plato.run();
   }
 
-  async startSimulationSession(testCase: TestCase, options = {}): Promise<PlatoSession> {
-    const session = await PlatoSession.start(this, testCase);
-    return session;
-  }
+
+
 }
 
 export class PlatoSession {
@@ -79,10 +177,10 @@ export class PlatoSession {
         'x-api-key': plato.apiKey
       },
       body: JSON.stringify({
-        version: plato.version,
+        version: plato.name,
         testCase: {
           ...testCase,
-          outputSchema: zodToJsonSchema(testCase.outputSchema)
+          outputSchema: testCase.outputSchema ? zodToJsonSchema(testCase.outputSchema) : undefined
         }
       })
     });
@@ -114,6 +212,10 @@ export class PlatoSession {
 
     const session = new PlatoSession(plato, testCase, cdpUrl, sessionId);
     return session;
+  }
+
+  async close(): Promise<void> {
+
   }
 
   async log(message: string): Promise<void> {
