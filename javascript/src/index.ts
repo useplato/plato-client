@@ -57,7 +57,7 @@ export default class Plato {
 
     this.maxConcurrency = evaluator.maxConcurrency || 15;
     this.trialCount = evaluator.trialCount || 1;
-    this.timeout = evaluator.timeout || 600000;
+    this.timeout = evaluator.timeout || 1800000;
   }
 
   async _runTask(input: TestCase): Promise<any> {
@@ -67,7 +67,7 @@ export default class Plato {
       const customScores = await Promise.all((this.evaluator.customScores ||[]).map(score => score({input, output, expected: input.expected})));
       return { input, output, customScores };
     } finally {
-      await simulatorSession.close();
+      await simulatorSession.end();
     }
   }
 
@@ -202,7 +202,7 @@ export class PlatoSession {
     while (Date.now() < timeoutAt) {
       const response = await fetch(`${plato.baseUrl}/api/runs/${sessionId}`);
       const data = await response.json();
-      if (data.cdpUrl) {
+      if (data.cdpUrl || !['run_queued', 'run_started'].includes(data.status)) {
         cdpUrl = data.cdpUrl;
         break;
       }
@@ -210,6 +210,7 @@ export class PlatoSession {
     }
 
     if (!cdpUrl) {
+      await PlatoSession.terminate(plato, sessionId);
       throw new Error('Failed to start browser session');
     }
 
@@ -217,7 +218,20 @@ export class PlatoSession {
     return session;
   }
 
-  async close(): Promise<void> {
+  static async terminate(plato: Plato, sessionId: string): Promise<void> {
+    try {
+      await fetch(`${plato.baseUrl}/api/runs/${sessionId}/terminate`, {
+        method: 'POST',
+        headers: {
+            'x-api-key': plato.apiKey
+          }
+        });
+    } catch (error) {
+      console.warn('Error terminating session', error);
+    }
+  }
+
+  async end(): Promise<void> {
 
   }
 
