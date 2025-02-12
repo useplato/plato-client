@@ -18,7 +18,7 @@ interface PlatoInitOptions {
 
 interface Evaluator {
   data: TestCase[];
-  task: (input: TestCase, simulatorSession: PlatoSession) => Promise<any>;
+  task: (input: TestCase, plato: Plato) => Promise<any>;
   customScores: ((args: {input: TestCase, output: any, expected: any}) => Promise<number>)[];
   name: string;
   trialCount?: number;
@@ -38,21 +38,15 @@ interface EvalResult {
   results: any[];
 }
 
-export default class Plato {
-  apiKey: string;
-  baseUrl: string;
-  name: string;
-  runBatchId: string;
+class PlatoEvaluator {
+  plato: Plato;
   evaluator: Evaluator;
   maxConcurrency: number;
   trialCount: number;
   timeout: number;
 
-  constructor(apiKey: string, baseUrl = BASE_URL, name: string, runBatchId: string, evaluator: Evaluator) {
-    this.apiKey = apiKey;
-    this.baseUrl = baseUrl;
-    this.name = name;
-    this.runBatchId = runBatchId;
+  constructor(plato: Plato, evaluator: Evaluator) {
+    this.plato = plato;
     this.evaluator = evaluator;
 
     this.maxConcurrency = evaluator.maxConcurrency || 15;
@@ -61,13 +55,13 @@ export default class Plato {
   }
 
   async _runTask(input: TestCase): Promise<any> {
-    const simulatorSession = await PlatoSession.start(this, input);
+    // const simulatorSession = await PlatoSession.start(this.plato, input);
     try {
-      const output = await this.evaluator.task(input, simulatorSession);
+      const output = await this.evaluator.task(input, this.plato);
       const customScores = await Promise.all((this.evaluator.customScores ||[]).map(score => score({input, output, expected: input.expected})));
       return { input, output, customScores };
     } finally {
-      await simulatorSession.end();
+      // await simulatorSession.end();
     }
   }
 
@@ -124,7 +118,29 @@ export default class Plato {
     }
   }
 
+}
 
+
+export default class Plato {
+  apiKey: string;
+  baseUrl: string;
+  name: string;
+  runBatchId: string;
+
+  constructor(apiKey: string, baseUrl = BASE_URL, name: string, runBatchId: string) {
+    this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
+    this.name = name;
+    this.runBatchId = runBatchId;
+  }
+
+  /**
+   * Creates a PlatoEvaluator
+   * @param name
+   * @param evaluator
+   * @param options
+   * @returns
+   */
   static async Eval(name: string, evaluator: Evaluator, options: PlatoInitOptions = {}) {
     const baseUrl = options.baseUrl || BASE_URL;
     const apiKey = options.apiKey || process.env.PLATO_API_KEY;
@@ -150,13 +166,54 @@ export default class Plato {
 
     const data = await response.json();
 
-    const plato = new Plato(apiKey, baseUrl, name, data.publicId, evaluator);
-
-    return plato.run();
+    const plato = new Plato(apiKey, baseUrl, name, data.publicId);
+    const platoEvaluator = new PlatoEvaluator(plato, evaluator);
+    return platoEvaluator.run();
   }
 
 
+  /**
+   * Initializes a new Plato instance
+   * @param name
+   * @param options
+   * @returns
+   */
+  static async init(name: string, options: PlatoInitOptions = {}) {
+    const baseUrl = options.baseUrl || BASE_URL;
+    const apiKey = options.apiKey || process.env.PLATO_API_KEY;
 
+    if (!apiKey) {
+      throw new Error('PLATO_API_KEY is not set');
+    }
+
+    const response = await fetch(`${baseUrl}/api/runs/group`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to initialize Plato: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return new Plato(apiKey, baseUrl, name, data.publicId);
+  }
+
+
+  async startSimulation(testCase: TestCase, options: StartSimulationOptions = {}): Promise<PlatoSession> {
+    return PlatoSession.start(this, testCase, options);
+  }
+
+}
+
+interface StartSimulationOptions {
+  cdpUrl?: string;
 }
 
 export class PlatoSession {
@@ -172,7 +229,7 @@ export class PlatoSession {
     this.sessionId = sessionId;
   }
 
-  static async start(plato: Plato, testCase: TestCase): Promise<PlatoSession> {
+  static async start(plato: Plato, testCase: TestCase, options: StartSimulationOptions = {}): Promise<PlatoSession> {
     const response = await fetch(`${plato.baseUrl}/api/runs/group/${plato.runBatchId}/run`, {
       method: 'POST',
       headers: {
@@ -184,7 +241,8 @@ export class PlatoSession {
         testCase: {
           ...testCase,
           outputSchema: testCase.outputSchema ? zodToJsonSchema(testCase.outputSchema) : undefined
-        }
+        },
+        ...options,
       })
     });
 
