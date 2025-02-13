@@ -1,6 +1,6 @@
 [project]
 name = "plato"
-version = "0.1.13"
+version = "0.1.32"
 description = "Plato client"
 authors = [
     { name = "Pranav", email = "pranav.putta02@gmail.com" }
