@@ -19,7 +19,7 @@ test_cases = await Plato.get_dataset("your_test_case_set_id")
 
 ### 2. Implementing the Task Function
 
-The task function is an async function that performs the actual evaluation for each test case. Here's an example of a browser automation task:
+The task function is an async function that performs the actual evaluation for each test case. This is where you can run your agent.Here's an example of a simple browser automation task:
 
 ```python
 from playwright.async_api import async_playwright
