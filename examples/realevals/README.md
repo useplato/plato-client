@@ -5,7 +5,7 @@ This example demonstrates how to use the Plato library to run browser-based eval
 ## Installation
 
 ```bash
-pip install plato-cli
+pip install plato-cli playwright
 ```
 
 ## Using Plato Library
@@ -22,43 +22,57 @@ test_cases = await Plato.get_dataset("your_test_case_set_id")
 The task function is an async function that performs the actual evaluation for each test case. Here's an example of a browser automation task:
 
 ```python
-async def agent_task(task: Task, session) -> dict:
-    # Example of an agent performing steps in a browser
-    steps = [
-        {"action": "navigate", "url": "https://example.com"},
-        {"action": "click", "selector": "#search-button"},
-        {"action": "type", "selector": "#search-input", "text": task.prompt},
-        {"action": "wait", "selector": ".results"}
-    ]
+from playwright.async_api import async_playwright
+
+async def agent_task(task: Task, cdp_url: str) -> dict:
+    # Connect to the browser using Playwright
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.connect_over_cdp(cdp_url)
+    context = await browser.new_context()
+    page = await context.new_page()
     
-    results = []
-    for step in steps:
-        await session.log(f"Executing step: {step['action']}")
+    try:
+        # Example of an agent performing steps in a browser
+        steps = [
+            {"action": "navigate", "url": "https://example.com"},
+            {"action": "click", "selector": "#search-button"},
+            {"action": "type", "selector": "#search-input", "text": task.prompt},
+            {"action": "wait", "selector": ".results"}
+        ]
         
-        if step['action'] == 'navigate':
-            await session.page.goto(step['url'])
-        elif step['action'] == 'click':
-            await session.page.click(step['selector'])
-        elif step['action'] == 'type':
-            await session.page.fill(step['selector'], step['text'])
-        elif step['action'] == 'wait':
-            await session.page.wait_for_selector(step['selector'])
+        results = []
+        for step in steps:
+            # Log each step (you can implement your own logging)
+            print(f"Executing step: {step['action']}")
+            
+            if step['action'] == 'navigate':
+                await page.goto(step['url'])
+            elif step['action'] == 'click':
+                await page.click(step['selector'])
+            elif step['action'] == 'type':
+                await page.fill(step['selector'], step['text'])
+            elif step['action'] == 'wait':
+                await page.wait_for_selector(step['selector'])
+            
+            results.append({
+                "step": step['action'],
+                "success": True
+            })
         
-        results.append({
-            "step": step['action'],
-            "success": True
-        })
-    
-    return {"steps": results}
+        return {"steps": results}
+    finally:
+        # Clean up resources
+        await context.close()
+        await browser.close()
+        await playwright.stop()
 ```
 
 The task function:
-- Takes a `Task` object containing the test case data and a `session` object for browser interaction
+- Takes a `Task` object containing the test case data and a `cdp_url` for connecting to the browser
+- Sets up a Playwright browser session using the CDP URL
+- Performs browser automation steps
+- Properly cleans up resources using a try/finally block
 - Returns a dictionary with the results of the evaluation
-- Can use the session object to:
-  - Control the browser (`session.page`)
-  - Log progress (`session.log`)
-  - Handle browser automation steps
 
 ### 3. Setting up Runner Configuration
 
