@@ -5,7 +5,7 @@ This example demonstrates how to use the Plato library to run browser-based eval
 ## Installation
 
 ```bash
-pip install plato-cli playwright
+pip install plato-cli
 ```
 
 ## Using Plato Library
