@@ -16,10 +16,14 @@ interface PlatoInitOptions {
   apiKey?: string;
 }
 
+interface StartSimulationOptions {
+  cdpUrl?: string;
+}
+
 interface Evaluator {
   data: TestCase[];
-  task: (input: TestCase, plato: Plato) => Promise<any>;
-  customScores: ((args: {input: TestCase, output: any, expected: any}) => Promise<number>)[];
+  task: (input: TestCase, startPlatoSimulation: (options: StartSimulationOptions) => Promise<PlatoSession>) => Promise<any>;
+  customScores: ((args: {input: TestCase, output: any, expected: any}) => Promise<CustomScore>)[];
   name: string;
   trialCount?: number;
   timeout?: number;
@@ -38,12 +42,18 @@ interface EvalResult {
   results: any[];
 }
 
+interface CustomScore {
+  name: string;
+  score: number;
+}
+
 class PlatoEvaluator {
   plato: Plato;
   evaluator: Evaluator;
   maxConcurrency: number;
   trialCount: number;
   timeout: number;
+  customScores: ((args: {input: TestCase, output: any, expected: any}) => Promise<CustomScore>)[];
 
   constructor(plato: Plato, evaluator: Evaluator) {
     this.plato = plato;
@@ -52,16 +62,24 @@ class PlatoEvaluator {
     this.maxConcurrency = evaluator.maxConcurrency || 15;
     this.trialCount = evaluator.trialCount || 1;
     this.timeout = evaluator.timeout || 1800000;
+    this.customScores = evaluator.customScores || [];
   }
 
   async _runTask(input: TestCase): Promise<any> {
-    // const simulatorSession = await PlatoSession.start(this.plato, input);
+    let simulatorSession: PlatoSession;
     try {
-      const output = await this.evaluator.task(input, this.plato);
-      const customScores = await Promise.all((this.evaluator.customScores ||[]).map(score => score({input, output, expected: input.expected})));
+      const output = await this.evaluator.task(input, async (options) => {
+        simulatorSession = await this.plato.startSimulation(input, options);
+        return simulatorSession;
+      });
+      const customScores = await Promise.all((this.evaluator.customScores ||[]).map(async score => {
+        const scoreResult = await score({input, output, expected: input.expected});
+        await simulatorSession.score(scoreResult);
+        return scoreResult;
+      }));
       return { input, output, customScores };
-    } finally {
-      // await simulatorSession.end();
+    } catch (err) {
+      console.error('Error running task', err);
     }
   }
 
@@ -212,9 +230,6 @@ export default class Plato {
 
 }
 
-interface StartSimulationOptions {
-  cdpUrl?: string;
-}
 
 export class PlatoSession {
   private plato: Plato;
@@ -294,10 +309,35 @@ export class PlatoSession {
   }
 
   async log(message: string): Promise<void> {
-    return;
+    try {
+      await fetch(`${this.plato.baseUrl}/api/runs/${this.sessionId}/log`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': this.plato.apiKey
+        },
+        body: JSON.stringify({ message, timestamp: new Date().toISOString() })
+      });
+    } catch (error) {
+      console.log('Error logging', error);
+    }
   }
 
-  async score(): Promise<void> {
-    return;
+  async score(score: CustomScore): Promise<void> {
+    try {
+      const response = await fetch(`${this.plato.baseUrl}/api/runs/${this.sessionId}/score`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.plato.apiKey
+        },
+        body: JSON.stringify({ score: score.score, name: score.name })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to score: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.log('Error scoring', error);
+    }
   }
 }
