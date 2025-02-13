@@ -1,24 +1,27 @@
-[tool.poetry]
-name = "plato-python-client"
-version = "0.1.0"
-description = ""
-authors = ["Robert Farlow <robfarlow@gmail.com>"]
+[project]
+name = "plato"
+version = "0.1.32"
+description = "Plato client"
+authors = [
+    { name = "Pranav", email = "pranav.putta02@gmail.com" }
+]
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.10.6",
+]
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.9"
-setuptools = "^75.2.0"
-twine = "^5.1.1"
-pydantic = "^2.9.2"
-python-socketio = "5.11.3"
-requests = "^2.32.3"
-
-
-[tool.poetry.group.dev.dependencies]
-playwright = "^1.48.0"
-ruff = "^0.7.3"
-pre-commit = "^4.0.1"
+requires-python = ">= 3.8"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plato"]
