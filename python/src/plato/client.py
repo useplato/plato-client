@@ -12,7 +12,7 @@ class PlatoClient:
     Attributes:
         api_key (str): The API key used for authentication with Plato API.
         base_url (str): The base URL of the Plato API.
-        aiohttp_session (Optional[aiohttp.ClientSession]): The aiohttp session for making HTTP requests.
+        http_session (Optional[aiohttp.ClientSession]): The aiohttp session for making HTTP requests.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -24,24 +24,24 @@ class PlatoClient:
         """
         self.api_key = api_key or config.api_key
         self.base_url = config.base_url
-        self.aiohttp_session: Optional[aiohttp.ClientSession] = None
+        self.http_session: Optional[aiohttp.ClientSession] = None
 
     @property
-    def aiohttp_session(self) -> aiohttp.ClientSession:
+    def http_session(self) -> aiohttp.ClientSession:
         """Get or create an aiohttp client session.
 
         Returns:
             aiohttp.ClientSession: The active HTTP client session.
         """
-        if self.aiohttp_session is None:
-            self.aiohttp_session = aiohttp.ClientSession()
-        return self.aiohttp_session
+        if self.http_session is None:
+            self.http_session = aiohttp.ClientSession()
+        return self.http_session
 
     async def close(self):
         """Close the aiohttp client session if it exists."""
-        if self.aiohttp_session is not None:
-            await self.aiohttp_session.close()
-            self.aiohttp_session = None
+        if self.http_session is not None:
+            await self.http_session.close()
+            self.http_session = None
 
     async def make_environment(self, task: PlatoTask) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
@@ -56,7 +56,7 @@ class PlatoClient:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        async with self.aiohttp_session.post(
+        async with self.http_session.post(
             f"{self.base_url}/environments",
             json=task.dict(),
             headers=headers
@@ -82,7 +82,7 @@ class PlatoClient:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        async with self.aiohttp_session.get(
+        async with self.http_session.get(
             f"{self.base_url}/environments/{session_id}/cdp_url",
             headers=headers
         ) as response:
