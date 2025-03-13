@@ -1,11 +1,13 @@
+"""Configuration settings for the Plato client."""
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
+from functools import lru_cache
 
 class Config(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="PLATO_")
     base_url: str = Field(
-        default="https://api.plato.so",
+        default="http://localhost:25565/api",
         description="Base URL for the Plato API",
         validation_alias="PLATO_BASE_URL    ",
     )
@@ -15,5 +17,6 @@ class Config(BaseSettings):
         validation_alias="PLATO_API_KEY",
     )
 
-
-config = Config()
+@lru_cache
+def get_config() -> Config:
+    return Config()
