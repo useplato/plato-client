@@ -1,5 +1,4 @@
-"""Models for the Plato SDK."""
-from .eval_results import EvalResult, EvalSummary
-from .task import Task
+from .task import PlatoTask
+from .env import PlatoEnvironment
 
-__all__ = ["EvalResult", "EvalSummary", "Task"]
+__all__ = ["PlatoTask", "PlatoEnvironment"]

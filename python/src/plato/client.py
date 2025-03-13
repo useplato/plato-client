@@ -1,305 +1,203 @@
-# plato_sdk.py
+from typing import Optional, Dict, Any
+import aiohttp
+from plato.config import get_config
+from plato.models import PlatoTask, PlatoEnvironment
 
-"""
-Plato Python SDK
+config = get_config()
 
-This module provides classes and methods for interacting with the Plato evaluation API.
-It defines the following key classes:
+class PlatoClient:
+    """Client for interacting with the Plato API.
 
-- Task: Represents a single task to be evaluated.
-- PlatoRunnerConfig: Configuration for task execution and browser management.
-- EvalSummary & EvalResult: Containers for evaluation results.
-- Plato: Main client for running evaluations.
-- PlatoSession: Manages a browser session for a task.
-"""
+    This class provides methods to create and manage Plato environments, handle API authentication,
+    and manage HTTP sessions.
 
-import asyncio
-import os
-import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional
-
-import httpx
-from pydantic import BaseModel
-
-from .models.eval_results import EvalResult, EvalSummary
-from .models.task import Task
-
-DEFAULT_BASE_URL = "https://plato.so"
-
-class PlatoRunnerConfig(BaseModel):
-    """
-    Configuration for task execution and browser management.
+    Attributes:
+        api_key (str): The API key used for authentication with Plato API.
+        base_url (str): The base URL of the Plato API.
+        http_session (Optional[aiohttp.ClientSession]): The aiohttp session for making HTTP requests.
     """
 
-    name: str
-    data: List[Task]
-    task: Callable[[Task, str], Awaitable[Any]]
-    trial_count: int = 1
-    timeout: int = 1800000
-    max_concurrency: int = 15
-    custom_browser: Optional[Callable[[Task], Awaitable[str]]] = None
-    custom_scores: List[Callable[[Dict[str, Any]], Awaitable[float]]] = []
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize a new PlatoClient.
 
-
-class Plato:
-    """
-    The main client for interacting with the Plato evaluation API.
-    """
-
-    def __init__(
-        self,
-        api_key: str,
-        base_url: str,
-        name: str,
-        run_batch_id: str,
-        config: PlatoRunnerConfig,
-    ):
-        self.api_key = api_key
-        self.base_url = base_url
-        self.name = name
-        self.run_batch_id = run_batch_id
-        self.config = config
-
-    async def _run_task(self, task: Task) -> dict:
+        Args:
+            api_key (Optional[str]): The API key for authentication. If not provided,
+                falls back to the key from config.
         """
-        Runs a single evaluation task:
-          1. Start a browser session.
-          2. Execute the runner task.
-          3. Compute custom scores (if any).
-          4. Close the session.
+        self.api_key = api_key or config.api_key
+        self.base_url = config.base_url
+        self._http_session: Optional[aiohttp.ClientSession] = None
+
+    @property
+    def http_session(self) -> aiohttp.ClientSession:
+        """Get or create an aiohttp client session.
+
+        Returns:
+            aiohttp.ClientSession: The active HTTP client session.
         """
-        try:
-            session = await PlatoSession.start(self, task)
-            output = await self.config.task(task, session.cdp_url)
-            custom_scores = []
-            for score_func in self.config.custom_scores:
-                score = await score_func(
-                    {
-                        "input": task,
-                        "output": output,
-                        "expected": getattr(task, "expected", None),
-                    }
-                )
-                custom_scores.append(score)
-            return {
-                "input": task.model_dump(mode="json"),
-                "output": output,
-                "custom_scores": custom_scores,
-            }
-        finally:
-            await session.close()
+        if self._http_session is None or self._http_session.closed:
+            self._http_session = aiohttp.ClientSession()
+        return self._http_session
 
-    async def run(self) -> EvalResult:
+    async def close(self):
+        """Close the aiohttp client session if it exists."""
+        if self._http_session is not None and not self._http_session.closed:
+            await self._http_session.close()
+            self._http_session = None
+
+    async def make_environment(self, env_id: str) -> PlatoEnvironment:
+        """Create a new Plato environment for the given task.
+
+        Args:
+            task (PlatoTask): The task to create an environment for.
+
+        Returns:
+            PlatoEnvironment: The created environment instance.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
         """
-        Executes all tasks based on trial_count and max_concurrency.
-        Returns an EvalResult containing a summary and all task results.
-        """
-        results = []
-        # Create a list of tasks repeated trial_count times.
-        queue = [
-            task for task in self.config.data for _ in range(self.config.trial_count)
-        ]
-        semaphore = asyncio.Semaphore(self.config.max_concurrency)
-
-        async def process_task(task: Task):
-            async with semaphore:
-                try:
-                    res = await self._run_task(task)
-                    results.append(res)
-                except Exception as e:
-                    print(f"Error processing {task.name}: {e}")
-
-        workers = [process_task(task) for task in queue]
-
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*workers), timeout=self.config.timeout / 1000
-            )
-        except asyncio.TimeoutError:
-            raise Exception(f"Evaluation timed out after {self.config.timeout}ms")
-
-        total = len(results)
-        success = len([r for r in results if r.get("score", 0) > 0])
-        failure = total - success
-        average_score = (
-            sum(r.get("score", 0) for r in results) / total if total > 0 else 0
-        )
-
-        summary = EvalSummary(
-            total=total, success=success, failure=failure, score=average_score
-        )
-        return EvalResult(summary=summary, results=results)
-
-    @staticmethod
-    async def start(
-        name: str,
-        config: PlatoRunnerConfig,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-    ) -> EvalResult:
-        """
-        Static method to initialize a run group and execute the evaluation.
-
-        :param name: The version or name for this evaluation run.
-        :param config: Configuration for task execution and browser management.
-        :param api_key: (Optional) API key; if not provided, uses the PLATO_API_KEY environment variable.
-        :param base_url: (Optional) Base URL of the Plato API.
-        :return: An EvalResult containing a summary and task results.
-        """
-        base_url = base_url or DEFAULT_BASE_URL
-        api_key = api_key or os.getenv("PLATO_API_KEY")
-        if not api_key:
-            raise Exception("PLATO_API_KEY is not set")
-
-        headers = {"Content-Type": "application/json", "x-api-key": api_key}
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{base_url}/api/runs/group",
-                json={"name": config.name},
-                headers=headers,
-            )
-            if response.status_code != 200:
-                raise Exception(f"Failed to initialize Plato: {response.text}")
-            data = response.json()
-
-        run_batch_id = data.get("publicId")
-        if not run_batch_id:
-            raise Exception("No run batch ID returned from Plato API")
-        plato = Plato(
-            api_key=api_key,
-            base_url=base_url,
-            name=name,
-            run_batch_id=run_batch_id,
-            config=config,
-        )
-        return await plato.run()
-
-    @staticmethod
-    async def get_dataset(
-        dataset_id: str, api_key: Optional[str] = None, base_url: Optional[str] = None
-    ) -> List[Task]:
-        """
-        Fetches a dataset from the Plato API.
-        """
-        base_url = base_url or DEFAULT_BASE_URL
-        api_key = api_key or os.getenv("PLATO_API_KEY")
-        if not api_key:
-            raise Exception("PLATO_API_KEY is not set")
-
-        headers = {"Content-Type": "application/json", "x-api-key": api_key}
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{base_url}/api/testcases/sets/{dataset_id}/testcases", headers=headers
-            )
-            if response.status_code != 200:
-                raise Exception(f"Failed to get dataset: {response.text}")
-            data = response.json()
-            if not data["success"]:
-                raise Exception(f"Failed to get dataset: {data['message']}")
-            return [Task.model_validate(task) for task in data["testcases"]]
-
-
-class PlatoSession:
-    """
-    Represents a browser session associated with a task.
-    """
-
-    def __init__(self, plato: Plato, task: Task, cdp_url: str, session_id: str):
-        self.plato = plato
-        self.task = task
-        self.cdp_url = cdp_url
-        self.session_id = session_id
-
-    @staticmethod
-    async def start(plato: Plato, task: Task) -> "PlatoSession":
-        """
-        Starts a new browser session for the given task.
-        If a custom_browser function is provided in the config, it will be used to get the CDP URL.
-        Otherwise, polls the Plato API until a CDP URL is available or a timeout occurs.
-        """
-        headers = {"Content-Type": "application/json", "x-api-key": plato.api_key}
-        payload = {"version": plato.name, "testCase": task.model_dump(mode="json")}
-
-        # Start the session first
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{plato.base_url}/api/runs/group/{plato.run_batch_id}/run",
-                json=payload,
-                headers=headers,
-            )
-            if response.status_code != 200:
-                raise Exception(f"Failed to start session: {response.text}")
-            data = response.json()
-
-        session_id = data.get("session_id")
-        if not session_id:
-            raise Exception("No session_id returned from Plato API")
-
-        # If custom browser is provided, use it to get CDP URL
-        if plato.config.custom_browser:
-            cdp_url = await plato.config.custom_browser(task)
-            return PlatoSession(plato, task, cdp_url, session_id)
-
-        # Otherwise poll for CDP URL from Plato API
-        cdp_url = None
-        timeout_seconds = 60  # 1 minute
-        start_time = time.time()
-
-        async with httpx.AsyncClient() as client:
-            while time.time() - start_time < timeout_seconds:
-                resp = await client.get(f"{plato.base_url}/api/runs/{session_id}")
-                run_data = resp.json()
-                if run_data.get("cdpUrl"):
-                    cdp_url = run_data.get("cdpUrl")
-                    break
-                await asyncio.sleep(1)
-
-        if not cdp_url:
-            raise Exception("Failed to start browser session")
-
-        return PlatoSession(plato, task, cdp_url, session_id)
-
-    @staticmethod
-    async def terminate(plato: "Plato", session_id: str) -> None:
-        """
-        Terminates a browser session.
-        """
-        try:
-            headers = {"x-api-key": plato.api_key}
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"{plato.base_url}/api/runs/{session_id}/terminate",
-                    headers=headers,
-                )
-        except Exception as e:
-            print(f"Error terminating session: {e}")
-
-    async def close(self) -> None:
-        """
-        Deprecated: Use end() instead.
-        Closes the browser session.
-        """
-        return await self.terminate(self.plato, self.session_id)
-
-    async def log(self, message: str) -> None:
-        """
-        Sends a log message to the Plato server for this session.
-        """
-        headers = {"Content-Type": "application/json", "x-api-key": self.plato.api_key}
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                f"{self.plato.base_url}/api/runs/{self.session_id}/log",
-                json={"message": message},
-                headers=headers,
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/env/make",
+            json={"config": {
+                "type": "browser_sim",
+                "env_id": env_id,
+                "sim_connection_type": "fastapi"
+            }},
+            headers=headers
+        ) as response:
+            response.raise_for_status()
+            data = await response.json()
+            return PlatoEnvironment(
+                client=self,
+                id=data["job_id"]
             )
 
-    async def score(self) -> None:
+    async def get_job_status(self, job_id: str) -> Dict[str, Any]:
+        """Get the status of a job.
+
+        Args:
+            job_id (str): The ID of the job to check.
+
+        Returns:
+            Dict[str, Any]: The job status information.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
         """
-        Sends the score to the Plato server for this session.
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/env/{job_id}/status",
+            headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def get_cdp_url(self, job_id: str) -> str:
+        """Get the Chrome DevTools Protocol URL for a job.
+
+        Args:
+            job_id (str): The ID of the job to get the CDP URL for.
+
+        Returns:
+            str: The CDP URL for the job.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
         """
-        headers = {"Content-Type": "application/json", "x-api-key": self.plato.api_key}
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                f"{self.plato.base_url}/api/runs/{self.session_id}/score",
-                headers=headers,
-            )
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/env/{job_id}/cdp_url",
+            headers=headers
+        ) as response:
+            response.raise_for_status()
+            data = await response.json()
+            return data["cdp_url"]
+
+    async def close_environment(self, job_id: str) -> Dict[str, Any]:
+        """Close an environment.
+
+        Args:
+            job_id (str): The ID of the job to close.
+
+        Returns:
+            Dict[str, Any]: The response from the server.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/env/{job_id}/close",
+            headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def reset_environment(self, job_id: str, task: Optional[PlatoTask] = None) -> Dict[str, Any]:
+        """Reset an environment with an optional new task.
+
+        Args:
+            job_id (str): The ID of the job to reset.
+            task (Optional[PlatoTask]): Optional new task for the environment.
+
+        Returns:
+            Dict[str, Any]: The response from the server.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        params = {"task": task.dict() if task else None}
+        async with self.http_session.post(
+            f"{self.base_url}/env/{job_id}/reset",
+            headers=headers,
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def get_environment_state(self, job_id: str) -> Dict[str, Any]:
+        """Get the current state of an environment.
+
+        Args:
+            job_id (str): The ID of the job to get state for.
+
+        Returns:
+            Dict[str, Any]: The current state of the environment.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/env/{job_id}/state",
+            headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def get_worker_ready(self, job_id: str) -> Dict[str, Any]:
+        """Check if the worker for this job is ready and healthy.
+
+        Args:
+            job_id (str): The ID of the job to check.
+
+        Returns:
+            Dict[str, Any]: The worker ready status information including:
+                - ready (bool): Whether the worker is ready
+                - worker_ip (Optional[str]): The worker's IP if ready
+                - worker_port (Optional[int]): The worker's port if ready
+                - health_status (Optional[Dict]): The worker's health status if ready
+                - error (Optional[str]): Error message if not ready
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/env/{job_id}/worker_ready",
+            headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
