@@ -7,7 +7,7 @@ from functools import lru_cache
 class Config(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="PLATO_")
     base_url: str = Field(
-        default="http://localhost:25565/api",
+        default="https://plato.so/api",
         description="Base URL for the Plato API",
         validation_alias="PLATO_BASE_URL    ",
     )

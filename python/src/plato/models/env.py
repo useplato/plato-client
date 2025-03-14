@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
 from plato.models import PlatoTask
 from typing import List, Optional, Type, Dict, Any
 import time
@@ -14,7 +14,7 @@ class PlatoEnvironment:
     basic contract that all Plato environments must fulfill.
 
     Attributes:
-        _client (PlatoClient): The client instance for interacting with the environment
+        _client (Plato): The client instance for interacting with the environment
         _current_task (Optional[PlatoTask]): The task currently being executed
         id (str): Unique identifier for this environment instance (job ID)
     """
@@ -22,10 +22,10 @@ class PlatoEnvironment:
     _current_task: Optional[PlatoTask] = Field(
         description="The current task for the environment", default=None
     )
-    _client: "PlatoClient" = Field(description="The client for the environment")
+    _client: "Plato" = Field(description="The client for the environment")
     id: str = Field(description="The ID for the environment (job ID)")
 
-    def __init__(self, client: "PlatoClient", id: str):
+    def __init__(self, client: "Plato", id: str):
         self._client = client
         self.id = id
 
@@ -72,7 +72,7 @@ class PlatoEnvironment:
                 cdp_url = await self._client.get_cdp_url(self.id)
                 if cdp_url:
                     break
-            except PlatoClientError as e:
+            except PlatoClientError:
                 await asyncio.sleep(0.1)
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError("Environment failed to start - cdp url not ready")

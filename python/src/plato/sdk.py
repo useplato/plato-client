@@ -6,7 +6,7 @@ from plato.exceptions import PlatoClientError
 
 config = get_config()
 
-class PlatoClient:
+class Plato:
     """Client for interacting with the Plato API.
 
     This class provides methods to create and manage Plato environments, handle API authentication,
@@ -19,7 +19,7 @@ class PlatoClient:
     """
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
-        """Initialize a new PlatoClient.
+        """Initialize a new Plato.
 
         Args:
             api_key (Optional[str]): The API key for authentication. If not provided,
