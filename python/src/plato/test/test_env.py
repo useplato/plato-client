@@ -7,8 +7,8 @@ from plato.models import PlatoTask
 async def test_environment_lifecycle():
     """Test the lifecycle of a Plato environment including creation, reset, and closure."""
     # Initialize the client
-    client = Plato(base_url="https://staging.plato.so/api")
-
+    # client = PlatoClient(base_url="https://staging.plato.so/api")
+    client = PlatoClient(base_url="http://54.153.101.234:25565/api")
     # Create a sample task
     task = PlatoTask(
         name="example_task",
