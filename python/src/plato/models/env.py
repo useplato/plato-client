@@ -1,9 +1,13 @@
 from pydantic import Field
 from plato.models import PlatoTask
-from typing import List, Optional, Type, Dict, Any
+from typing import List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
 from plato.exceptions import PlatoClientError
+
+# Using TYPE_CHECKING for proper type annotation without circular imports
+if TYPE_CHECKING:
+    from plato.sdk import Plato
 
 
 class PlatoEnvironment:
@@ -17,6 +21,7 @@ class PlatoEnvironment:
         _client (Plato): The client instance for interacting with the environment
         _current_task (Optional[PlatoTask]): The task currently being executed
         id (str): Unique identifier for this environment instance (job ID)
+        _run_session_id (Optional[str]): The ID of the active run session, set after reset
     """
 
     _current_task: Optional[PlatoTask] = Field(
@@ -24,10 +29,14 @@ class PlatoEnvironment:
     )
     _client: "Plato" = Field(description="The client for the environment")
     id: str = Field(description="The ID for the environment (job ID)")
+    _run_session_id: Optional[str] = Field(
+        description="The ID of the active run session", default=None
+    )
 
     def __init__(self, client: "Plato", id: str):
         self._client = client
         self.id = id
+        self._run_session_id = None
 
     async def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
@@ -48,7 +57,7 @@ class PlatoEnvironment:
             status = await self._client.get_job_status(self.id)
             if status["status"].lower() == "running":
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError(
                     "Environment failed to start - job never entered running state"
@@ -59,7 +68,7 @@ class PlatoEnvironment:
             worker_status = await self._client.get_worker_ready(self.id)
             if worker_status["ready"]:
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             if timeout and time.time() - start_time > timeout:
                 error_msg = worker_status.get("error", "Unknown error")
                 raise RuntimeError(
@@ -72,8 +81,8 @@ class PlatoEnvironment:
                 cdp_url = await self._client.get_cdp_url(self.id)
                 if cdp_url:
                     break
-            except PlatoClientError:
-                await asyncio.sleep(0.1)
+            except PlatoClientError as e:
+                await asyncio.sleep(0.5)
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError("Environment failed to start - cdp url not ready")
 
@@ -110,7 +119,12 @@ class PlatoEnvironment:
 
         Returns:
             str: The CDP URL for connecting to this environment's browser session.
+            
+        Raises:
+            PlatoClientError: If no active run session exists.
         """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_cdp_url(self.id)
 
     async def reset(self, task: Optional[PlatoTask] = None) -> None:
@@ -118,17 +132,27 @@ class PlatoEnvironment:
 
         Args:
             task (Optional[PlatoTask]): The new task to set up the environment for.
+            
+        Returns:
+            None: The environment is reset and a new run session is created.
         """
-        await self._client.reset_environment(self.id, task)
+        response = await self._client.reset_environment(self.id, task)
         if task:
             self._current_task = task
+        # Store the run session ID from the response
+        self._run_session_id = response.get("run_session_id")
 
     async def get_state(self) -> Dict[str, Any]:
         """Get the current state of the environment.
 
         Returns:
             Dict[str, Any]: A dictionary representing the current state of the environment.
+            
+        Raises:
+            PlatoClientError: If no active run session exists.
         """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_environment_state(self.id)
 
     async def get_state_mutations(self) -> List[Dict[str, Any]]:
@@ -136,6 +160,9 @@ class PlatoEnvironment:
 
         Returns:
             List[Dict[str, Any]]: A list of dictionaries representing state changes.
+            
+        Raises:
+            PlatoClientError: If no active run session exists.
         """
         state = await self.get_state()
         return state.get("mutations", [])
@@ -145,7 +172,12 @@ class PlatoEnvironment:
 
         Returns:
             bool: True if the task is completed successfully, False otherwise.
+            
+        Raises:
+            PlatoClientError: If no active run session exists.
         """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
         state = await self.get_state()
         return state.get("completed", False)
 

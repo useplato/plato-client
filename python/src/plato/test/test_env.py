@@ -1,14 +1,13 @@
 import asyncio
 from playwright.async_api import async_playwright
 
-from plato.sdk import Plato
 from plato.models import PlatoTask
+from plato.sdk import Plato
 
 async def test_environment_lifecycle():
     """Test the lifecycle of a Plato environment including creation, reset, and closure."""
     # Initialize the client
-    client = Plato(base_url="https://staging.plato.so/api")
-
+    client = PlatoClient(base_url="https://staging.plato.so/api")
     # Create a sample task
     task = PlatoTask(
         name="example_task",
@@ -23,6 +22,7 @@ async def test_environment_lifecycle():
         # Wait for the environment to be ready
         print("Waiting for environment to be ready")
         await env.wait_for_ready(timeout=30.0)
+        await env.reset()
 
         # Get the CDP URL for browser connection
         cdp_url = await env.get_cdp_url()
@@ -38,11 +38,6 @@ async def test_environment_lifecycle():
             print("Waited for 3 seconds")
             await page.screenshot(path="screenshot.png")
             print("Screenshot taken")
-
-
-        # Reset the environment with a new task
-        await env.reset()
-        print("Environment reset with new task")
 
     finally:
         # Always ensure we close the environment
