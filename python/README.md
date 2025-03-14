@@ -2,20 +2,18 @@
 
 
 ## Usage
-```
-class Task(BaseModel):
-    ...
+```python
+from plato import Plato
 
-async with env := plato.make(ENV_ID):
+async def run():
+    env = await client.make_environment("doordash")
     cdp_url = env.cdp_url
-    
-    # connect to browser and do modifications
 
-   # get state
+    # connect to browser and do modifications
+    browser = await playwright.chromium.connect_over_cdp(cdp_url)
+
+    # get state
     state_mutations: dict = env.get_state()
 
     # evaluate
-
     ...
-
-```
