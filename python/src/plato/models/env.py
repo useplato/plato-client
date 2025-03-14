@@ -48,7 +48,7 @@ class PlatoEnvironment:
             status = await self._client.get_job_status(self.id)
             if status["status"].lower() == "running":
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError(
                     "Environment failed to start - job never entered running state"
@@ -59,7 +59,7 @@ class PlatoEnvironment:
             worker_status = await self._client.get_worker_ready(self.id)
             if worker_status["ready"]:
                 break
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             if timeout and time.time() - start_time > timeout:
                 error_msg = worker_status.get("error", "Unknown error")
                 raise RuntimeError(
@@ -72,8 +72,8 @@ class PlatoEnvironment:
                 cdp_url = await self._client.get_cdp_url(self.id)
                 if cdp_url:
                     break
-            except PlatoClientError:
-                await asyncio.sleep(0.1)
+            except PlatoClientError as e:
+                await asyncio.sleep(0.5)
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError("Environment failed to start - cdp url not ready")
 
