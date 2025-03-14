@@ -1,31 +1,30 @@
 [project]
-name = "plato"
-version = "0.1.32"
-description = "Plato client"
+name = "plato-sdk"
+version = "0.1.0a1"
+description = "Plato SDK"
+readme = "README.md"
 authors = [
     { name = "Pranav Putta", email = "pranav@plato.so" },
-    {name = "Rob Farlow", email="rob@plato.so"}
-
+    { name = "Rob Farlow", email = "rob@plato.so" },
 ]
+requires-python = ">=3.12.8"
 dependencies = [
-    "httpx>=0.28.1",
+    "aiohttp>=3.11.13",
     "pydantic>=2.10.6",
     "pydantic-settings>=2.8.1",
-    "aiohttp>=3.11.13",
 ]
-readme = "README.md"
-requires-python = ">= 3.8"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.rye]
-managed = true
-dev-dependencies = []
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/plato"]
+
+[tool.uv.workspace]
+members = ["example"]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.50.0",
+]

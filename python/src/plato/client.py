@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any
 import aiohttp
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
+from plato.exceptions import PlatoClientError
 
 config = get_config()
 
@@ -17,7 +18,7 @@ class PlatoClient:
         http_session (Optional[aiohttp.ClientSession]): The aiohttp session for making HTTP requests.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         """Initialize a new PlatoClient.
 
         Args:
@@ -25,7 +26,7 @@ class PlatoClient:
                 falls back to the key from config.
         """
         self.api_key = api_key or config.api_key
-        self.base_url = config.base_url
+        self.base_url = base_url or config.base_url
         self._http_session: Optional[aiohttp.ClientSession] = None
 
     @property
@@ -111,8 +112,9 @@ class PlatoClient:
             f"{self.base_url}/env/{job_id}/cdp_url",
             headers=headers
         ) as response:
-            response.raise_for_status()
             data = await response.json()
+            if "error" in data:
+                raise PlatoClientError(data["error"])
             return data["cdp_url"]
 
     async def close_environment(self, job_id: str) -> Dict[str, Any]:

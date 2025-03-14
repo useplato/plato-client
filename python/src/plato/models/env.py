@@ -3,7 +3,7 @@ from plato.models import PlatoTask
 from typing import List, Optional, Type, Dict, Any
 import time
 import asyncio
-from aiohttp import ClientError
+from plato.exceptions import PlatoClientError
 
 
 class PlatoEnvironment:
@@ -72,7 +72,7 @@ class PlatoEnvironment:
                 cdp_url = await self._client.get_cdp_url(self.id)
                 if cdp_url:
                     break
-            except ClientError as e:
+            except PlatoClientError as e:
                 await asyncio.sleep(0.1)
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError("Environment failed to start - cdp url not ready")
