@@ -10,27 +10,29 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      
+
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      
+
       - name: Build package
         run: |
+          cd ./python
           uv build
-      
+
       - name: Publish package to PyPI
         run: |
+          cd ./python
           export UV_PUBLISH_USERNAME=__token__
           export UV_PUBLISH_PASSWORD=${{ secrets.PYPI_API_TOKEN }}
-          uv publish 
+          uv publish
