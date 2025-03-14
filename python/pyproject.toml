@@ -1,13 +1,13 @@
 [project]
 name = "plato-sdk"
-version = "1.0.3"
+version = "1.0.4"
 description = "Plato SDK"
 readme = "README.md"
 authors = [
     { name = "Pranav Putta", email = "pranav@plato.so" },
     { name = "Rob Farlow", email = "rob@plato.so" },
 ]
-requires-python = ">=3.12.8"
+requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.11.13",
     "pydantic>=2.10.6",
