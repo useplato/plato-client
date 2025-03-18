@@ -8,7 +8,7 @@ async def test_environment_lifecycle():
     """Test the lifecycle of a Plato environment including creation, reset, and closure."""
     # Initialize the client
     client = Plato(base_url="https://staging.plato.so/api")
-    # Create a sample task
+    # Create a sample 5
     task = PlatoTask(
         name="example_task",
         metadata={"type": "test"},
@@ -22,15 +22,18 @@ async def test_environment_lifecycle():
         # Wait for the environment to be ready
         print("Waiting for environment to be ready")
         await env.wait_for_ready(timeout=30.0)
+        print("Environment ready")
         await env.reset()
+        print("Environment reset")
 
         # Get the CDP URL for browser connection
+        print("Getting CDP URL")
         cdp_url = await env.get_cdp_url()
         print(f"Environment ready with CDP URL: {cdp_url}")
 
         async with async_playwright() as p:
             browser = await p.chromium.connect_over_cdp(cdp_url)
-            page = browser.contexts[0].pages[0]
+            page = await browser.new_page()
             print("Connected to browser")
             await page.goto("https://www.doordash.com/")
             print("Navigating to Doordash")

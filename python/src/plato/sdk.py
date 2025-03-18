@@ -61,11 +61,26 @@ class Plato:
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
             f"{self.base_url}/env/make",
-            json={"config": {
-                "type": "browser_sim",
-                "env_id": env_id,
-                "sim_connection_type": "fastapi"
-            }},
+            json={
+                "config": {
+                    "type": "browser",
+                    "browser_config": {
+                        "type": "playwright",
+                        "cdp_port": 9222,
+                        "headless": True,
+                        "viewport_size": [1920, 1080]
+                    },
+                    "simulator_config": {
+                        "type": "fastapi_full",
+                        "env_id": env_id,
+                        "num_workers": 4
+                    },
+                    "recording_config": {
+                        "record_rrweb": True,
+                        "record_network_requests": True
+                    }
+                }
+            },
             headers=headers
         ) as response:
             response.raise_for_status()
@@ -113,9 +128,9 @@ class Plato:
             headers=headers
         ) as response:
             data = await response.json()
-            if "error" in data:
+            if data['error'] is not None:
                 raise PlatoClientError(data["error"])
-            return data["cdp_url"]
+            return data["data"]["cdp_url"]
 
     async def close_environment(self, job_id: str) -> Dict[str, Any]:
         """Close an environment.

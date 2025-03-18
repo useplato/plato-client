@@ -75,17 +75,6 @@ class PlatoEnvironment:
                     f"Environment failed to start - worker not ready: {error_msg}"
                 )
 
-        # wait for the cdp url to be ready
-        while True:
-            try:
-                cdp_url = await self._client.get_cdp_url(self.id)
-                if cdp_url:
-                    break
-            except PlatoClientError as e:
-                await asyncio.sleep(0.5)
-            if timeout and time.time() - start_time > timeout:
-                raise RuntimeError("Environment failed to start - cdp url not ready")
-
     async def __aenter__(self):
         """Enter the async context manager.
 
@@ -140,7 +129,7 @@ class PlatoEnvironment:
         if task:
             self._current_task = task
         # Store the run session ID from the response
-        self._run_session_id = response.get("run_session_id")
+        self._run_session_id = response['data']['run_session_id']
 
     async def get_state(self) -> Dict[str, Any]:
         """Get the current state of the environment.
