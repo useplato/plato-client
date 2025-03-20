@@ -71,9 +71,13 @@ class Plato:
                         "viewport_size": [1920, 1080]
                     },
                     "simulator_config": {
-                        "type": "fastapi_full",
+                        "type": "proxy",
                         "env_id": env_id,
-                        "num_workers": 4
+                        "num_workers": 4,
+                        "proxy_config": {
+                            "host": "localhost",
+                            "port": 8000,
+                        }
                     },
                     "recording_config": {
                         "record_rrweb": True,
