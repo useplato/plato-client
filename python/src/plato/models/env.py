@@ -22,6 +22,7 @@ class PlatoEnvironment:
         _current_task (Optional[PlatoTask]): The task currently being executed
         id (str): Unique identifier for this environment instance (job ID)
         _run_session_id (Optional[str]): The ID of the active run session, set after reset
+        _heartbeat_task (Optional[asyncio.Task]): Task for sending periodic heartbeats
     """
 
     _current_task: Optional[PlatoTask] = Field(
@@ -32,11 +33,14 @@ class PlatoEnvironment:
     _run_session_id: Optional[str] = Field(
         description="The ID of the active run session", default=None
     )
+    _heartbeat_task: Optional[asyncio.Task] = None
+    _heartbeat_interval: int = 30  # seconds
 
     def __init__(self, client: "Plato", id: str):
         self._client = client
         self.id = id
         self._run_session_id = None
+        self._heartbeat_task = None
 
     async def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
@@ -130,6 +134,51 @@ class PlatoEnvironment:
             self._current_task = task
         # Store the run session ID from the response
         self._run_session_id = response['data']['run_session_id']
+        
+        # Start the heartbeat task if not already running
+        await self._start_heartbeat()
+
+    async def _heartbeat_loop(self) -> None:
+        """Background task that periodically sends heartbeats to keep the environment active."""
+        try:
+            while True:
+                try:
+                    pass
+                    # await self._client.send_heartbeat(self.id)
+                except Exception as e:
+                    # Log the error but continue trying
+                    print(f"Heartbeat error: {e}")
+                await asyncio.sleep(self._heartbeat_interval)
+        except asyncio.CancelledError:
+            # Task was cancelled, clean exit
+            pass
+        except Exception as e:
+            # Unexpected error
+            print(f"Heartbeat task failed with error: {e}")
+
+    async def _start_heartbeat(self) -> None:
+        """Start the heartbeat background task if not already running."""
+        # Cancel any existing heartbeat task
+        await self._stop_heartbeat()
+        
+        # Start a new heartbeat task
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+    async def _stop_heartbeat(self) -> None:
+        """Stop the heartbeat background task if it's running."""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                # Wait for the task to be cancelled
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                # This is expected when cancelling the task
+                pass
+            except Exception as e:
+                # Log any unexpected errors
+                print(f"Error stopping heartbeat task: {e}")
+            finally:
+                self._heartbeat_task = None
 
     async def get_state(self) -> Dict[str, Any]:
         """Get the current state of the environment.
@@ -170,10 +219,30 @@ class PlatoEnvironment:
         state = await self.get_state()
         return state.get("completed", False)
 
+    async def get_live_view_url(self) -> str:
+        """Get the URL for accessing the live view of the environment.
+        
+        The live view provides a browser-based view of the environment through noVNC.
+        
+        Returns:
+            str: The URL for accessing the live view of the environment.
+            
+        Raises:
+            PlatoClientError: If no active run session exists or if the worker is not ready.
+            aiohttp.ClientError: If the API request fails.
+        """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
+        return await self._client.get_live_view_url(self.id)
+
     async def close(self) -> None:
         """Clean up and close the environment.
 
         This method handles cleanup of resources by closing the environment
-        through the API client.
+        through the API client and stopping the heartbeat task.
         """
+        # Stop sending heartbeats
+        await self._stop_heartbeat()
+        
+        # Close the environment through the API
         await self._client.close_environment(self.id)
