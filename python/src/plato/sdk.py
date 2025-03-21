@@ -67,7 +67,7 @@ class Plato:
                     "browser_config": {
                         "type": "playwright",
                         "cdp_port": 9222,
-                        "headless": True,
+                        "headless": False,
                         "viewport_size": [1920, 1080]
                     },
                     "simulator_config": {
@@ -218,6 +218,55 @@ class Plato:
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
             f"{self.base_url}/env/{job_id}/worker_ready",
+            headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def get_live_view_url(self, job_id: str) -> str:
+        """Get the URL for accessing the live view of the environment.
+
+        The live view provides a browser-based view of the environment through noVNC.
+
+        Args:
+            job_id (str): The ID of the job to get the live view URL for.
+
+        Returns:
+            str: The URL for accessing the live view of the environment.
+
+        Raises:
+            PlatoClientError: If the worker is not ready or lacks a public IP.
+            aiohttp.ClientError: If the API request fails.
+        """
+        worker_status = await self.get_worker_ready(job_id)
+        
+        if not worker_status.get("ready", False):
+            raise PlatoClientError("Worker is not ready yet")
+            
+        worker_public_ip = worker_status.get("worker_public_ip")
+        if not worker_public_ip:
+            raise PlatoClientError("Worker public IP not available")
+            
+        return f"http://{worker_public_ip}:6080"
+        
+    async def send_heartbeat(self, job_id: str) -> Dict[str, Any]:
+        """Send a heartbeat to keep the environment active.
+        
+        The environment requires regular heartbeats to stay active. Without
+        heartbeats, inactive environments may be terminated.
+        
+        Args:
+            job_id (str): The ID of the job to send a heartbeat for.
+            
+        Returns:
+            Dict[str, Any]: The response from the server.
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/env/{job_id}/heartbeat",
             headers=headers
         ) as response:
             response.raise_for_status()
