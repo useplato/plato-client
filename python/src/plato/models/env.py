@@ -3,7 +3,11 @@ from plato.models import PlatoTask
 from typing import List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
+import random
+import logging
 from plato.exceptions import PlatoClientError
+
+logger = logging.getLogger(__name__)
 
 # Using TYPE_CHECKING for proper type annotation without circular imports
 if TYPE_CHECKING:
@@ -46,6 +50,7 @@ class PlatoEnvironment:
         """Wait for the environment to be ready.
 
         This method checks both the job status and worker health until everything is ready.
+        Uses exponential backoff with jitter for polling to reduce server load.
 
         Args:
             timeout (Optional[float]): Maximum time to wait in seconds before raising an error.
@@ -55,29 +60,49 @@ class PlatoEnvironment:
             RuntimeError: If the environment fails to start within the timeout period.
         """
         start_time = time.time()
-
+        base_delay = 0.5  # Starting delay in seconds
+        max_delay = 8.0   # Maximum delay between retries
+        
         # wait for the job to be running
+        current_delay = base_delay
         while True:
             status = await self._client.get_job_status(self.id)
             if status["status"].lower() == "running":
                 break
-            await asyncio.sleep(0.5)
+                
+            # Add jitter (±25% of current delay)
+            jitter = random.uniform(-0.25 * current_delay, 0.25 * current_delay)
+            await asyncio.sleep(current_delay + jitter)
+            
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError(
                     "Environment failed to start - job never entered running state"
                 )
+                
+            # Exponential backoff
+            current_delay = min(current_delay * 2, max_delay)
+            logger.debug(f"Waiting for job to be running: {current_delay} seconds")
 
         # wait for the worker to be ready and healthy
+        current_delay = base_delay  # Reset delay for worker health check
         while True:
             worker_status = await self._client.get_worker_ready(self.id)
             if worker_status["ready"]:
                 break
-            await asyncio.sleep(0.5)
+                
+            # Add jitter (±25% of current delay)
+            jitter = random.uniform(-0.25 * current_delay, 0.25 * current_delay)
+            await asyncio.sleep(current_delay + jitter)
+            
             if timeout and time.time() - start_time > timeout:
                 error_msg = worker_status.get("error", "Unknown error")
                 raise RuntimeError(
                     f"Environment failed to start - worker not ready: {error_msg}"
                 )
+                
+            # Exponential backoff
+            current_delay = min(current_delay * 2, max_delay)
+            logger.debug(f"Waiting for worker to be ready: {current_delay} seconds")
 
     async def __aenter__(self):
         """Enter the async context manager.
