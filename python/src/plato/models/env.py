@@ -168,8 +168,7 @@ class PlatoEnvironment:
         try:
             while True:
                 try:
-                    pass
-                    # await self._client.send_heartbeat(self.id)
+                    await self._client.send_heartbeat(self.id)
                 except Exception as e:
                     # Log the error but continue trying
                     print(f"Heartbeat error: {e}")
