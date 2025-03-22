@@ -52,7 +52,7 @@ venv
 markdown.md
 
 screenshots/
-
+metrics/
 *.egg-info/
 
 python/dist

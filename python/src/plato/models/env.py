@@ -169,16 +169,17 @@ class PlatoEnvironment:
             while True:
                 try:
                     await self._client.send_heartbeat(self.id)
+                    logger.debug("Heartbeat sent")
                 except Exception as e:
                     # Log the error but continue trying
-                    print(f"Heartbeat error: {e}")
+                    logger.error(f"Heartbeat error: {e}")
                 await asyncio.sleep(self._heartbeat_interval)
         except asyncio.CancelledError:
             # Task was cancelled, clean exit
             pass
         except Exception as e:
             # Unexpected error
-            print(f"Heartbeat task failed with error: {e}")
+            logger.error(f"Heartbeat task failed with error: {e}")
 
     async def _start_heartbeat(self) -> None:
         """Start the heartbeat background task if not already running."""
