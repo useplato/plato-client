@@ -24,7 +24,7 @@ const plato = new Plato('your_api_key', 'https://plato.so/api');
 ## Basic Usage
 
 ```typescript
-import { Plato } from '@plato-ai/client';
+import { Plato } from 'plato-sdk';
 
 async function main() {
   // Create a client instance
