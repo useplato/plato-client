@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@plato-ai/client": ["./src/index.ts"],
+      "@plato-ai/client/*": ["./src/*"]
+    },
+    "noEmit": true
+  },
+  "include": ["examples/**/*", "src/**/*"],
+  "exclude": ["node_modules", "dist"]
+} 

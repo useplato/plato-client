@@ -1,43 +1,42 @@
 {
-  "name": "plato-cli",
-  "version": "0.0.32",
-  "description": "A client for the Plato API",
+  "name": "@plato-ai/client",
+  "version": "0.1.0",
+  "description": "JavaScript client for interacting with the Plato API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "examples": "NODE_PATH=./src ts-node -r tsconfig-paths/register -P tsconfig.examples.json"
+  },
   "keywords": [
     "plato",
-    "web automation",
-    "browser automation",
-    "web scraping",
-    "structured data extraction"
+    "ai",
+    "automation",
+    "testing"
   ],
-  "author": "Plato Technologies, Inc. <rob@plato.so>",
+  "author": "Plato AI",
   "license": "MIT",
-  "type": "module",
-  "module": "./dist/index.js",
-  "main": "./dist/index.cjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    "types": "./dist/index.d.ts",
-    "import": "./dist/index.js",
-    "require": "./dist/index.cjs"
-  },
-  "scripts": {
-    "build": "bun build.ts"
-  },
-  "files": [
-    "dist"
-  ],
-  "bin": {
-    "plato": "./dist/index.js"
+  "dependencies": {
+    "axios": "^1.6.7",
+    "dotenv": "^16.4.5",
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.22.4"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/jest": "^29.5.14",
-    "bun-plugin-dts": "^0.3.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "zod-to-json-schema": "^3.23.5"
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.24",
+    "@typescript-eslint/eslint-plugin": "^7.1.1",
+    "@typescript-eslint/parser": "^7.1.1",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "playwright": "^1.42.1",
+    "prettier": "^3.2.5",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.3.3"
   }
 }
