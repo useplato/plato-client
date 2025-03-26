@@ -35,19 +35,15 @@ class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
 class PlatoTask(BaseModel):
     """Represents a task in the Plato system.
 
-    This class defines the structure of a task, including its name, metadata,
-    initial state, and evaluation configuration.
+    This class defines the structure of a task, including its name, prompt, and starting URL.
+    Tasks are used to specify what actions should be performed in a Plato environment.
 
     Attributes:
-        name (Optional[str]): The name of the task. Defaults to None.
-        metadata (Optional[dict]): Additional metadata associated with the task.
-            Defaults to None.
-        initial_state (Optional[dict]): The initial state of the task before
-            execution. Defaults to None.
-        eval_config (Optional[BasePlatoEvalConfig]): The evaluation configuration
-            for the task. Defaults to None.
+        name (str): The name of the task.
+        prompt (str): The prompt describing what should be done in this task.
+        start_url (str): The URL where the task should begin execution.
     """
-    name: Optional[str] = None
-    metadata: Optional[dict] = None
-    initial_state: Optional[dict] = None
-    eval_config: Optional[BasePlatoEvalConfig] = None
+    name: str
+    prompt: str
+    start_url: str
+    

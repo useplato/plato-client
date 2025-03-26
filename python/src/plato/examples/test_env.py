@@ -12,8 +12,8 @@ async def test_environment_lifecycle():
     client = Plato(base_url="http://54.219.139.8:25565/api")
     task = PlatoTask(
         name="example_task",
-        metadata={"type": "test"},
-        initial_state={"url": "https://example.com"}
+        prompt="",
+        start_url="https://www.doordash.com/"
     )
 
     # Create and initialize the environment
