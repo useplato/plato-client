@@ -174,6 +174,7 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/reset",
             headers=headers,
+            json=params
         ) as response:
             response.raise_for_status()
             return await response.json()
