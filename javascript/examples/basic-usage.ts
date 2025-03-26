@@ -1,10 +1,12 @@
 import { Plato, PlatoClientError } from '../src/index';
-import 'dotenv/config';
 
 async function main() {
   try {
-    // Initialize the client
-    const plato = new Plato(process.env.PLATO_API_KEY);
+    // User needs to provide API key
+    const apiKey = 'YOUR_API_KEY_HERE'; // Replace with actual API key
+    
+    // Initialize the client with required API key
+    const plato = new Plato(apiKey);
 
     // Create a new environment
     console.log('Creating environment...');
@@ -42,16 +44,14 @@ async function main() {
       console.log('Live View URL:', liveViewUrl);
     }
 
-    // Keep the environment alive with heartbeats
-    const heartbeatInterval = setInterval(() => {
-      plato.sendHeartbeat(env.id).catch(console.error);
-    }, 30000);
+    // Note: Heartbeats are sent automatically by the environment
+    console.log('Heartbeats are being sent automatically every 30 seconds');
 
     // Simulate some work
+    console.log('Simulating work for 60 seconds...');
     await new Promise(resolve => setTimeout(resolve, 60000));
 
-    // Cleanup
-    clearInterval(heartbeatInterval);
+    // Cleanup - this will also stop the heartbeat interval
     console.log('Closing environment...');
     await env.close();
     console.log('Environment closed');
@@ -64,7 +64,10 @@ async function main() {
     } else {
       console.error('Unknown error:', err);
     }
-    process.exit(1);
+    // Use process.exit if running in Node.js environment
+    if (typeof process !== 'undefined') {
+      process.exit(1);
+    }
   }
 }
 

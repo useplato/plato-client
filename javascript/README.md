@@ -10,15 +10,11 @@ npm install @plato-ai/client
 
 ## Configuration
 
-The client can be configured using environment variables or by passing options directly to the client constructor:
+The client must be configured by passing options directly to the client constructor:
 
 ```typescript
-// Using environment variables (.env file)
-PLATO_API_KEY=your_api_key
-PLATO_BASE_URL=https://plato.so/api  # Optional, defaults to https://plato.so/api
-
-// Or configure programmatically
-const plato = new Plato('your_api_key', 'https://plato.so/api');
+// Configure programmatically
+const plato = new Plato('your_api_key', 'https://plato.so/api'); // API key is required, base URL is optional
 ```
 
 ## Basic Usage
@@ -27,11 +23,14 @@ const plato = new Plato('your_api_key', 'https://plato.so/api');
 import { Plato } from 'plato-sdk';
 
 async function main() {
-  // Create a client instance
+  // Create a client instance with your API key
   const plato = new Plato('your_api_key');
 
   // Create a new environment
   const env = await plato.makeEnvironment('test-env');
+
+  // Wait for the environment to be ready
+  await env.waitForReady(60000); // timeout in ms (optional)
 
   // Get the CDP URL for browser automation
   const cdpUrl = await env.getCdpUrl();
@@ -41,12 +40,73 @@ async function main() {
   const liveViewUrl = await env.getLiveViewUrl();
   console.log('Live View URL:', liveViewUrl);
 
-  // Close the environment when done
+  // Environment automatically sends heartbeats to keep it alive
+  
+  // When finished, close the environment - this also stops the heartbeats
   await env.close();
 }
 
 main().catch(console.error);
 ```
+
+## Playwright Integration
+
+The library includes built-in support for Playwright browser automation:
+
+```typescript
+import { Plato } from 'plato-sdk';
+import { chromium } from 'playwright';
+
+async function main() {
+  // Create a client and environment
+  const plato = new Plato('your_api_key');
+  const env = await plato.makeEnvironment('playwright-test');
+  
+  // Wait for the environment to be ready
+  await env.waitForReady();
+  
+  // Connect with Playwright using the built-in helper
+  const { browser, context, page } = await env.connectWithPlaywright(chromium);
+  
+  // Use Playwright as normal
+  await page.goto('https://example.com');
+  await page.screenshot({ path: 'screenshot.png' });
+  
+  // Clean up
+  await browser.close();
+  await env.close();
+}
+
+main().catch(console.error);
+```
+
+## Browser Usage
+
+This library is compatible with browser environments. When using in a browser, simply import the package and provide your API key:
+
+```javascript
+// In a browser environment
+import { Plato } from 'plato-sdk';
+
+// Create a client with your API key
+const plato = new Plato('your_api_key');
+
+// Use the client as normal
+document.getElementById('createEnv').addEventListener('click', async () => {
+  try {
+    const env = await plato.makeEnvironment('browser-test');
+    await env.waitForReady();
+    const cdpUrl = await env.getCdpUrl();
+    console.log('Environment ready with CDP URL:', cdpUrl);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+});
+```
+
+## Automatic Heartbeats
+
+The environment automatically sends heartbeats to keep the environment alive, so you don't need to manually implement a heartbeat mechanism. When you call `env.close()`, the heartbeats are automatically stopped.
 
 ## Advanced Usage
 
@@ -78,8 +138,7 @@ if (workerStatus.ready) {
   console.log('Worker Public IP:', workerStatus.worker_public_ip);
 }
 
-// Send heartbeat to keep worker alive
-await plato.sendHeartbeat(env.id);
+// Heartbeats are sent automatically, you don't need to do this manually
 ```
 
 ### Error Handling
@@ -117,6 +176,10 @@ Check out the [examples](./examples) directory for more detailed usage examples:
 
 Main client class for interacting with the Plato API.
 
+#### Constructor
+
+- `constructor(apiKey: string, baseUrl?: string)`
+
 #### Methods
 
 - `makeEnvironment(envId: string): Promise<PlatoEnvironment>`
@@ -125,7 +188,7 @@ Main client class for interacting with the Plato API.
 - `closeEnvironment(jobId: string): Promise<any>`
 - `resetEnvironment(jobId: string, task?: PlatoTask): Promise<any>`
 - `getEnvironmentState(jobId: string): Promise<any>`
-- `getWorkerReady(jobId: string): Promise<any>`
+- `getWorkerReady(jobId: string): Promise<WorkerReadyResponse>`
 - `getLiveViewUrl(jobId: string): Promise<string>`
 - `sendHeartbeat(jobId: string): Promise<any>`
 
@@ -141,6 +204,8 @@ Class representing a Plato environment instance.
 - `reset(task?: PlatoTask): Promise<any>`
 - `getState(): Promise<any>`
 - `getLiveViewUrl(): Promise<string>`
+- `waitForReady(timeout?: number): Promise<void>`
+- `connectWithPlaywright(playwrightLib: any): Promise<{ browser, context, page }>`
 
 ## Contributing
 

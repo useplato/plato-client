@@ -9,10 +9,10 @@ This directory contains example scripts demonstrating how to use the Plato clien
 npm install
 ```
 
-2. Set up your environment variables:
-```bash
-# Create a .env file in the root directory
-echo "PLATO_API_KEY=your_api_key" > ../.env
+2. Update the API Key in the examples:
+```javascript
+// In each example file, replace the placeholder with your actual API key
+const apiKey = 'YOUR_API_KEY_HERE'; // Replace with your actual API key
 ```
 
 ## Running Examples
@@ -47,7 +47,7 @@ Shows how to use the Plato client with Playwright for browser automation:
 
 ## Notes
 
-- Make sure you have a valid Plato API key before running the examples
+- Make sure you specify your Plato API key directly in the example files
 - The browser automation example requires Playwright, which is included in the devDependencies
 - Examples include proper error handling and cleanup to demonstrate best practices
 - Each example can be run independently and includes console output to show what's happening

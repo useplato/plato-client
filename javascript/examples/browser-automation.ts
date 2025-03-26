@@ -1,25 +1,29 @@
 import { Plato, PlatoClientError } from '../src/index';
 import { chromium, Browser } from 'playwright';
-import 'dotenv/config';
 
 async function main() {
   let browser: Browser | undefined;
   try {
-    // Initialize the client
-    const plato = new Plato(process.env.PLATO_API_KEY);
+    // User needs to provide API key
+    const apiKey = 'YOUR_API_KEY_HERE'; // Replace with actual API key
+    
+    // Initialize the client with required API key
+    const plato = new Plato(apiKey);
 
     // Create a new environment
     console.log('Creating environment...');
     const env = await plato.makeEnvironment('browser-automation-example');
     console.log('Environment created with ID:', env.id);
 
-    // Get CDP URL and connect Playwright
-    console.log('Connecting to browser...');
-    const cdpUrl = await env.getCdpUrl();
-    browser = await chromium.connectOverCDP(cdpUrl);
+    // Wait for the environment to be ready
+    console.log('Waiting for environment to be ready...');
+    await env.waitForReady(300_000); // 5 minutes timeout
+    console.log('Environment is ready');
 
-    // Create a new page
-    const page = await browser.newPage();
+    // Connect with Playwright using the helper
+    console.log('Connecting to browser...');
+    const { browser: playwrightBrowser, context, page } = await env.connectWithPlaywright(chromium);
+    browser = playwrightBrowser; // Store in outer scope for cleanup
 
     // Navigate to a website
     console.log('Navigating to example.com...');
@@ -37,13 +41,19 @@ async function main() {
     const content = await page.textContent('h1');
     console.log('H1 content:', content);
 
-    // Keep the environment alive with heartbeats
-    const heartbeatInterval = setInterval(() => {
-      plato.sendHeartbeat(env.id).catch(console.error);
-    }, 30000);
+    // Perform some actions (example)
+    console.log('Performing actions...');
+    await page.click('a');
+    await page.waitForLoadState('networkidle');
+    console.log('Clicked link and page loaded');
 
-    // Cleanup
-    clearInterval(heartbeatInterval);
+    // We don't need to manually send heartbeats anymore - it's handled automatically
+    console.log('Environment will stay alive due to automatic heartbeats');
+    
+    // Simulate work (wait for 30 seconds)
+    await new Promise(resolve => setTimeout(resolve, 30000));
+
+    // Cleanup - closing the environment will also stop the heartbeat
     console.log('Closing browser and environment...');
     await browser.close();
     await env.close();
@@ -57,7 +67,10 @@ async function main() {
     } else {
       console.error('Unknown error:', err);
     }
-    process.exit(1);
+    // Use process.exit if running in Node.js environment
+    if (typeof process !== 'undefined') {
+      process.exit(1);
+    }
   } finally {
     if (browser) {
       await browser.close().catch(console.error);
