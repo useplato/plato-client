@@ -291,28 +291,21 @@ export class Plato {
       throw error;
     }
   }
-
   async getLiveViewUrl(jobId: string): Promise<string> {
     try {
-      const workerStatus = await this.getWorkerReady(jobId);
-
-      if (!workerStatus.ready) {
-        throw new PlatoClientError('Worker is not ready yet');
-      }
-
-      const workerPublicIp = workerStatus.worker_public_ip;
-      if (!workerPublicIp) {
-        throw new PlatoClientError('Worker public IP not available');
-      }
-
-      return `http://${workerPublicIp}:6080`;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new PlatoClientError(error.message);
-      }
-      throw error;
+        const workerStatus = await this.getWorkerReady(jobId);
+        if (!workerStatus.ready) {
+            throw new PlatoClientError('Worker is not ready yet');
+        }
+        return `${this.baseUrl}/api/env/live/${jobId}`;
     }
-  }
+    catch (error) {
+        if (axios.isAxiosError(error)) {
+            throw new PlatoClientError(error.message);
+        }
+        throw error;
+    }
+}
 
   async sendHeartbeat(jobId: string) {
     try {

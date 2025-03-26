@@ -157,6 +157,10 @@ class PlatoEnvironment:
         response = await self._client.reset_environment(self.id, task)
         if task:
             self._current_task = task
+        
+        if not response['success']:
+            raise PlatoClientError(response['error'])
+
         # Store the run session ID from the response
         self._run_session_id = response['data']['run_session_id']
         
