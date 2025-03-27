@@ -305,7 +305,7 @@ export class Plato {
         }
         throw error;
     }
-}
+  }
 
   async sendHeartbeat(jobId: string) {
     try {

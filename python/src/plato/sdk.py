@@ -223,11 +223,9 @@ class Plato:
         ) as response:
             response.raise_for_status()
             return await response.json()
-
+    
     async def get_live_view_url(self, job_id: str) -> str:
         """Get the URL for accessing the live view of the environment.
-
-        The live view provides a browser-based view of the environment through noVNC.
 
         Args:
             job_id (str): The ID of the job to get the live view URL for.
@@ -236,19 +234,16 @@ class Plato:
             str: The URL for accessing the live view of the environment.
 
         Raises:
-            PlatoClientError: If the worker is not ready or lacks a public IP.
+            PlatoClientError: If the worker is not ready.
             aiohttp.ClientError: If the API request fails.
         """
-        worker_status = await self.get_worker_ready(job_id)
-        
-        if not worker_status.get("ready", False):
-            raise PlatoClientError("Worker is not ready yet")
-            
-        worker_public_ip = worker_status.get("worker_public_ip")
-        if not worker_public_ip:
-            raise PlatoClientError("Worker public IP not available")
-            
-        return f"http://{worker_public_ip}:6080"
+        try:
+            worker_status = await self.get_worker_ready(job_id)
+            if not worker_status.get("ready"):
+                raise PlatoClientError("Worker is not ready yet")
+            return f"{self.base_url}/api/env/live/{job_id}"
+        except aiohttp.ClientError as e:
+            raise PlatoClientError(str(e))
         
     async def send_heartbeat(self, job_id: str) -> Dict[str, Any]:
         """Send a heartbeat to keep the environment active.
