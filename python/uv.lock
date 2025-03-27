@@ -1,12 +1,5 @@
 version = 1
-revision = 1
-requires-python = ">=3.12.8"
-
-[manifest]
-members = [
-    "example",
-    "plato-sdk",
-]
+requires-python = ">=3.12"
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -95,11 +88,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/5a/b0/1367933a8532ee6ff
 wheels = [
     { url = "https://files.pythonhosted.org/packages/77/06/bb80f5f86020c4551da315d78b3ab75e8228f89f0162f2c3a819e407941a/attrs-25.3.0-py3-none-any.whl", hash = "sha256:427318ce031701fea540783410126f03899a97ffc6f61596ad581ac2e40e3bc3", size = 63815 },
 ]
-
-[[package]]
-name = "example"
-version = "0.1.0"
-source = { virtual = "example" }
 
 [[package]]
 name = "frozenlist"
@@ -223,7 +211,7 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "0.1.0a1"
+version = "1.0.11"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
