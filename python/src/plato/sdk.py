@@ -197,7 +197,8 @@ class Plato:
             headers=headers
         ) as response:
             response.raise_for_status()
-            return await response.json()
+            data = await response.json()
+            return data['data']['state']
 
     async def get_worker_ready(self, job_id: str) -> Dict[str, Any]:
         """Check if the worker for this job is ready and healthy.
@@ -264,6 +265,26 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/heartbeat",
             headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def process_snapshot(self, session_id: str) -> Dict[str, Any]:
+        """Process a snapshot of the environment.
+
+        Args:
+            session_id (str): The ID of the session to process.
+
+        Returns:
+            Dict[str, Any]: The response from the server.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/snapshot/process/{session_id}",
+            headers=headers,
         ) as response:
             response.raise_for_status()
             return await response.json()
