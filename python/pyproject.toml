@@ -12,6 +12,7 @@ dependencies = [
     "aiohttp>=3.11.13",
     "pydantic>=2.10.6",
     "pydantic-settings>=2.8.1",
+    "rebrowser-playwright>=1.49.1",
 ]
 
 [build-system]
