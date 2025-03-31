@@ -6,6 +6,7 @@ from plato.exceptions import PlatoClientError
 
 config = get_config()
 
+
 class Plato:
     """Client for interacting with the Plato API.
 
@@ -64,11 +65,12 @@ class Plato:
             json={
                 "config": {
                     "type": "browser",
+                    "source": "SDK",
                     "browser_config": {
                         "type": "playwright",
                         "cdp_port": 9222,
                         "headless": False,
-                        "viewport_size": [1920, 1080]
+                        "viewport_size": [1920, 1080],
                     },
                     "simulator_config": {
                         "type": "proxy",
@@ -80,19 +82,16 @@ class Plato:
                         }
                     },
                     "recording_config": {
-                        "record_rrweb": True,
-                        "record_network_requests": True
-                    }
+                        "record_rrweb": False,
+                        "record_network_requests": False,
+                    },
                 }
             },
-            headers=headers
+            headers=headers,
         ) as response:
             response.raise_for_status()
             data = await response.json()
-            return PlatoEnvironment(
-                client=self,
-                id=data["job_id"]
-            )
+            return PlatoEnvironment(client=self, id=data["job_id"])
 
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
@@ -108,8 +107,7 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/env/{job_id}/status",
-            headers=headers
+            f"{self.base_url}/env/{job_id}/status", headers=headers
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -128,11 +126,10 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/env/{job_id}/cdp_url",
-            headers=headers
+            f"{self.base_url}/env/{job_id}/cdp_url", headers=headers
         ) as response:
             data = await response.json()
-            if data['error'] is not None:
+            if data["error"] is not None:
                 raise PlatoClientError(data["error"])
             return data["data"]["cdp_url"]
 
@@ -150,13 +147,14 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
-            f"{self.base_url}/env/{job_id}/close",
-            headers=headers
+            f"{self.base_url}/env/{job_id}/close", headers=headers
         ) as response:
             response.raise_for_status()
             return await response.json()
 
-    async def reset_environment(self, job_id: str, task: Optional[PlatoTask] = None) -> Dict[str, Any]:
+    async def reset_environment(
+        self, job_id: str, task: Optional[PlatoTask] = None
+    ) -> Dict[str, Any]:
         """Reset an environment with an optional new task.
 
         Args:
@@ -172,9 +170,7 @@ class Plato:
         headers = {"X-API-Key": self.api_key}
         params = {"task": task.dict() if task else None}
         async with self.http_session.post(
-            f"{self.base_url}/env/{job_id}/reset",
-            headers=headers,
-            json=params
+            f"{self.base_url}/env/{job_id}/reset", headers=headers, json=params
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -193,12 +189,11 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/env/{job_id}/state",
-            headers=headers
+            f"{self.base_url}/env/{job_id}/state", headers=headers
         ) as response:
             response.raise_for_status()
             data = await response.json()
-            return data['data']['state']
+            return data["data"]["state"]
 
     async def get_worker_ready(self, job_id: str) -> Dict[str, Any]:
         """Check if the worker for this job is ready and healthy.
@@ -219,8 +214,7 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/env/{job_id}/worker_ready",
-            headers=headers
+            f"{self.base_url}/env/{job_id}/worker_ready", headers=headers
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -263,8 +257,7 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
-            f"{self.base_url}/env/{job_id}/heartbeat",
-            headers=headers
+            f"{self.base_url}/env/{job_id}/heartbeat", headers=headers
         ) as response:
             response.raise_for_status()
             return await response.json()
