@@ -47,7 +47,7 @@ class Plato:
             await self._http_session.close()
             self._http_session = None
 
-    async def make_environment(self, env_id: str) -> PlatoEnvironment:
+    async def make_environment(self, env_id: str, open_page_on_start: bool = False) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
         Args:
@@ -66,6 +66,7 @@ class Plato:
                 "config": {
                     "type": "browser",
                     "source": "SDK",
+                    "open_page_on_start": open_page_on_start,
                     "browser_config": {
                         "type": "playwright",
                         "cdp_port": 9222,

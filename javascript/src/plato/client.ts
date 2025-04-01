@@ -173,11 +173,13 @@ export class Plato {
     });
   }
 
-  async makeEnvironment(envId: string): Promise<PlatoEnvironment> {
+  async makeEnvironment(envId: string, openPageOnStart: boolean = false): Promise<PlatoEnvironment> {
     try {
       const response = await this.http.post('/env/make', {
         config: {
           type: 'browser',
+          source: 'SDK',
+          open_page_on_start: openPageOnStart,
           browser_config: {
             type: 'playwright',
             cdp_port: 9222,
