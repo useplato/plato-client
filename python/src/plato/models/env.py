@@ -1,5 +1,5 @@
 from pydantic import Field
-from plato.models import PlatoTask
+from plato.models import PlatoTask, EvaluationResult
 from typing import List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 # Using TYPE_CHECKING for proper type annotation without circular imports
 if TYPE_CHECKING:
     from plato.sdk import Plato
+
 
 
 class PlatoEnvironment:
@@ -234,24 +235,49 @@ class PlatoEnvironment:
         state = await self.get_state()
         return state.get("mutations", [])
 
-    async def evaluate(self) -> Optional[bool]:
+    def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:
+        """Get a value from a nested dictionary using dotted notation.
+        
+        Args:
+            data: The dictionary to search in
+            key_path: A string with dot-separated keys, can include list indices with []
+            
+        Returns:
+            The value at the specified path
+            
+        Example:
+            data = {"a": {"b": [{"c": 1}, {"c": 2}]}}
+            _get_nested_value(data, "a.b[1].c") -> 2
+        """
+        current = data
+        for part in key_path.split('.'):
+            if '[' in part:
+                # Handle list index access
+                key, idx_str = part.split('[')
+                idx = int(idx_str.rstrip(']'))
+                current = current[key][idx]
+            else:
+                current = current[part]
+        return current
+
+    async def evaluate(self) -> EvaluationResult:
         """Evaluate whether the current task has been completed successfully.
 
         This method evaluates task completion based on the evaluation configuration
         specified in the task. It supports two types of evaluation:
         1. State mutation matching - checks if required state mutations occurred
+           using dotted notation for nested paths (e.g., "browser.url" or "elements[0].text")
         2. Custom evaluation - uses a provided scoring function
 
         If no evaluation config is specified, defaults to checking the completed flag
         in the environment state.
 
         Returns:
-            bool: True if the task is completed successfully, False otherwise.
+            EvaluationResult: Contains success status and reason for failure if applicable.
 
         Raises:
             PlatoClientError: If no active run session exists.
         """
-        breakpoint()
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
 
@@ -259,30 +285,60 @@ class PlatoEnvironment:
             logger.warning(
                 f"No evaluation config found for task: {self._current_task.name}"
             )
-            return None
+            return EvaluationResult(success=None, reason="No evaluation config found")
 
         eval_config = self._current_task.eval_config
 
         if eval_config.type == "state_mutation_match":
-            # Get actual mutations from environment
-            actual_mutations = await self.get_state_mutations()
-
+            mutations = await self.get_state_mutations()
+            
             # Get expected mutations from config
             expected_mutations = eval_config.state_mutations
-
-            # Check if all expected mutations are present in actual mutations
-            # This is a simple subset check - could be made more sophisticated
-            return all(expected in actual_mutations for expected in expected_mutations)
+            
+            # Check each expected mutation against the current state
+            for key_path, expected_value in expected_mutations:
+                try:
+                    actual_value = self._get_nested_value(mutations, key_path)
+                    if actual_value != expected_value:
+                        return EvaluationResult(
+                            success=False,
+                            reason=f"Mismatch at '{key_path}': expected {expected_value}, got {actual_value}"
+                        )
+                except (KeyError, IndexError, TypeError) as e:
+                    return EvaluationResult(
+                        success=False,
+                        reason=f"Failed to access path '{key_path}': {str(e)}"
+                    )
+            
+            return EvaluationResult(success=True)
 
         elif eval_config.type == "custom":
             # Get current state for custom evaluation
             state = await self.get_state()
 
-            # Run custom evaluation function
-            return eval_config.score_fn(state)
+            try:
+                # Run custom evaluation function, expecting (bool, str) tuple
+                result = eval_config.score_fn(state)
+                if isinstance(result, tuple):
+                    success, reason = result
+                    return EvaluationResult(success=success, reason=None if success else reason)
+                else:
+                    # Handle legacy score functions that return just a boolean
+                    return EvaluationResult(
+                        success=bool(result),
+                        reason=None if result else "Custom evaluation failed"
+                    )
+            except Exception as e:
+                return EvaluationResult(
+                    success=False,
+                    reason=f"Custom evaluation error: {str(e)}"
+                )
 
         else:
-            raise PlatoClientError(f"Unknown evaluation type: {eval_config.type}")
+            return EvaluationResult(
+                success=False,
+                reason=f"Unknown evaluation type: {eval_config.type}"
+            )
 
     async def get_live_view_url(self) -> str:
         """Get the URL for accessing the live view of the environment.

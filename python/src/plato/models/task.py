@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Literal, List, Callable
+from typing import Optional, Literal, List, Callable, Tuple
 
 
 class BasePlatoEvalConfig(BaseModel):
@@ -31,7 +31,7 @@ class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """
 
     type: Literal["state_mutation_match"] = "state_mutation_match"
-    state_mutations: List[dict]
+    state_mutations: List[Tuple[str, str]]
 
 
 class CustomEvalConfig(BasePlatoEvalConfig):
@@ -47,6 +47,18 @@ class CustomEvalConfig(BasePlatoEvalConfig):
 
     type: Literal["custom"] = "custom"
     score_fn: Callable
+
+
+class EvaluationResult(BaseModel):
+    """Result of an evaluation containing both success status and reason if failed.
+
+    Attributes:
+        success: Whether the evaluation was successful
+        reason: If success is False, contains the reason for failure. None if successful.
+    """
+
+    success: bool
+    reason: Optional[str] = None
 
 
 class PlatoTask(BaseModel):
