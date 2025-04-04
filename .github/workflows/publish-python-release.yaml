@@ -1,0 +1,61 @@
+name: Publish Python Package
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          
+      - name: Generate version
+        id: version
+        run: |
+          # Extract package name and base version from pyproject.toml
+          PACKAGE_NAME=$(grep -m1 "name =" pyproject.toml | cut -d'"' -f2 | cut -d'"' -f1)
+          BASE_VERSION=$(grep -m1 "version =" pyproject.toml | cut -d'"' -f2 | cut -d'"' -f1)
+          
+          # Get tag name and short commit hash
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          
+          echo "Generated version details:"
+          echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+          echo "VERSION=${BASE_VERSION}" >> $GITHUB_ENV
+          
+          # Create a summary for the GitHub Actions summary page
+          echo "## 📦 Package Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** ${PACKAGE_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${BASE_VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${TAG_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Install dependencies
+        run: uv pip install -e .
+          
+      - name: Build and publish to PyPI
+        env:
+          UV_PUBLISH_USERNAME: __token__
+          UV_PUBLISH_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          echo "Publishing version ${VERSION} to PyPI"
+          uv publish

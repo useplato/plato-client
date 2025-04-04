@@ -1,4 +1,4 @@
-from .task import PlatoTask
+from .task import PlatoTask, EvaluationResult
 from .env import PlatoEnvironment
 
-__all__ = ["PlatoTask", "PlatoEnvironment"]
+__all__ = ["PlatoTask", "PlatoEnvironment", "EvaluationResult"]
