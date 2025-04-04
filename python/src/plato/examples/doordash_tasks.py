@@ -8,10 +8,10 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=StateMutationMatchEvalConfig(
             state_mutations=[
-                {
-                    "url": "https://www.doordash.com/menu/papa-johns-pizza-san-francisco-ca/100000000000000000000000",
-                    "completed": True,
-                }
+                (
+                    "browser.url",
+                    "https://www.doordash.com/menu/papa-johns-pizza-san-francisco-ca/100000000000000000000000",
+                ),
             ]
         ),
     ),

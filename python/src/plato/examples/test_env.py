@@ -43,6 +43,9 @@ async def test_environment_lifecycle():
             print("Waited for 3 seconds")
             await page.screenshot(path="screenshot.png")
             print("Screenshot taken")
+            # get the state 
+            state = await env.get_state()
+            print(f"State: {state}")
             result = await env.evaluate()
             print(f"Evaluation result: {result}")
             await asyncio.sleep(180)
