@@ -1,5 +1,5 @@
 from pydantic import Field
-from plato.models import PlatoTask
+from plato.models import PlatoTask, EvaluationResult
 from typing import List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 # Using TYPE_CHECKING for proper type annotation without circular imports
 if TYPE_CHECKING:
     from plato.sdk import Plato
+
 
 
 class PlatoEnvironment:
@@ -61,24 +62,24 @@ class PlatoEnvironment:
         """
         start_time = time.time()
         base_delay = 0.5  # Starting delay in seconds
-        max_delay = 8.0   # Maximum delay between retries
-        
+        max_delay = 8.0  # Maximum delay between retries
+
         # wait for the job to be running
         current_delay = base_delay
         while True:
             status = await self._client.get_job_status(self.id)
             if status["status"].lower() == "running":
                 break
-                
+
             # Add jitter (±25% of current delay)
             jitter = random.uniform(-0.25 * current_delay, 0.25 * current_delay)
             await asyncio.sleep(current_delay + jitter)
-            
+
             if timeout and time.time() - start_time > timeout:
                 raise RuntimeError(
                     "Environment failed to start - job never entered running state"
                 )
-                
+
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
             logger.debug(f"Waiting for job to be running: {current_delay} seconds")
@@ -89,17 +90,17 @@ class PlatoEnvironment:
             worker_status = await self._client.get_worker_ready(self.id)
             if worker_status["ready"]:
                 break
-                
+
             # Add jitter (±25% of current delay)
             jitter = random.uniform(-0.25 * current_delay, 0.25 * current_delay)
             await asyncio.sleep(current_delay + jitter)
-            
+
             if timeout and time.time() - start_time > timeout:
                 error_msg = worker_status.get("error", "Unknown error")
                 raise RuntimeError(
                     f"Environment failed to start - worker not ready: {error_msg}"
                 )
-                
+
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
             logger.debug(f"Waiting for worker to be ready: {current_delay} seconds")
@@ -137,7 +138,7 @@ class PlatoEnvironment:
 
         Returns:
             str: The CDP URL for connecting to this environment's browser session.
-            
+
         Raises:
             PlatoClientError: If no active run session exists.
         """
@@ -150,20 +151,20 @@ class PlatoEnvironment:
 
         Args:
             task (Optional[PlatoTask]): The new task to set up the environment for.
-            
+
         Returns:
             None: The environment is reset and a new run session is created.
         """
         response = await self._client.reset_environment(self.id, task)
         if task:
             self._current_task = task
-        
-        if not response['success']:
-            raise PlatoClientError(response['error'])
+
+        if not response["success"]:
+            raise PlatoClientError(response["error"])
 
         # Store the run session ID from the response
-        self._run_session_id = response['data']['run_session_id']
-        
+        self._run_session_id = response["data"]["run_session_id"]
+
         # Start the heartbeat task if not already running
         await self._start_heartbeat()
 
@@ -189,7 +190,7 @@ class PlatoEnvironment:
         """Start the heartbeat background task if not already running."""
         # Cancel any existing heartbeat task
         await self._stop_heartbeat()
-        
+
         # Start a new heartbeat task
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
@@ -214,7 +215,7 @@ class PlatoEnvironment:
 
         Returns:
             Dict[str, Any]: A dictionary representing the current state of the environment.
-            
+
         Raises:
             PlatoClientError: If no active run session exists.
         """
@@ -227,35 +228,136 @@ class PlatoEnvironment:
 
         Returns:
             List[Dict[str, Any]]: A list of dictionaries representing state changes.
-            
+
         Raises:
             PlatoClientError: If no active run session exists.
         """
         state = await self.get_state()
         return state.get("mutations", [])
 
-    async def evaluate(self) -> bool:
-        """Evaluate whether the current task has been completed successfully.
+    def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:
+        """Get a value from a nested dictionary using dotted notation.
+
+        Args:
+            data: The dictionary to search in
+            key_path: A string with dot-separated keys, can include list indices with []
 
         Returns:
-            bool: True if the task is completed successfully, False otherwise.
-            
+            The value at the specified path
+
+        Example:
+            data = {"a": {"b": [{"c": 1}, {"c": 2}]}}
+            _get_nested_value(data, "a.b[1].c") -> 2
+        """
+        current = data
+        for part in key_path.split('.'):
+            if '[' in part:
+                # Handle list index access
+                key, idx_str = part.split('[')
+                idx = int(idx_str.rstrip(']'))
+                current = current[key][idx]
+            else:
+                current = current[part]
+        return current
+
+    async def get_evaluation_result(self) -> EvaluationResult:
+        """Evaluate whether the current task has been completed successfully.
+
+        This method evaluates task completion based on the evaluation configuration
+        specified in the task. It supports two types of evaluation:
+        1. State mutation matching - checks if required state mutations occurred
+           using dotted notation for nested paths (e.g., "browser.url" or "elements[0].text")
+        2. Custom evaluation - uses a provided scoring function
+
+        If no evaluation config is specified, defaults to checking the completed flag
+        in the environment state.
+
+        Returns:
+            EvaluationResult: Contains success status and reason for failure if applicable.
+
         Raises:
             PlatoClientError: If no active run session exists.
         """
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
-        state = await self.get_state()
-        return state.get("completed", False)
+
+        if not self._current_task or not self._current_task.eval_config:
+            logger.warning(
+                f"No evaluation config found for task: {self._current_task.name}"
+            )
+            return EvaluationResult(success=None, reason="No evaluation config found")
+
+        eval_config = self._current_task.eval_config
+
+        if eval_config.type == "state_mutation_match":
+            mutations = await self.get_state_mutations()
+
+            # Get expected mutations from config
+            expected_mutations = eval_config.state_mutations
+
+            # Check each expected mutation against the current state
+            for key_path, expected_value in expected_mutations:
+                try:
+                    actual_value = self._get_nested_value(mutations, key_path)
+                    if actual_value != expected_value:
+                        return EvaluationResult(
+                            success=False,
+                            reason=f"Mismatch at '{key_path}': expected {expected_value}, got {actual_value}"
+                        )
+                except (KeyError, IndexError, TypeError) as e:
+                    return EvaluationResult(
+                        success=False,
+                        reason=f"Failed to access path '{key_path}': {str(e)}"
+                    )
+
+            return EvaluationResult(success=True)
+
+        elif eval_config.type == "custom":
+            # Get current state for custom evaluation
+            state = await self.get_state()
+
+            try:
+                # Run custom evaluation function, expecting (bool, str) tuple
+                result = eval_config.score_fn(state)
+                if isinstance(result, tuple):
+                    success, reason = result
+                    return EvaluationResult(success=success, reason=None if success else reason)
+                else:
+                    # Handle legacy score functions that return just a boolean
+                    return EvaluationResult(
+                        success=bool(result),
+                        reason=None if result else "Custom evaluation failed"
+                    )
+            except Exception as e:
+                return EvaluationResult(
+                    success=False,
+                    reason=f"Custom evaluation error: {str(e)}"
+                )
+
+        else:
+            return EvaluationResult(
+                success=False,
+                reason=f"Unknown evaluation type: {eval_config.type}"
+            )
+
+    async def evaluate(self) -> EvaluationResult:
+        evaluation_result = await self.get_evaluation_result()
+
+        if self._run_session_id:
+            await self._client.post_evaluation_result(self._run_session_id, evaluation_result)
+
+        return evaluation_result
+
+
 
     async def get_live_view_url(self) -> str:
         """Get the URL for accessing the live view of the environment.
-        
+
         The live view provides a browser-based view of the environment through noVNC.
-        
+
         Returns:
             str: The URL for accessing the live view of the environment.
-            
+
         Raises:
             PlatoClientError: If no active run session exists or if the worker is not ready.
             aiohttp.ClientError: If the API request fails.
@@ -272,6 +374,6 @@ class PlatoEnvironment:
         """
         # Stop sending heartbeats
         await self._stop_heartbeat()
-        
+
         # Close the environment through the API
         await self._client.close_environment(self.id)
