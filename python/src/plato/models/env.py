@@ -237,14 +237,14 @@ class PlatoEnvironment:
 
     def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:
         """Get a value from a nested dictionary using dotted notation.
-        
+
         Args:
             data: The dictionary to search in
             key_path: A string with dot-separated keys, can include list indices with []
-            
+
         Returns:
             The value at the specified path
-            
+
         Example:
             data = {"a": {"b": [{"c": 1}, {"c": 2}]}}
             _get_nested_value(data, "a.b[1].c") -> 2
@@ -260,7 +260,7 @@ class PlatoEnvironment:
                 current = current[part]
         return current
 
-    async def evaluate(self) -> EvaluationResult:
+    async def get_evaluation_result(self) -> EvaluationResult:
         """Evaluate whether the current task has been completed successfully.
 
         This method evaluates task completion based on the evaluation configuration
@@ -291,10 +291,10 @@ class PlatoEnvironment:
 
         if eval_config.type == "state_mutation_match":
             mutations = await self.get_state_mutations()
-            
+
             # Get expected mutations from config
             expected_mutations = eval_config.state_mutations
-            
+
             # Check each expected mutation against the current state
             for key_path, expected_value in expected_mutations:
                 try:
@@ -309,7 +309,7 @@ class PlatoEnvironment:
                         success=False,
                         reason=f"Failed to access path '{key_path}': {str(e)}"
                     )
-            
+
             return EvaluationResult(success=True)
 
         elif eval_config.type == "custom":
@@ -339,6 +339,16 @@ class PlatoEnvironment:
                 success=False,
                 reason=f"Unknown evaluation type: {eval_config.type}"
             )
+
+    async def evaluate(self) -> EvaluationResult:
+        evaluation_result = await self.get_evaluation_result()
+
+        if self._run_session_id:
+            await self._client.post_evaluation_result(self._run_session_id, evaluation_result)
+
+        return evaluation_result
+
+
 
     async def get_live_view_url(self) -> str:
         """Get the URL for accessing the live view of the environment.

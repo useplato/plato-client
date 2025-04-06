@@ -10,9 +10,9 @@ from plato.examples.doordash_tasks import specific_easy_tasks
 async def test_environment_lifecycle():
     """Test the lifecycle of a Plato environment including creation, reset, and closure."""
     # Initialize the client
-    # client = Plato(base_url="https://plato.so/api")
+    client = Plato(base_url="https://plato.so/api")
     # client = Plato(base_url="https://staging.plato.so/api")
-    client = Plato(base_url="http://54.183.111.101:25565/api")
+    # client = Plato(base_url="http://54.183.111.101:25565/api")
     # Create and initialize the environment
     env = await client.make_environment("doordash")
 
@@ -20,6 +20,10 @@ async def test_environment_lifecycle():
         # Wait for the environment to be ready
         print("Waiting for environment to be ready")
         await env.wait_for_ready(timeout=30.0)
+
+        live_view_url = await env.get_live_view_url()
+        print(f"Live view URL: {live_view_url}")
+
         print("Environment ready")
         start_time = time.time()
         await env.reset(task=specific_easy_tasks[0])
@@ -43,12 +47,12 @@ async def test_environment_lifecycle():
             print("Waited for 3 seconds")
             await page.screenshot(path="screenshot.png")
             print("Screenshot taken")
-            # get the state 
+            # get the state
             state = await env.get_state()
             print(f"State: {state}")
             result = await env.evaluate()
             print(f"Evaluation result: {result}")
-            await asyncio.sleep(180)
+            # await asyncio.sleep(180)
 
     finally:
         # Always ensure we close the environment

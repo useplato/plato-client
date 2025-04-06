@@ -3,6 +3,7 @@ import aiohttp
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
 from plato.exceptions import PlatoClientError
+from plato.models.task import EvaluationResult
 
 config = get_config()
 
@@ -279,6 +280,20 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/snapshot/process/{session_id}",
             headers=headers,
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def post_evaluation_result(self, session_id: str, evaluation_result: EvaluationResult) -> Dict[str, Any]:
+        """Post an evaluation result to the server.
+
+        Args:
+            job_id (str): The ID of the job to post the evaluation result for.
+            evaluation_result (EvaluationResult): The evaluation result to post.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/env/session/{session_id}/score", headers=headers, json=evaluation_result.model_dump()
         ) as response:
             response.raise_for_status()
             return await response.json()
