@@ -1,9 +1,11 @@
 from typing import Optional, Dict, Any
-import aiohttp
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
 from plato.exceptions import PlatoClientError
 from plato.models.task import EvaluationResult
+
+import aiohttp
+import os
 
 config = get_config()
 
@@ -238,7 +240,8 @@ class Plato:
             worker_status = await self.get_worker_ready(job_id)
             if not worker_status.get("ready"):
                 raise PlatoClientError("Worker is not ready yet")
-            return f"{self.base_url}/env/live/{job_id}"
+            root_url = self.base_url.split("/api")[0]
+            return os.path.join(root_url, "live", job_id)
         except aiohttp.ClientError as e:
             raise PlatoClientError(str(e))
 
