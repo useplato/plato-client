@@ -10,13 +10,14 @@ from plato.examples.doordash_tasks import specific_easy_tasks
 async def test_environment_lifecycle():
     """Test the lifecycle of a Plato environment including creation, reset, and closure."""
     # Initialize the client
-    client = Plato(base_url="https://plato.so/api")
-    # client = Plato(base_url="https://staging.plato.so/api")
+    # client = Plato(base_url="https://plato.so/api")
+    client = Plato(base_url="https://staging.plato.so/api")
     # client = Plato(base_url="http://54.183.111.101:25565/api")
     # Create and initialize the environment
     env = await client.make_environment("doordash")
 
     try:
+        print(env.id)
         # Wait for the environment to be ready
         print("Waiting for environment to be ready")
         await env.wait_for_ready(timeout=30.0)
@@ -35,6 +36,10 @@ async def test_environment_lifecycle():
         print("Getting CDP URL")
         cdp_url = await env.get_cdp_url()
         print(f"Environment ready with CDP URL: {cdp_url}")
+
+        live_url = await client.get_live_view_url(env.id)
+        print(f"Live view URL: {live_url}")
+        breakpoint()
 
         async with async_playwright() as p:
             browser = await p.chromium.connect_over_cdp(cdp_url)

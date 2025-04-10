@@ -299,7 +299,7 @@ export class Plato {
         if (!workerStatus.ready) {
             throw new PlatoClientError('Worker is not ready yet');
         }
-        return `${this.baseUrl}/env/live/${jobId}`;
+        return `${this.baseUrl}/live/${jobId}/`;
     }
     catch (error) {
         if (axios.isAxiosError(error)) {

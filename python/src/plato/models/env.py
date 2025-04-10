@@ -82,7 +82,7 @@ class PlatoEnvironment:
 
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
-            logger.debug(f"Waiting for job to be running: {current_delay} seconds")
+            logger.debug(f"Waiting for job {self.id} to be running: {current_delay} seconds")
 
         # wait for the worker to be ready and healthy
         current_delay = base_delay  # Reset delay for worker health check
@@ -103,7 +103,7 @@ class PlatoEnvironment:
 
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
-            logger.debug(f"Waiting for worker to be ready: {current_delay} seconds")
+            logger.debug(f"Waiting for worker {self.id} to be ready: {current_delay} seconds")
 
     async def __aenter__(self):
         """Enter the async context manager.
@@ -174,17 +174,17 @@ class PlatoEnvironment:
             while True:
                 try:
                     await self._client.send_heartbeat(self.id)
-                    logger.debug("Heartbeat sent")
+                    logger.debug(f"Heartbeat sent for job {self.id}")
                 except Exception as e:
                     # Log the error but continue trying
-                    logger.error(f"Heartbeat error: {e}")
+                    logger.error(f"Heartbeat error for job {self.id}: {e}")
                 await asyncio.sleep(self._heartbeat_interval)
         except asyncio.CancelledError:
             # Task was cancelled, clean exit
             pass
         except Exception as e:
             # Unexpected error
-            logger.error(f"Heartbeat task failed with error: {e}")
+            logger.error(f"Heartbeat task failed with error: {e} for job {self.id}")
 
     async def _start_heartbeat(self) -> None:
         """Start the heartbeat background task if not already running."""
@@ -206,7 +206,7 @@ class PlatoEnvironment:
                 pass
             except Exception as e:
                 # Log any unexpected errors
-                print(f"Error stopping heartbeat task: {e}")
+                logger.error(f"Error stopping heartbeat task for job {self.id}: {e}")
             finally:
                 self._heartbeat_task = None
 
