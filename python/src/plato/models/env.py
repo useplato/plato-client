@@ -105,6 +105,9 @@ class PlatoEnvironment:
             current_delay = min(current_delay * 2, max_delay)
             logger.debug(f"Waiting for worker {self.id} to be ready: {current_delay} seconds")
 
+         # Start the heartbeat task if not already running
+        await self._start_heartbeat()
+
     async def __aenter__(self):
         """Enter the async context manager.
 
@@ -165,8 +168,7 @@ class PlatoEnvironment:
         # Store the run session ID from the response
         self._run_session_id = response["data"]["run_session_id"]
 
-        # Start the heartbeat task if not already running
-        await self._start_heartbeat()
+       
 
     async def _heartbeat_loop(self) -> None:
         """Background task that periodically sends heartbeats to keep the environment active."""
