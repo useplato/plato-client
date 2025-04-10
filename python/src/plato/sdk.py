@@ -241,7 +241,7 @@ class Plato:
             if not worker_status.get("ready"):
                 raise PlatoClientError("Worker is not ready yet")
             root_url = self.base_url.split("/api")[0]
-            return os.path.join(root_url, "live", job_id)
+            return os.path.join(root_url, "live", job_id, "/")
         except aiohttp.ClientError as e:
             raise PlatoClientError(str(e))
 
