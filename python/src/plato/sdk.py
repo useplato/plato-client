@@ -6,6 +6,9 @@ from plato.models.task import EvaluationResult
 
 import aiohttp
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 config = get_config()
 
@@ -114,7 +117,9 @@ class Plato:
             f"{self.base_url}/env/{job_id}/status", headers=headers
         ) as response:
             response.raise_for_status()
-            return await response.json()
+            response = await response.json()
+            logger.debug(f"Job status for job {job_id}: {response}")
+            return response
 
     async def get_cdp_url(self, job_id: str) -> str:
         """Get the Chrome DevTools Protocol URL for a job.
