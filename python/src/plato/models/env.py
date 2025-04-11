@@ -149,7 +149,7 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_cdp_url(self.id)
 
-    async def reset(self, task: Optional[PlatoTask] = None) -> None:
+    async def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None) -> None:
         """Reset the environment with an optional new task.
 
         Args:
@@ -158,7 +158,7 @@ class PlatoEnvironment:
         Returns:
             None: The environment is reset and a new run session is created.
         """
-        response = await self._client.reset_environment(self.id, task)
+        response = await self._client.reset_environment(self.id, task, agent_version)
         if task:
             self._current_task = task
 
@@ -168,7 +168,7 @@ class PlatoEnvironment:
         # Store the run session ID from the response
         self._run_session_id = response["data"]["run_session_id"]
 
-       
+
 
     async def _heartbeat_loop(self) -> None:
         """Background task that periodically sends heartbeats to keep the environment active."""
@@ -342,11 +342,11 @@ class PlatoEnvironment:
                 reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
-    async def evaluate(self) -> EvaluationResult:
+    async def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
         evaluation_result = await self.get_evaluation_result()
 
         if self._run_session_id:
-            await self._client.post_evaluation_result(self._run_session_id, evaluation_result)
+            await self._client.post_evaluation_result(self._run_session_id, evaluation_result, agent_version)
 
         return evaluation_result
 

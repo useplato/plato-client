@@ -162,7 +162,7 @@ class Plato:
             return await response.json()
 
     async def reset_environment(
-        self, job_id: str, task: Optional[PlatoTask] = None
+        self, job_id: str, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None
     ) -> Dict[str, Any]:
         """Reset an environment with an optional new task.
 
@@ -177,9 +177,12 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"X-API-Key": self.api_key}
-        params = {"task": task.dict() if task else None}
+        body = {
+            "task": task.dict() if task else None,
+            "agent_version": agent_version
+        }
         async with self.http_session.post(
-            f"{self.base_url}/env/{job_id}/reset", headers=headers, json=params
+            f"{self.base_url}/env/{job_id}/reset", headers=headers, json=body
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -292,16 +295,21 @@ class Plato:
             response.raise_for_status()
             return await response.json()
 
-    async def post_evaluation_result(self, session_id: str, evaluation_result: EvaluationResult) -> Dict[str, Any]:
+    async def post_evaluation_result(self, session_id: str, evaluation_result: EvaluationResult, agent_version: Optional[str] = None) -> Dict[str, Any]:
         """Post an evaluation result to the server.
 
         Args:
             job_id (str): The ID of the job to post the evaluation result for.
             evaluation_result (EvaluationResult): The evaluation result to post.
         """
+        body = {
+            "success": evaluation_result.success,
+            "reason": evaluation_result.reason,
+            "agent_version": agent_version
+        }
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
-            f"{self.base_url}/env/session/{session_id}/score", headers=headers, json=evaluation_result.model_dump()
+            f"{self.base_url}/env/session/{session_id}/score", headers=headers, json=body
         ) as response:
             response.raise_for_status()
             return await response.json()
