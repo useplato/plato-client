@@ -1,6 +1,6 @@
 from pydantic import Field
 from plato.models import PlatoTask, EvaluationResult
-from typing import List, Optional, Type, Dict, Any, TYPE_CHECKING
+from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
 import random
@@ -320,7 +320,9 @@ class PlatoEnvironment:
 
             try:
                 # Run custom evaluation function, expecting (bool, str) tuple
-                result = eval_config.score_fn(state)
+                result = await eval_config.score_fn(state)
+                if isinstance(result, Coroutine):
+                    result = await result
                 if isinstance(result, tuple):
                     success, reason = result
                     return EvaluationResult(success=success, reason=None if success else reason)

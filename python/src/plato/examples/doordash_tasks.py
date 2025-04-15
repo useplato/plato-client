@@ -1,21 +1,21 @@
 import json
 from typing import Tuple
 from plato.models.task import CustomEvalConfig, PlatoTask
-from openai import OpenAI
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-client = OpenAI()
+client = AsyncOpenAI()
 
 class LLMJudgeResponseFormat(BaseModel):
   success: bool
   reason: str
 
-def llm_judge_eval_fn(data: dict, prompt: str) -> Tuple[bool, str]:
-  response = client.beta.chat.completions.parse(
+async def llm_judge_eval_fn(data: dict, prompt: str) -> Tuple[bool, str]:
+  response = await client.beta.chat.completions.parse(
     model="gpt-4o",
     messages=[
       {"role": "system", "content": "Your job is to judge whether the given prompt is satisfied by the given data. If it is, return 'true'. If it is not, return 'false'. Also include the reason for the score."},
-      {"role": "user", "content": f"prompt: {prompt}\n\ndata: {json.dumps(data)}"},
+      {"role": "user", "content": f"prompt: {prompt}\n orders: {json.dumps(data['state']['consumer_orders'])}"},
     ],
     response_format=LLMJudgeResponseFormat
   )
@@ -32,7 +32,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 medium pizza from papa johns with no toppings"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 medium pizza from papa johns with no toppings"),
         )
     ),
     PlatoTask(
@@ -41,7 +41,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 juicy pork bao from Dumpling story"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 juicy pork bao from Dumpling story"),
         )
     ),
     PlatoTask(
@@ -50,7 +50,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 Classic Grandma from pie punks"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 Classic Grandma from pie punks"),
         )
     ),
     PlatoTask(
@@ -59,7 +59,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 2 fried chicken sandwhiches from The Bird"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 2 fried chicken sandwhiches from The Bird"),
         )
     ),
     PlatoTask(
@@ -68,7 +68,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 10 piece buffalo wings from The Bird"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 10 piece buffalo wings from The Bird"),
         ),
     ),
     PlatoTask(
@@ -77,7 +77,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 large chicken shawarma fries from Popstar shawarma"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 large chicken shawarma fries from Popstar shawarma"),
         ),
     ),
     PlatoTask(
@@ -86,7 +86,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 10 boneless wings from Wingstop. I want only original hot flavour"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 10 boneless wings from Wingstop. I want only original hot flavour"),
         ),
     ),
     PlatoTask(
@@ -95,7 +95,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 chicken pad thai from OSHA Thai Restaurant with medium spice level."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 chicken pad thai from OSHA Thai Restaurant with medium spice level."),
         ),
     ),
     PlatoTask(
@@ -104,7 +104,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 chicken over salad from Halal Cart SF"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 chicken over salad from Halal Cart SF"),
         ),
     ),
     PlatoTask(
@@ -113,7 +113,7 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 Chicken Quesadilla from Chisme"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 Chicken Quesadilla from Chisme"),
         ),
     ),
     PlatoTask(
@@ -122,29 +122,29 @@ specific_easy_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 Gai Noodle Soup from Gai Chicken Rice"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 Gai Noodle Soup from Gai Chicken Rice"),
         ),
     ),
 ]
 
 # Tasks that have only one correct answer but include multiple items or detailed specifications
 multiple_items_specific_tasks = [
-    PlatoTask(
-        name="order_pizza_and_drinks_papa_johns",
-        prompt="buy a medium pizza from papa johns. get pepperoni and jalapenos. also get 2 cans of diet coke.",
-        start_url="https://www.doordash.com",
-        eval_config=CustomEvalConfig(
-          type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 medium pizza from papa johns. get pepperoni and jalapenos. also get 2 cans of diet coke."),
-        ),
-    ),
+    # PlatoTask(
+    #     name="order_pizza_and_drinks_papa_johns",
+    #     prompt="buy a medium pizza from papa johns. get pepperoni and jalapenos. also get 2 cans of diet coke.",
+    #     start_url="https://www.doordash.com",
+    #     eval_config=CustomEvalConfig(
+    #       type="custom",
+    #       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 medium pizza from papa johns. get pepperoni and jalapenos. also get 2 cans of diet coke."),
+    #     ),
+    # ),
     PlatoTask(
         name="order_custom_poke_bowl",
         prompt="order a large poke bowl from Poke Bowl. For my sauce I want spicy mayo sauce. For protein I want crab. For my sides I want cucumber and carrot. For my base I want white rice. For toppings I want Sesame Seeds and Fried garlic chips.",
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 large poke bowl from Poke Bowl. For my sauce I want spicy mayo sauce. For protein I want crab. For my sides I want cucumber and carrot. For my base I want white rice. For toppings I want Sesame Seeds and Fried garlic chips."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 large poke bowl from Poke Bowl. For my sauce I want spicy mayo sauce. For protein I want crab. For my sides I want cucumber and carrot. For my base I want white rice. For toppings I want Sesame Seeds and Fried garlic chips."),
         ),
     ),
     PlatoTask(
@@ -153,7 +153,7 @@ multiple_items_specific_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 chicken salad from Souvla. get dressing on the side and get no onions. also get a side of greek fries and a lemon soda."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 chicken salad from Souvla. get dressing on the side and get no onions. also get a side of greek fries and a lemon soda."),
         ),
     ),
     PlatoTask(
@@ -162,16 +162,16 @@ multiple_items_specific_tasks = [
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 2 burritos from Chipotle. The first one should be white rice, black beans and chicken. With medium salsa, cheese and lettuce. The second one should be a brown rice, pinto beans and steak with hot salsa, sour cream, guacamole, cheese and lettuce."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 2 burritos from Chipotle. The first one should be white rice, black beans and chicken. With medium salsa, cheese and lettuce. The second one should be a brown rice, pinto beans and steak with hot salsa, sour cream, guacamole, cheese and lettuce."),
         ),
     ),
     PlatoTask(
-        name="order_pizza_and_sides_bellissimos",
-        prompt="order an extra large pizza from Bellissimo's. I want 3 toppings. 1. pepperoni 2. mushroom 3. pineapple. I also want a side of garlic bread and 3 bottles of water.",
+        name="order_pizza_and_sides_bellissimo",
+        prompt="order an extra large pizza from Bellissimo Pizza. I want 3 toppings. 1. pepperoni 2. mushroom 3. pineapple. I also want a side of garlic bread and 3 bottles of water.",
         start_url="https://www.doordash.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 extra large pizza from Bellissimo's. I want 3 toppings. 1. pepperoni 2. mushroom 3. pineapple. I also want a side of garlic bread and 3 bottles of water."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 extra large pizza from Bellissimo's. I want 3 toppings. 1. pepperoni 2. mushroom 3. pineapple. I also want a side of garlic bread and 3 bottles of water."),
         ),
     ),
 ]
@@ -184,7 +184,7 @@ multiple_items_specific_tasks = [
 #         start_url="https://www.doordash.com",
 #         eval_config=CustomEvalConfig(
 #           type="custom",
-#           score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 shawarma that has has chicken and fries. It shouldn't have anything else in it. Also I don't want to spend more than 15 dollars"),
+#           score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 shawarma that has has chicken and fries. It shouldn't have anything else in it. Also I don't want to spend more than 15 dollars"),
 #         ),
 #     ),
 #     PlatoTask(
@@ -193,7 +193,7 @@ multiple_items_specific_tasks = [
 #         start_url="https://www.doordash.com",
 #         eval_config=CustomEvalConfig(
 #           type="custom",
-#           score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but sushi for 4 people from the highest rated sushi place in SF. money is no contraint. I want the best stuff."),
+#           score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but sushi for 4 people from the highest rated sushi place in SF. money is no contraint. I want the best stuff."),
 #         ),
 #     ),
 #     PlatoTask(
@@ -202,7 +202,7 @@ multiple_items_specific_tasks = [
 #         start_url="https://www.doordash.com",
 #         eval_config=CustomEvalConfig(
 #           type="custom",
-#           score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but a large pizza from a place that has at least 4.5 stars and can be delivered in less than 30 minutes. Get pepperoni and mushroom on it."),
+#           score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but a large pizza from a place that has at least 4.5 stars and can be delivered in less than 30 minutes. Get pepperoni and mushroom on it."),
 #         ),
 #     ),
 # ]
@@ -215,7 +215,7 @@ multiple_items_specific_tasks = [
 #     start_url="https://www.doordash.com",
 #     eval_config=CustomEvalConfig(
 #       type="custom",
-#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 pepperoni pizza with a total cost less than $30"),
+#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 pepperoni pizza with a total cost less than $30"),
 #     )
 #   ),
 #   PlatoTask(
@@ -224,7 +224,7 @@ multiple_items_specific_tasks = [
 #     start_url="https://www.doordash.com",
 #     eval_config=CustomEvalConfig(
 #       type="custom",
-#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 pad thai from a restaurant with rating >= 4.7 and delivery fee < $2.00"),
+#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 pad thai from a restaurant with rating >= 4.7 and delivery fee < $2.00"),
 #     )
 #   ),
 #   PlatoTask(
@@ -233,7 +233,7 @@ multiple_items_specific_tasks = [
 #     start_url="https://www.doordash.com",
 #     eval_config=CustomEvalConfig(
 #       type="custom",
-#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but buffalo wings from a restaurant with rating >= 4.8 and delivery time < 30 minutes"),
+#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but buffalo wings from a restaurant with rating >= 4.8 and delivery time < 30 minutes"),
 #     )
 #   ),
 #   PlatoTask(
@@ -242,7 +242,7 @@ multiple_items_specific_tasks = [
 #     start_url="https://www.doordash.com",
 #     eval_config=CustomEvalConfig(
 #       type="custom",
-#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with butter chicken, butter naan, and plain rice from an indian restaurant with $0 delivery fee"),
+#       score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with butter chicken, butter naan, and plain rice from an indian restaurant with $0 delivery fee"),
 #     )
 #   ),
 # ]
@@ -255,16 +255,7 @@ specific_restaurant_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 thin crust cheese pizza from Little Caesars"),
-    )
-  ),
-  PlatoTask(
-    name="order_citybachi_noodles",
-    prompt="Order garlic hibachi noodles from CityBachi",
-    start_url="https://www.doordash.com",
-    eval_config=CustomEvalConfig(
-      type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 garlic hibachi noodles from CityBachi"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 thin crust cheese pizza from Little Caesars"),
     )
   ),
   PlatoTask(
@@ -273,7 +264,7 @@ specific_restaurant_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but buffalo wings from Proposition Chicken"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but buffalo wings from Proposition Chicken"),
     )
   ),
   PlatoTask(
@@ -282,7 +273,7 @@ specific_restaurant_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 extra large pepperoni pizza from North Beach pizza"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 extra large pepperoni pizza from North Beach pizza"),
     )
   ),
 ]
@@ -290,12 +281,12 @@ specific_restaurant_tasks = [
 # Tasks that require advanced customizations from specific restaurants
 advanced_customization_tasks = [
   PlatoTask(
-    name="order_mcdonalds_nuggets_meal",
-    prompt="Order a 10 piece Chicken McNuggets from McDonalds meal with a large coke and hot mustard sauce",
+    name="order_mcdonalds_nuggets_meal_2",
+    prompt="Order a 10 piece Chicken McNuggets from McDonalds meal with a large coke, spicy buffalo sauce and hot mustard sauce",
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 10-piece Chicken McNuggets meal from McDonalds with large coke and hot mustard sauce"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 10-piece Chicken McNuggets meal from McDonalds with large coke and hot mustard sauce"),
     )
   ),
   PlatoTask(
@@ -304,7 +295,7 @@ advanced_customization_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 Double Cheeseburger from McDonalds with no onions and extra cheese"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 Double Cheeseburger from McDonalds with no onions and extra cheese"),
     )
   ),
   PlatoTask(
@@ -313,7 +304,7 @@ advanced_customization_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 milk tea from Feng Cha with jasmine green tea base, Regular Ice, 50% sweet, oat milk, boba pearls and grass jelly"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 milk tea from Feng Cha with jasmine green tea base, Regular Ice, 50% sweet, oat milk, boba pearls and grass jelly"),
     )
   ),
   PlatoTask(
@@ -322,16 +313,16 @@ advanced_customization_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 poke bowl from Ea Cafe with spicy crab meat cucumber, sweet corn, miso sauce, cabbage, and pineapple"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 poke bowl from Ea Cafe with spicy crab meat cucumber, sweet corn, miso sauce, cabbage, and pineapple"),
     )
   ),
   PlatoTask(
-    name="order_popeyes_combo",
-    prompt="Order a 3Pc spicy Tenders Combo from Popeyes with blackened ranch and a diet coke",
+    name="order_popeyes_combo_2",
+    prompt="Order a 3Pc spicy Tenders Combo from Popeyes with blackened ranch sauce, cajun fries and a diet coke",
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 3Pc spicy Tenders Combo from Popeyes with blackened ranch and a diet coke"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 3Pc spicy Tenders Combo from Popeyes with blackened ranch sauce, cajun fries and a diet coke and a biscuit"),
     )
   ),
   PlatoTask(
@@ -340,16 +331,7 @@ advanced_customization_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 Fan Favorite Box from KFC with extra crispy chicken, 2x gravy, 2x ranch, 4 large Starrys, and a 10 piece cherry pie popper with a plate"),
-    )
-  ),
-  PlatoTask(
-    name="order_kfc_tenders_meal",
-    prompt="Order a 16 pc. Tenders Meal, 2x gravy and 2x ranch and 1 honey mustard and 3x honey bbq sauces, 1 fry, 2 mac and cheese, and one close slaw, with plates and an extra biscuit",
-    start_url="https://www.doordash.com",
-    eval_config=CustomEvalConfig(
-      type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 16 pc. Tenders Meal with specified sauces and sides from KFC"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 Fan Favorite Box from KFC with extra crispy chicken, 2x gravy, 2x ranch, 4 large Starrys, and a 10 piece cherry pie popper with a plate"),
     )
   ),
 ]
@@ -357,12 +339,12 @@ advanced_customization_tasks = [
 # Tasks that require ordering multiple items from specific restaurants
 multiple_items_tasks = [
   PlatoTask(
-    name="order_papa_johns_combo",
-    prompt="Order a cheese pizza and liter of pepsi from papa johns",
+    name="order_papa_johns_combo_2_liters",
+    prompt="Order a cheese pizza and a 2 liter pepsi from papa johns",
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with nothing but 1 cheese pizza and 1 liter of pepsi from papa johns"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 1 pizza with no toppings and a 2 liter bottle of pepsi from papa johns"),
     )
   ),
   PlatoTask(
@@ -371,7 +353,7 @@ multiple_items_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with Steamed BBQ Pork Bao, Shrimp & Pork Siu Mai, Tom Yum, and Crispy Sesame Tofu Squares from Dumpling Time"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but Steamed BBQ Pork Bao, Shrimp & Pork Siu Mai, Tom Yum, and Crispy Sesame Tofu Squares from Dumpling Time"),
     )
   ),
   PlatoTask(
@@ -380,29 +362,29 @@ multiple_items_tasks = [
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with 2 Chicken Tikka Masalas, 2 Basmati Rices, 1 garlic naan and 1 plain naan from NEWA Nepalese Indian Resturant"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with nothing but 2 Chicken Tikka Masalas, 2 Basmati Rices, 1 garlic naan and 1 plain naan from NEWA Nepalese Indian Resturant"),
     )
   ),
 ]
 
 # Bonus tasks with special requirements
 bonus_tasks = [
-  PlatoTask(
-    name="reorder_shawarma_with_drink",
-    prompt="re-order the last shawarma I got. also add a diet coke",
-    start_url="https://www.doordash.com",
-    eval_config=CustomEvalConfig(
-      type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order from Popstar Shawarma with a chicken shawarma fries and a diet coke"),
-    )
-  ),
+  # PlatoTask(
+  #   name="reorder_shawarma_with_drink",
+  #   prompt="re-order the last shawarma I got. also add a diet coke",
+  #   start_url="https://www.doordash.com",
+  #   eval_config=CustomEvalConfig(
+  #     type="custom",
+  #     score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order from Popstar Shawarma with a chicken shawarma fries and a diet coke"),
+  #   )
+  # ),
   PlatoTask(
     name="order_rt_rotisserie_with_tip",
     prompt="Order a Umami Fries from RT Rotisserie and tip 30%",
     start_url="https://www.doordash.com",
     eval_config=CustomEvalConfig(
       type="custom",
-      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 consumer_order with Umami Fries from RT Rotisserie and a 30% tip"),
+      score_fn=lambda x: llm_judge_eval_fn(x, "There should be 1 order with Umami Fries from RT Rotisserie and a 30% tip"),
     )
   ),
 ]
