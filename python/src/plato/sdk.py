@@ -53,7 +53,9 @@ class Plato:
             await self._http_session.close()
             self._http_session = None
 
-    async def make_environment(self, env_id: str, open_page_on_start: bool = False) -> PlatoEnvironment:
+    async def make_environment(
+        self, env_id: str, open_page_on_start: bool = False
+    ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
         Args:
@@ -67,32 +69,15 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
-            f"{self.base_url}/env/make",
+            f"{self.base_url}/env/make2",
             json={
-                "config": {
-                    "type": "browser",
-                    "source": "SDK",
-                    "open_page_on_start": open_page_on_start,
-                    "browser_config": {
-                        "type": "playwright",
-                        "cdp_port": 9222,
-                        "headless": False,
-                        "viewport_size": [1920, 1080],
-                    },
-                    "simulator_config": {
-                        "type": "proxy",
-                        "env_id": env_id,
-                        "num_workers": 4,
-                        "proxy_config": {
-                            "host": "localhost",
-                            "port": 8000,
-                        }
-                    },
-                    "recording_config": {
-                        "record_rrweb": False,
-                        "record_network_requests": False,
-                    },
-                }
+                "interface_type": "browser",
+                "interface_width": 1920,
+                "interface_height": 1080,
+                "source": "SDK",
+                "open_page_on_start": open_page_on_start,
+                "env_id": env_id,
+                "env_config": {},
             },
             headers=headers,
         ) as response:
@@ -162,7 +147,10 @@ class Plato:
             return await response.json()
 
     async def reset_environment(
-        self, job_id: str, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None
+        self,
+        job_id: str,
+        task: Optional[PlatoTask] = None,
+        agent_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Reset an environment with an optional new task.
 
@@ -177,10 +165,7 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"X-API-Key": self.api_key}
-        body = {
-            "task": task.dict() if task else None,
-            "agent_version": agent_version
-        }
+        body = {"task": task.dict() if task else None, "agent_version": agent_version}
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/reset", headers=headers, json=body
         ) as response:
@@ -249,7 +234,7 @@ class Plato:
             if not worker_status.get("ready"):
                 raise PlatoClientError("Worker is not ready yet")
             root_url = self.base_url.split("/api")[0]
-            return os.path.join(root_url, "live", job_id, "/")
+            return os.path.join(root_url, "live", f"{job_id}/")
         except aiohttp.ClientError as e:
             raise PlatoClientError(str(e))
 
@@ -295,7 +280,12 @@ class Plato:
             response.raise_for_status()
             return await response.json()
 
-    async def post_evaluation_result(self, session_id: str, evaluation_result: EvaluationResult, agent_version: Optional[str] = None) -> Dict[str, Any]:
+    async def post_evaluation_result(
+        self,
+        session_id: str,
+        evaluation_result: EvaluationResult,
+        agent_version: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Post an evaluation result to the server.
 
         Args:
@@ -305,11 +295,13 @@ class Plato:
         body = {
             "success": evaluation_result.success,
             "reason": evaluation_result.reason,
-            "agent_version": agent_version
+            "agent_version": agent_version,
         }
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
-            f"{self.base_url}/env/session/{session_id}/score", headers=headers, json=body
+            f"{self.base_url}/env/session/{session_id}/score",
+            headers=headers,
+            json=body,
         ) as response:
             response.raise_for_status()
             return await response.json()
