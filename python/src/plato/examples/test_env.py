@@ -4,15 +4,18 @@ import time
 from playwright.async_api import async_playwright
 from plato.models import PlatoTask
 from plato.sdk import Plato
-from plato.examples.doordash_tasks import specific_easy_tasks
+
+from dotenv import load_dotenv
+
+load_dotenv('.env')
 
 
 async def test_environment_lifecycle():
     """Test the lifecycle of a Plato environment including creation, reset, and closure."""
     # Initialize the client
     # client = Plato(base_url="https://plato.so/api")
-    # client = Plato(base_url="https://staging.plato.so/api")
-    client = Plato(base_url="http://54.219.32.250:8080/api")
+    client = Plato(base_url="https://staging.plato.so/api")
+    # client = Plato(base_url="http://54.219.32.250:8080/api")
     # Create and initialize the environment
     env = await client.make_environment("espocrm")
 
@@ -20,7 +23,7 @@ async def test_environment_lifecycle():
         print(env.id)
         # Wait for the environment to be ready
         print("Waiting for environment to be ready")
-        await env.wait_for_ready(timeout=30.0)
+        await env.wait_for_ready(timeout=120.0)
 
         print("Environment ready")
         start_time = time.time()
@@ -37,12 +40,16 @@ async def test_environment_lifecycle():
         live_url = await client.get_live_view_url(env.id)
         print(f"Live view URL: {live_url}")
 
+        state = await env.get_state()
+        print(f"State: {state}")
+
         async with async_playwright() as p:
             browser = await p.chromium.connect_over_cdp(cdp_url)
             print("Connected to browser")
             context = await browser.new_context()
             page = await context.new_page()
             breakpoint()
+            await asyncio.sleep(10000)
             await page.goto("https://www.doordash.com/")
             print("Navigating to Doordash")
             await page.wait_for_timeout(3000)

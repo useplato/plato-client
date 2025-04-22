@@ -59,11 +59,11 @@ contact_and_company_tasks = [
     ),
     PlatoTask(
         name="update_contact_property",
-        prompt="update contact property for contact_id: 12345 → set job_title = Senior Developer",
+        prompt="update contact property for contact Pranav Putta → set job_title = Senior Developer",
         start_url="https://app-na2.hubspot.com",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "Contact with ID 12345 should have job_title property set to Senior Developer"),
+          score_fn=lambda x: llm_judge_eval_fn(x, "Contact Pranav Putta should have job_title property set to Senior Developer"),
         )
     ),
     PlatoTask(
@@ -175,17 +175,17 @@ emails_and_marketing_tasks = [
 deals_tasks = [
     PlatoTask(
         name="create_and_associate_deal",
-        prompt="create deal: Enterprise Software Solution, stage Proposal, value $100000 for company Plato Technologies, Inc. Then associate it with contact Robert Farlow.",
+        prompt="create deal: Enterprise Software Solution, stage Proposal, value $100000 for company Plato Technologies, Inc. Then associate it with contact Rob Farlow.",
         start_url="https://app-na2.hubspot.com",
     ),
     PlatoTask(
         name="move_deal_to_stage",
-        prompt="move deal Enterprise Software Solution to stage Closed Won.",
+        prompt="move deal Platform Expansion - Pied Piper to stage Closed Won.",
         start_url="https://app-na2.hubspot.com",
     ),
     PlatoTask(
         name="set_close_date_for_deal",
-        prompt="set close date for Enterprise Software Solution to June 1st.",
+        prompt="set close date for Platform Expansion - Pied Piper to June 1st.",
         start_url="https://app-na2.hubspot.com",
     )
 ]
