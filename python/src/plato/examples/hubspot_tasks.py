@@ -34,6 +34,7 @@ contact_and_company_tasks = [
         name="create_contact_and_company",
         prompt="create a contact and company with the following details: name: Robert Farlow, email: rob@plato.so, company: Plato Technologies, Inc.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
         eval_config=CustomEvalConfig(
           type="custom",
           score_fn=lambda x: llm_judge_eval_fn(x, "There should be a contact and company with the following details: name: Robert Farlow, email: rob@plato.so, company: Plato Technologies, Inc."),
@@ -43,6 +44,7 @@ contact_and_company_tasks = [
         name="create_contact_with_lifecycle",
         prompt="create a contact with the following details: firstname: Pranav, lastname: Putta, email: pranav@multion.ai, lifecycle_stage: Marketing Qualified Lead",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
         eval_config=CustomEvalConfig(
           type="custom",
           score_fn=lambda x: llm_judge_eval_fn(x, "There should be a contact with firstname: Pranav, lastname: Putta, email: pranav@multion.ai, and lifecycle_stage set to Marketing Qualified Lead"),
@@ -52,6 +54,7 @@ contact_and_company_tasks = [
         name="associate_contact_with_company",
         prompt="associate contact Pranav Putta with company Multion AI",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
         eval_config=CustomEvalConfig(
           type="custom",
           score_fn=lambda x: llm_judge_eval_fn(x, "Contact Pranav Putta should be associated with company Multion AI"),
@@ -61,6 +64,7 @@ contact_and_company_tasks = [
         name="update_contact_property",
         prompt="update contact property for contact Pranav Putta → set job_title = Senior Developer",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
         eval_config=CustomEvalConfig(
           type="custom",
           score_fn=lambda x: llm_judge_eval_fn(x, "Contact Pranav Putta should have job_title property set to Senior Developer"),
@@ -70,6 +74,7 @@ contact_and_company_tasks = [
         name="enroll_contact_in_workflow",
         prompt="enroll contact michael.brown@tech.com in workflow Lead Nurturing Campaign",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
         eval_config=CustomEvalConfig(
           type="custom",
           score_fn=lambda x: llm_judge_eval_fn(x, "Contact michael.brown@tech.com should be enrolled in the Lead Nurturing Campaign workflow"),
@@ -79,6 +84,7 @@ contact_and_company_tasks = [
         name="create_company_with_details",
         prompt="create company with domain: innovatech.com, industry: Technology, annual_revenue: 5000000",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
         eval_config=CustomEvalConfig(
           type="custom",
           score_fn=lambda x: llm_judge_eval_fn(x, "There should be a company with domain: innovatech.com, industry: Technology, and annual_revenue: 5000000"),
@@ -88,6 +94,7 @@ contact_and_company_tasks = [
         name="auto_assign_lifecycle_stage",
         prompt="auto-assign lifecycle stage to contact david@startup.com based on form submission: Enterprise Demo Request",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
         eval_config=CustomEvalConfig(
           type="custom",
           score_fn=lambda x: llm_judge_eval_fn(x, "Contact david@startup.com should have lifecycle stage automatically assigned based on Enterprise Demo Request form submission"),
@@ -106,16 +113,19 @@ notes_and_tasks_tasks = [
         name="pin_note_on_contact",
         prompt="pin a note on contact Robert Farlow with the following text: This is a test note.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="assign_task_to_contact",
         prompt="assign task to Zach Kreutzjans: follow up with Robert Farlow by June 1st.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="create_task_from_email_open_alert",
         prompt="create task from email open alert: rob@plato.so opened email with title: Quarterly Product Update.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
 ]
 
@@ -128,11 +138,13 @@ calls_and_meetings_tasks = [
         name="log_call",
         prompt="log a call: phone call with Robert Farlow on June 1st.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="record_meeting_outcome",
         prompt="record meeting outcome: Robert Farlow → successful meeting.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
 
 ]
@@ -148,21 +160,25 @@ emails_and_marketing_tasks = [
         name="send_1_1_tracked_email",
         prompt="send 1:1 tracked email to Robert Farlow with template Quarterly Product Update.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="create_and_send_marketing_email",
         prompt="create & send marketing email: Quarterly Product Update to list Test List.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="set_email_subscription_status",
         prompt="set email subscription status for rob@plato.so to opt-in.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="track_email_reply",
         prompt="track email reply: rob@plato.so replied to Quarterly Product Update.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     )
 ]
 
@@ -177,16 +193,19 @@ deals_tasks = [
         name="create_and_associate_deal",
         prompt="create deal: Enterprise Software Solution, stage Proposal, value $100000 for company Plato Technologies, Inc. Then associate it with contact Rob Farlow.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="move_deal_to_stage",
         prompt="move deal Platform Expansion - Pied Piper to stage Closed Won.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="set_close_date_for_deal",
         prompt="set close date for Platform Expansion - Pied Piper to June 1st.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     )
 ]
 
@@ -201,21 +220,25 @@ automations_tasks = [
         name="trigger_workflow_when_property_changes",
         prompt="trigger workflow when property Lead Score changes to 50.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="delay_workflow_for_days",
         prompt="delay workflow for 3 days then send Quarterly Product Update.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="rotate_contact_owner_for_leads_in_region",
         prompt="rotate contact owner for leads in New York.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="if_email_open_rate_below_20_enroll_in_re_engagement_workflow",
         prompt="if email open rate is below 20%, enroll in Re-Engagement Workflow.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     )
 ]
 
@@ -229,16 +252,19 @@ reporting_and_dashboards_tasks = [
         name="view_sales_dashboard",
         prompt="view sales dashboard: Test Team - this month's pipeline = $1000.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="create_report",
         prompt="create report: contacts with Proposal in New York.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="export_contact_list",
         prompt="export contact list Test Saved View to csv.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     )
 ]
 
@@ -253,11 +279,13 @@ forms_and_lists_tasks = [
         name="form_workflow_and_list_management",
         prompt="build form: Test Form with fields email, job_title, company_size. Then trigger workflow when Test Form is submitted. Finally, add contact Robert Farlow to static list Test List.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     ),
     PlatoTask(
         name="create_smart_list",
         prompt="create smart list: contacts where lead_score > 50 and lifecycle_stage = MQL.",
         start_url="https://app-na2.hubspot.com",
+        env_id="hubspot",
     )
 ]
 

@@ -17,7 +17,7 @@ async def test_environment_lifecycle():
     client = Plato(base_url="https://staging.plato.so/api")
     # client = Plato(base_url="http://54.219.32.250:8080/api")
     # Create and initialize the environment
-    env = await client.make_environment("espocrm")
+    env = await client.make_environment("roundcube")
 
     try:
         print(env.id)

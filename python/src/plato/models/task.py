@@ -75,5 +75,6 @@ class PlatoTask(BaseModel):
 
     name: str
     prompt: str
+    env_id: str
     start_url: str
     eval_config: Optional[BasePlatoEvalConfig] = None

@@ -51,16 +51,10 @@ async def run_single_test(test_id: int) -> TestMetrics:
     
     try:
         # Initialize the client
-        client = Plato(base_url="https://plato.so/api")
-        task = PlatoTask(
-            name=f"loadtest_{test_id}",
-            metadata={"type": "loadtest"},
-            initial_state={"url": "https://www.doordash.com/"}
-        )
-
+        client = Plato(base_url="https://staging.plato.so/api")
         # Create and initialize the environment
         step_start = time.time()
-        env = await client.make_environment("doordash")
+        env = await client.make_environment("espocrm")
         metrics.add_step_timing("environment_creation", time.time() - step_start)
 
         try:
@@ -82,7 +76,7 @@ async def run_single_test(test_id: int) -> TestMetrics:
             async with async_playwright() as p:
                 browser = await p.chromium.connect_over_cdp(cdp_url)
                 page = await browser.new_page()
-                await page.goto("https://www.doordash.com/")
+                await page.goto("http://espocrm.com/")
                 await page.wait_for_timeout(3000)
                 
                 await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}.png"))
@@ -163,6 +157,6 @@ async def run_load_test(num_concurrent: int, total_tests: int):
 if __name__ == "__main__":
     # Configure these parameters as needed
     NUM_CONCURRENT_TESTS = 10  # Number of tests to run concurrently
-    TOTAL_TESTS = 20         # Total number of tests to run
+    TOTAL_TESTS = 10         # Total number of tests to run
     
     asyncio.run(run_load_test(NUM_CONCURRENT_TESTS, TOTAL_TESTS))

@@ -30,6 +30,7 @@ specific_easy_tasks = [
         name="book_1_bedroom_apartment_in_manhattan",
         prompt="book a 1 bedroom apartment in Manhattan between June 4th - June 7th.",
         start_url="https://www.airbnb.com",
+        env_id="airbnb",
         # eval_config=CustomEvalConfig(
         #   type="custom",
         #   score_fn=lambda x: llm_judge_eval_fn(x, "There should be a booking for a 1 bedroom apartment in Manhattan between June 4th - June 7th"),
