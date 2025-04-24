@@ -7,6 +7,7 @@ from plato.models.task import EvaluationResult
 import aiohttp
 import os
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,18 @@ class Plato:
             aiohttp.ClientSession: The active HTTP client session.
         """
         if self._http_session is None or self._http_session.closed:
-            self._http_session = aiohttp.ClientSession()
+            # Set comprehensive timeout settings:
+            # - total: overall operation timeout (10 mins)
+            # - connect: timeout for connection (60s)
+            # - sock_read: timeout for reading data (10 mins)
+            # - sock_connect: timeout for connecting to peer (60s)
+            timeout = aiohttp.ClientTimeout(
+                total=600,  # 10 minutes
+                connect=60,
+                sock_read=600,  # 10 minutes
+                sock_connect=60
+            )
+            self._http_session = aiohttp.ClientSession(timeout=timeout)
         return self._http_session
 
     async def close(self):
@@ -166,9 +178,12 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         body = {"task": task.dict() if task else None, "agent_version": agent_version}
+        start_time = time.time()
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/reset", headers=headers, json=body
         ) as response:
+            end_time = time.time()
+            print(f"Reset time: {end_time - start_time} seconds")
             response.raise_for_status()
             return await response.json()
 
