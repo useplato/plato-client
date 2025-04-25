@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
 from plato.exceptions import PlatoClientError
@@ -300,6 +300,7 @@ class Plato:
         session_id: str,
         evaluation_result: EvaluationResult,
         agent_version: Optional[str] = None,
+        mutations: Optional[List[dict]] = None
     ) -> Dict[str, Any]:
         """Post an evaluation result to the server.
 
@@ -311,6 +312,7 @@ class Plato:
             "success": evaluation_result.success,
             "reason": evaluation_result.reason,
             "agent_version": agent_version,
+            "mutations": mutations
         }
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
