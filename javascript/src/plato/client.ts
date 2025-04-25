@@ -173,33 +173,24 @@ export class Plato {
     });
   }
 
+  /**
+   * Create a new Plato environment for the given environment ID.
+   *
+   * @param envId The environment ID to create
+   * @param openPageOnStart Whether to open the page on start
+   * @returns The created environment instance
+   * @throws PlatoClientError If the API request fails
+   */
   async makeEnvironment(envId: string, openPageOnStart: boolean = false): Promise<PlatoEnvironment> {
     try {
-      const response = await this.http.post('/env/make', {
-        config: {
-          type: 'browser',
-          source: 'SDK',
-          open_page_on_start: openPageOnStart,
-          browser_config: {
-            type: 'playwright',
-            cdp_port: 9222,
-            headless: false,
-            viewport_size: [1920, 1080],
-          },
-          simulator_config: {
-            type: 'proxy',
-            env_id: envId,
-            num_workers: 4,
-            proxy_config: {
-              host: 'localhost',
-              port: 8000,
-            },
-          },
-          recording_config: {
-            record_rrweb: true,
-            record_network_requests: true,
-          },
-        },
+      const response = await this.http.post('/env/make2', {
+        interface_type: "browser",
+        interface_width: 1920,
+        interface_height: 1080,
+        source: "SDK",
+        open_page_on_start: openPageOnStart,
+        env_id: envId,
+        env_config: {},
       });
 
       return new PlatoEnvironment(this, response.data.job_id);

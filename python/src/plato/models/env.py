@@ -346,8 +346,9 @@ class PlatoEnvironment:
 
     async def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
         evaluation_result = await self.get_evaluation_result()
-        mutations = await self.get_state_mutations()
-
+        state = await self.get_state()
+        state = state.get('state', {})
+        mutations = state.get('mutations', [])
         if self._run_session_id:
             await self._client.post_evaluation_result(self._run_session_id, evaluation_result, agent_version, mutations)
 

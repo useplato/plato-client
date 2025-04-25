@@ -79,14 +79,14 @@ opportunities_tasks = [
     ),
     PlatoTask(
         name="update_opportunity_stage_and_probability",
-        prompt="Update the 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner from Qualification stage to Needs Analysis stage and increase the probability from 30% to 50%.",
+        prompt="Update the 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner from Qualification stage to Needs Analysis stage and increase the probability from 20% to 50%.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=CustomEvalConfig(
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "The 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner should be updated from Qualification stage to Needs Analysis stage and the probability should be increased from 30% to 50%.",
+                "The 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner should be updated from Qualification stage to Needs Analysis stage and the probability should be increased from 20% to 50%.",
             ),
         ),
     ),
@@ -115,27 +115,27 @@ opportunities_tasks = [
 contacts_and_accounts_tasks = [
     PlatoTask(
         name="update_contact_role_and_schedule_meeting",
-        prompt="Update contact Diana Huynh's role from 'Technical Contact' to 'Decision Maker' for the Peterson LLC account and schedule a follow-up meeting for April 24, 2025 at 10:00 AM.",
+        prompt="Update contact Diana Huynh's role from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and schedule a follow-up meeting for April 24, 2025 at 10:00 AM.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=CustomEvalConfig(
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "Contact Diana Huynh's role should be updated from 'Technical Contact' to 'Decision Maker' for the Peterson LLC account and a follow-up meeting should be scheduled for April 24, 2025 at 10:00 AM.",
+                "Contact Diana Huynh's role should be updated from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and a follow-up meeting should be scheduled for April 24, 2025 at 10:00 AM.",
             ),
         ),
     ),
     PlatoTask(
         name="create_new_contact",
-        prompt="Create a new contact named Maria Rodriguez associated with the Green Ltd account, with role 'Technical Contact' and email address maria.rodriguez@cruz.net.",
+        prompt="Create a new contact named Robert Farlow associated with the Green Ltd account, with role 'Technical Contact' and email address robert.farlow@green.com.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=CustomEvalConfig(
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "There should be a new contact named Maria Rodriguez associated with the Green Ltd account, with role 'Technical Contact' and email address maria.rodriguez@cruz.net.",
+                "There should be a new contact named Robert Farlow associated with the Green Ltd account, with role 'Technical Contact' and email address robert.farlow@green.com.",
             ),
         ),
     ),
@@ -218,7 +218,7 @@ meetings_tasks = [
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "There should be a group meeting titled 'Q2 Pipeline Review' scheduled for April 25, 2025 at 1:00 PM with all users assigned to opportunities in the Proposal/Price Quote stage, marked as a high priority meeting.",
+                "There should be a group meeting titled 'Q2 Pipeline Review' scheduled for April 25, 2025 at 1:00 PM (8:00 PM (20:00) UTC) with all users assigned to opportunities in the Proposal/Price Quote stage, marked as a high priority meeting.",
             ),
         ),
     ),
