@@ -205,7 +205,7 @@ meetings_tasks = [
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "There should be a new meeting with Walter Montgomery to discuss the 'Persevering local forecast' opportunity with Gonzales, George and Guzman on April 23, 2025 at 2:00 PM with Ashley Powell as an attendee.",
+                "There should be a new meeting with Walter Montgomery to discuss the 'Persevering local forecast' opportunity with Gonzales, George and Guzman on April 23, 2025 at 2:00 PM (9:00 PM (21:00) UTC) with Ashley Powell as an attendee.",
             ),
         ),
     ),
