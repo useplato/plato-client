@@ -225,6 +225,145 @@ meetings_tasks = [
 ]
 
 
+settings_tasks = [
+    PlatoTask(
+        name="set_email_signature",
+        prompt="Set your email signature to: 'John Smith\nSales Director\nAcme Corporation\nPhone: (555) 123-4567\nEmail: john.smith@acmecorp.com\nwww.acmecorp.com'",
+        env_id="espocrm",
+        start_url="http://espocrm.com",
+        eval_config=CustomEvalConfig(
+            type="custom",
+            score_fn=lambda x: llm_judge_eval_fn(
+                x,
+                "Your email signature should be set to: 'John Smith\nSales Director\nAcme Corporation\nPhone: (555) 123-4567\nEmail: john.smith@acmecorp.com\nwww.acmecorp.com'",
+            ),
+        ),
+    ),
+    PlatoTask(
+        name="change_crm_theme",
+        prompt="Change the CRM theme from 'Default (Espo)' to a dark mode theme.",
+        env_id="espocrm",
+        start_url="http://espocrm.com",
+        eval_config=CustomEvalConfig(
+            type="custom",
+            score_fn=lambda x: llm_judge_eval_fn(
+                x,
+                "The CRM theme should be changed from 'Default (Espo)' to a dark mode theme.",
+            ),
+        ),
+    ),
+    PlatoTask(
+        name="set_calendar_reminders",
+        prompt="Set calendar reminders to send an email 5 minutes before",
+        env_id="espocrm",
+        start_url="http://espocrm.com",
+        eval_config=CustomEvalConfig(
+            type="custom",
+            score_fn=lambda x: llm_judge_eval_fn(
+                x,
+                "Calendar reminders should be set to send an email 5 minutes before",
+            ),
+        ),
+    ),
+]
+
+
+multi_step_tasks = [
+    PlatoTask(
+        name="update_customer_accounts_https",
+        prompt="Update all Customer-type accounts to change their websites to use HTTPS instead of HTTP.",
+        env_id="espocrm",
+        start_url="http://espocrm.com",
+        eval_config=CustomEvalConfig(
+            type="custom",
+            score_fn=lambda x: llm_judge_eval_fn(
+                x,
+                "'Burke, Chang and Wolf', 'Davis-Kelly', 'Washington Group', 'Ramos, Tran and David', 'Brooks, Briggs and Aguilar' should have their websites changed to use HTTPS instead of HTTP.",
+            ),
+        ),
+    ),
+
+    PlatoTask(
+        name="update_sharon_not_started_tasks",
+        prompt="Change the status of all 'Not Started' tasks with 'Urgent' which are assigned to Sharon Martin to 'Started'",
+        env_id="espocrm",
+        start_url="http://espocrm.com",
+        eval_config=CustomEvalConfig(
+            type="custom",
+            score_fn=lambda x: llm_judge_eval_fn(
+                x,
+                "Tasks with names 'Enviornmental run manager here bring.' and 'Everyone tree job.' should be changed to 'Started'",
+            ),
+        ),
+    ),
+
+    # Reassign all opportunities in the "Perception Analysis" stage from Cynthia Curtis to Adam Dudley and increase their amounts by 5%.
+    PlatoTask(
+        name="reassign_perception_analysis_opportunities",
+        prompt="Reassign all opportunities in the 'Perception Analysis' stage from Cynthia Curtis to Adam Dudley and increase their amounts by 5%.",
+        env_id="espocrm",
+        start_url="http://espocrm.com",
+        eval_config=CustomEvalConfig(
+            type="custom",
+            score_fn=lambda x: llm_judge_eval_fn(
+                x,
+                "Opportunities with names 'Function-based executive infrastructure', 'Diverse bandwidth-monitored intranet' should be re-assigned from Cynthia Curtis to Adam Dudley and their amounts should be increased by 5%.",
+            ),
+        ),
+    ),
+
+    # Update all contacts associated with "Miller, Mason and Harris" to a new address:
+    # 555 Madison Avenue, Suite 1200, New York, NY 10022
+
+    PlatoTask(
+      name="update_miller_mason_harris_contacts",
+      prompt="Update all contacts associated with 'Miller, Mason and Harris' to have the new address: 555 Madison Avenue, Suite 1200, New York, NY 10022",
+      env_id="espocrm",
+      start_url="http://espocrm.com",
+      eval_config=CustomEvalConfig(
+        type="custom",
+        score_fn=lambda x: llm_judge_eval_fn(
+          x,
+          "Abigail Galloway and Ricardo Harrison should have their address updated to '555 Madison Avenue, Suite 1200, New York, NY 10022'",
+        ),
+      ),
+    ),
+
+    # Write a comment on all opportunities in the Qualification stage with amounts over $400,000 asking if there are any updates.
+
+    PlatoTask(
+        name="write_comment_on_qualification_opportunities",
+        prompt="Write a comment on all opportunities in the 'Qualification' stage with amounts over $400,000 asking if there are any updates.",
+        env_id="espocrm",
+        start_url="http://espocrm.com",
+        eval_config=CustomEvalConfig(
+            type="custom",
+            score_fn=lambda x: llm_judge_eval_fn(
+                x,
+                "Opportunities with names 'Grass-roots reciprocal archive', 'Compatible discrete infrastructure' should have a comment asking if there are any updates.",
+            ),
+        ),
+    ),
+
+    # Add a task for all Accounts in Singapore to request updated financial statements for the new fiscal year
+    PlatoTask(
+      name="request_financial_statements_singapore",
+      prompt="Add a task for all accounts located in Singapore to request updated financial statements for the new fiscal year. Set the due date for 2 weeks from today.",
+      env_id="espocrm",
+      start_url="http://espocrm.com",
+      eval_config=CustomEvalConfig(
+        type="custom",
+        score_fn=lambda x: llm_judge_eval_fn(
+          x,
+          "Accounts with names 'Wagner and Sons' and 'Wilson-Olson' should have a task assigned with the description 'Please send updated financial statements for the new fiscal year'.",
+        ),
+      ),
+    ),
+
+
+]
+
+
 all_tasks = (
-    opportunities_tasks + contacts_and_accounts_tasks + leads_tasks + meetings_tasks
+    opportunities_tasks + contacts_and_accounts_tasks + leads_tasks + meetings_tasks + settings_tasks + multi_step_tasks
 )
