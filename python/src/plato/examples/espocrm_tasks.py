@@ -79,14 +79,14 @@ opportunities_tasks = [
     ),
     PlatoTask(
         name="update_opportunity_stage_and_probability",
-        prompt="Update the 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner from Qualification stage to Needs Analysis stage and increase the probability from 20% to 50%.",
+        prompt="Update the 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner from Qualification stage to Proposal stage and increase the probability from 20% to 50%.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=CustomEvalConfig(
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "The 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner should be updated from Qualification stage to Needs Analysis stage and the probability should be increased from 20% to 50%.",
+                "The 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner should be updated from Qualification stage to Proposal stage and the probability should be increased from 20% to 50%.",
             ),
         ),
     ),
