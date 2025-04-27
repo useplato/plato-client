@@ -43,160 +43,318 @@ async def llm_judge_eval_fn(data: dict, prompt: str) -> Tuple[bool, str]:
 
 # 💬 mattermost tasks
 # Test tasks for evaluating Mattermost platform usage
+login_prompt = """
+Log in to Mattermost at mattermost:8065 using the credentials username: alex.reynolds, password: password.
+"""
 
-mattermost_tasks = [
+# Category 1: Posts
+post_tasks = [
     PlatoTask(
-        name="login_and_post_town_square",
-        prompt="Log in to the Mattermost instance at localhost:80 using the credentials username: alex.reynolds, password: password. Navigate to the Town Square channel and post a message saying 'Checking Project Atlas announcement'.",
-        start_url="http://localhost:80",
+        name="reply_to_welcome_message",
+        prompt=login_prompt + "Find the message about welcoming Jordan in the Town Square channel and reply with 'Welcome to the team, Jordan! Let me know if you need any help getting started.'",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should log in to Mattermost with username alex.reynolds and password 'password', navigate to Town Square channel, and post a message with the exact text 'Checking Project Atlas announcement'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should log in with correct credentials, find the message about welcoming Jordan in Town Square, and reply with the exact text 'Welcome to the team, Jordan! Let me know if you need any help getting started.'"),
         )
     ),
     PlatoTask(
-        name="post_in_general_channel",
-        prompt="Navigate to the General channel and post a message saying 'Reviewing General channel content'.",
-        start_url="http://localhost:80",
+        name="reply_to_project_atlas_message",
+        prompt=login_prompt + "Find Chris's message about Project Atlas in Town Square. Reply with 'The Project Atlas launch was a great success! Thanks to everyone who contributed.'",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should navigate to the General channel and post a message with the exact text 'Reviewing General channel content'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should find Chris's message about Project Atlas and reply with the exact text 'The Project Atlas launch was a great success! Thanks to everyone who contributed.'"),
         )
     ),
     PlatoTask(
-        name="post_in_development_channel",
-        prompt="Switch to the Development channel and post a message containing the text 'Looking for code discussions'.",
-        start_url="http://localhost:80",
+        name="reply_with_formatted_text",
+        prompt=login_prompt + "Get the most recent message in the Development channel and reply with a message that includes both bold text and a code block.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should navigate to the Development channel and post a message with the exact text 'Looking for code discussions'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Development channel and reply with a message that contains both bold text (using **text** format) and a code block (using ```code``` format)."),
         )
     ),
     PlatoTask(
-        name="search_implementation_term",
-        prompt="Perform a search for the term 'implementation' and click on at least one search result.",
-        start_url="http://localhost:80",
+        name="reply_with_emoji",
+        prompt=login_prompt + "Get the most recent message in the Marketing channel and reply with a message that includes the 🚀 emoji.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should perform a search for the term 'implementation' and click on at least one of the search results."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Marketing channel and reply with a message that includes the 🚀 emoji."),
         )
     ),
     PlatoTask(
-        name="post_in_marketing_channel",
-        prompt="Navigate to the Marketing channel and post a message saying 'Need update on quarterly marketing plan by Friday'.",
-        start_url="http://localhost:80",
+        name="reply_with_bulleted_list",
+        prompt=login_prompt + "Get the most recent message in the Sales channel and reply with a bulleted list of 3 sales priorities.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should navigate to the Marketing channel and post a message with the exact text 'Need update on quarterly marketing plan by Friday'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Sales channel and reply with a bulleted list (using - or * format) containing exactly 3 sales priorities."),
         )
     ),
     PlatoTask(
-        name="reply_to_message_about_jordan",
-        prompt="In Town Square, post a reply to selena_moscicki's message about Jordan with text 'Welcome to the team, Jordan!'.",
-        start_url="http://localhost:80",
+        name="reply_with_mention",
+        prompt=login_prompt + "Get the most recent message in the Development channel and reply with a message that mentions @ashleigh_lang31.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should find selena_moscicki's message about Jordan in Town Square and post a reply with the exact text 'Welcome to the team, Jordan!'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Development channel and reply with a message that includes a mention of @ashleigh_lang31."),
         )
     ),
     PlatoTask(
-        name="add_reaction_to_message",
-        prompt="Add a thumbs up reaction to eldora.walter's message about Project Atlas.",
-        start_url="http://localhost:80",
+        name="save_message",
+        prompt=login_prompt + "Get the most recent message in the Sales channel and save it.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should find eldora.walter's message about Project Atlas and add a thumbs up reaction to it."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Sales channel and save it."),
         )
     ),
     PlatoTask(
-        name="edit_posted_message",
-        prompt="Post a message saying 'Typo here', then edit that message to say 'Edited: No typo here anymore'.",
-        start_url="http://localhost:80",
+        name="pin_message",
+        prompt=login_prompt + "Get the most recent message in the Sales channel and pin it.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
-        eval_config=CustomEvalConfig(
+        eval_config=CustomEvalConfig( 
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should post a message with the text 'Typo here' and then edit that same message to have the text 'Edited: No typo here anymore'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Sales channel and pin it."),
         )
     ),
     PlatoTask(
-        name="post_link_in_sales_channel",
-        prompt="Post a message in the Sales channel containing the link 'https://example.com' with text 'Check this resource'.",
-        start_url="http://localhost:80",
+        name="pin_and_unpin_message",
+        prompt=login_prompt + "Get the most recent message in the Sales channel and save it.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should navigate to the Sales channel and post a message containing the link 'https://example.com' with the text 'Check this resource'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Sales channel and save it."),
         )
     ),
     PlatoTask(
-        name="post_formatted_message",
-        prompt="Post a message in Town Square that includes bold text and a bulleted list with exactly 3 items.",
-        start_url="http://localhost:80",
+        name="edit_message_content",
+        prompt=login_prompt + "Get your most recent message in the General channel and edit it to say 'Final message: team meeting at 3pm tomorrow'.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should post a message in Town Square that contains bold text and a bulleted list with exactly 3 items."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get their most recent message in the General channel and edit it to say 'Final message: team meeting at 3pm tomorrow'."),
         )
     ),
     PlatoTask(
-        name="mention_user_in_message",
-        prompt="Post a message that mentions @selena_moscicki with text '@selena_moscicki please review when you have time'.",
-        start_url="http://localhost:80",
+        name="delete_message",
+        prompt=login_prompt + "Get your most recent message in the Marketing channel and delete it.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
-        eval_config=CustomEvalConfig(
+        eval_config=CustomEvalConfig( 
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should post a message that mentions @selena_moscicki with the exact text '@selena_moscicki please review when you have time'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get the most recent message in the Marketing channel and delete it."),
         )
     ),
     PlatoTask(
-        name="create_thread_reply",
-        prompt="Find eldora.walter's message about Project Atlas and create a new thread reply with text 'Starting new discussion thread'.",
-        start_url="http://localhost:80",
+        name="edit_to_add_mention",
+        prompt=login_prompt + "Get your most recent message in the Marketing channel and edit it to include a mention of @ashleigh_lang31.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should find eldora.walter's message about Project Atlas and create a new thread reply with the exact text 'Starting new discussion thread'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get their most recent message in the Marketing channel and edit it to include a mention of @ashleigh_lang31."),
         )
     ),
     PlatoTask(
-        name="check_notifications",
-        prompt="Click on your notification bell icon and view any notifications.",
-        start_url="http://localhost:80",
+        name="edit_to_add_formatting",
+        prompt=login_prompt + "Get your most recent message in the Sales channel and edit it to add bold formatting to at least one word.",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should click on the notification bell icon and view any notifications."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should get their most recent message in the Sales channel and edit it to add bold formatting (using **text**) to at least one word."),
+        )
+    ),
+]
+
+# Category 2: Channels (10 tasks)
+channel_tasks = [
+    PlatoTask(
+        name="create_new_channel",
+        prompt=login_prompt + "Create a new public channel called 'product-updates'",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should create a new public channel named 'product-updates'"),
         )
     ),
     PlatoTask(
-        name="change_status",
-        prompt="Click on your profile picture in the top-right corner and change your status to 'Do Not Disturb'.",
-        start_url="http://localhost:80",
+        name="create_private_channel",
+        prompt=login_prompt + "Create a new private channel called 'leadership-team'",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should click on their profile picture in the top-right corner and change their status to 'Do Not Disturb'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should create a new private channel named 'leadership-team'"),
         )
     ),
     PlatoTask(
-        name="complete_login_flow",
-        prompt="Log out of Mattermost, then log back in with username: alex.reynolds, password: password.",
-        start_url="http://localhost:80",
+        name="create_channel_and_post",
+        prompt=login_prompt + "Create a new public channel called 'events' and post a the message 'Welcome to the events channel!'",
+        start_url="http://mattermost:8065",
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
-          score_fn=lambda x: llm_judge_eval_fn(x, "The user should log out of Mattermost and then successfully log back in with username alex.reynolds and password 'password'."),
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should create a new public channel named 'events' and post a the message 'Welcome to the events channel!'"),
+        )
+    ),
+    PlatoTask(
+        name="create_channel_with_purpose",
+        prompt=login_prompt + "Create a new public channel called 'product-updates' with the purpose 'Sharing product updates and release notes'.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        
+    ),
+    PlatoTask(
+        name="create_channel_with_header",
+        prompt=login_prompt + "Create a new public channel called 'CI/CD' with a header that includes the message 'This channel is for discussing CI/CD topics.'",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should create a new public channel named 'CI/CD' with a header that includes the message 'This channel is for discussing CI/CD topics.'"),
+        )
+    ),
+    PlatoTask(
+        name="delete_channel",
+        prompt=login_prompt + "Delete the 'Development' channel.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should delete the 'Development' channel."),
+        )
+    ),
+    PlatoTask(
+        name="rename_channel",
+        prompt=login_prompt + "Rename the 'Development' channel to 'Engineering'.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should rename the 'Development' channel to 'Engineering'."),
+        )
+    ),
+    PlatoTask(
+        name="edit_channel_purpose",
+        prompt=login_prompt + "Edit the purpose of the 'Sales' channel to 'Discussion of sales pipelines and client opportunities'.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should edit the purpose of the 'Sales' channel to 'Discussion of sales pipelines and client opportunities'."),
+        )
+    ),
+    PlatoTask(
+        name="edit_channel_header",
+        prompt=login_prompt + "Edit the header of the 'Marketing' channel to 'Discussion of marketing strategies and campaigns'.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should edit the header of the 'Marketing' channel to 'Discussion of marketing strategies and campaigns'."),
+        )
+    ),
+    PlatoTask(
+        name="create_channel_add_member",
+        prompt=login_prompt + "Create a new public channel called 'product-updates' and add @ashleigh_lang31 to it.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should create a new public channel named 'product-updates' and add @ashleigh_lang31 to it."),
+        )
+    )
+]
+
+
+# Category 3: Teams
+team_tasks = [
+    PlatoTask(
+        name="join_new_team",
+        prompt=login_prompt + "Navigate to the team selection menu, join the 'Nebula Tech', and post a message in its Town Square channel.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should navigate to the team selection menu, join the 'Nebula Tech', and post any message in the Town Square channel of that team."),
+        )
+    ),
+    PlatoTask(
+        name="create_team",
+        prompt=login_prompt + "Create a new team called 'Project X' and post a message in its Town Square channel.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should create a new team named 'Project X' and post any message in the Town Square channel of that team."),
+        )
+    )
+]
+
+
+
+# Category 5: Status and availability (5 tasks)
+status_tasks = [
+   
+    PlatoTask(
+        name="set_status_message",
+        prompt=login_prompt + "Set your status message to 'Working on project documentation'.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should set their status message to 'Working on project documentation'."),
+        )
+    ),
+    PlatoTask(
+        name="change_availability",
+        prompt=login_prompt + "Change your availability status from 'Online' to 'Away', then back to 'Online'.",
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should change their availability status from 'Online' to 'Away', and then change it back to 'Online'."),
         )
     )
 ]
 
 
 # Collect all the tasks
+mattermost_tasks = [
+    # Website setup task (login)
+    PlatoTask(
+        name="login_to_mattermost",
+        prompt=login_prompt,
+        start_url="http://mattermost:8065",
+        env_id="mattermost",
+        eval_config=CustomEvalConfig(
+          type="custom",
+          score_fn=lambda x: llm_judge_eval_fn(x, "The user should access Mattermost at mattermost:8065 and successfully log in using username 'alex.reynolds' and password 'password'."),
+        )
+    ),
+    
+    # Add all category tasks
+    *channel_tasks,
+    *post_tasks,
+    *status_tasks,
+    *team_tasks
+]
+
+# Collect all the tasks for export
 all_tasks = mattermost_tasks
