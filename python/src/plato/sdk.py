@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
@@ -319,6 +320,25 @@ class Plato:
             f"{self.base_url}/env/session/{session_id}/score",
             headers=headers,
             json=body,
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def log(self, session_id: str, log: dict) -> Dict[str, Any]:
+        """Log a message to the server.
+
+        Args:
+            session_id (str): The ID of the session to log the message for.
+            log (dict): The log to log.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/env/{session_id}/log", headers=headers, json={
+                "source": "agent",
+                "type": "info",
+                "message": log,
+                "timestamp": datetime.now().isoformat()
+            }
         ) as response:
             response.raise_for_status()
             return await response.json()

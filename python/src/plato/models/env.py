@@ -354,7 +354,15 @@ class PlatoEnvironment:
 
         return evaluation_result
 
+    async def log(self, log: dict) -> None:
+        """Log a message to the environment.
 
+        Args:
+            log (dict): The log to log.
+        """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
+        await self._client.log(self._run_session_id, log)
 
     async def get_live_view_url(self) -> str:
         """Get the URL for accessing the live view of the environment.
