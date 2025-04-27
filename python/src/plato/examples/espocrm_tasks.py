@@ -241,14 +241,14 @@ settings_tasks = [
     ),
     PlatoTask(
         name="change_crm_theme",
-        prompt="Change the CRM theme from 'Default (Espo)' to a dark mode theme.",
+        prompt="Change the CRM theme from 'Default (Espo)' to a dark mode theme for this account.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=CustomEvalConfig(
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "The CRM theme should be changed from 'Default (Espo)' to a dark mode theme.",
+                "The preferences tables should be updated with the CRM theme set to a dark mode theme.",
             ),
         ),
     ),
