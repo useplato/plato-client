@@ -73,7 +73,7 @@ opportunities_tasks = [
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "There should be a new opportunity with Frost, Simmons and Blackwell account for $45,000 in the Qualification stage with a 30% probability, assigned to Jason Doyle with a close date of May 15, 2025.",
+                "There should be a new opportunity with Frost, Simmons and Blackwell account for $45,000 in the Qualification stage with a 30% probability, assigned to Jason Doyle (user id 15852d37407e45bab) with a close date of May 15, 2025.",
             ),
         ),
     ),
