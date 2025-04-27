@@ -141,14 +141,14 @@ contacts_and_accounts_tasks = [
     ),
     PlatoTask(
         name="create_new_account_with_note",
-        prompt="Create a new account 'Technovate Solutions' with type 'Prospect', industry 'Technology', assign it to Cynthia Cuevas, and add a note that they were referred by the Wagner and Sons account.",
+        prompt="Create a new account 'Technovate Solutions' with type 'Customer', industry 'Technology', assign it to Cynthia Cuevas, and add a note that they were referred by the Wagner and Sons account.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=CustomEvalConfig(
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "There should be a new account 'Technovate Solutions' with type 'Prospect', industry 'Technology', assigned to Cynthia Cuevas, with a note that they were referred by the Wagner and Sons account.",
+                "There should be a new account 'Technovate Solutions' with type 'Customer', industry 'Technology', assigned to Cynthia Cuevas, with a note that they were referred by the Wagner and Sons account.",
             ),
         ),
     ),
@@ -205,7 +205,7 @@ meetings_tasks = [
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "There should be a new meeting with Walter Montgomery to discuss the 'Persevering local forecast' opportunity with Gonzales, George and Guzman on April 23, 2025 at 2:00 PM (9:00 PM (21:00) UTC) with Ashley Powell as an attendee.",
+                "There should be a new meeting with Walter Montgomery (user_id aae6f6b05d3d43189) to discuss the 'Persevering local forecast' opportunity with Gonzales, George and Guzman (account_id 6f74727cab6e4bec8) on April 23, 2025 at 2:00 PM (9:00 PM (21:00) UTC) with Ashley Powell (user_id ba1345ba10c14590b) as an attendee.",
             ),
         ),
     ),
