@@ -122,7 +122,7 @@ contacts_and_accounts_tasks = [
             type="custom",
             score_fn=lambda x: llm_judge_eval_fn(
                 x,
-                "Contact Diana Huynh's role should be updated from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and a follow-up meeting should be scheduled for April 24, 2025 at 10:00 AM.",
+                "Contact Diana Huynh's role should be updated from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and a follow-up meeting should be scheduled for April 24, 2025 at 10:00 AM which is 5:00 PM (17:00:00) UTC.",
             ),
         ),
     ),

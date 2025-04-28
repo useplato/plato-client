@@ -287,7 +287,7 @@ class PlatoEnvironment:
             logger.warning(
                 f"No evaluation config found for task: {self._current_task.name}"
             )
-            return EvaluationResult(success=None, reason="No evaluation config found")
+            raise PlatoClientError("No evaluation config found for task")
 
         eval_config = self._current_task.eval_config
 
