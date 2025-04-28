@@ -44,6 +44,7 @@ handler.setFormatter(colorlog.ColoredFormatter(
         'WARNING': 'yellow',
         'ERROR': 'red',
         'CRITICAL': 'red,bg_white',
+        'TASK': 'white,bold',
     },
     secondary_log_colors={},
     style='%'
@@ -171,12 +172,12 @@ async def run_task(
     agent_version: str = "browser_use_test",
     task_set: str = "espocrm",
 ):
-    logger.info(f"[{task.name}] Running task: {task.prompt}")
+    logger.info(f"\033[1m[{task.name}]\033[0m Running task: {task.prompt}")
     env = await client.make_environment(task.env_id, open_page_on_start=False)
 
-    logger.info(f"[{task.name}] Waiting for environment to be ready ({task.env_id})")
+    logger.info(f"\033[1m[{task.name}]\033[0m Waiting for environment to be ready ({task.env_id})")
     await env.wait_for_ready()
-    logger.info(f"[{task.name}] Environment {task.env_id} is ready")
+    logger.info(f"\033[1m[{task.name}]\033[0m Environment {task.env_id} is ready")
 
     # Get the base prompt template from the task set configuration
     base_prompt = TASK_SETS[task_set]["base_prompt"]
@@ -184,14 +185,14 @@ async def run_task(
     # Format the prompt with task-specific information
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
-    logger.info(f"[{task.name}] Resetting environment")
+    logger.info(f"\033[1m[{task.name}]\033[0m Resetting environment")
     await env.reset(task, agent_version=agent_version)
-    logger.info(f"[{task.name}] Environment reset")
+    logger.info(f"\033[1m[{task.name}]\033[0m Environment reset")
     cdp_url = await env.get_cdp_url()
 
     try:
         live_view_url = await env.get_live_view_url()
-        logger.info(f"[{task.name}] Live view URL: {live_view_url}")
+        logger.info(f"\033[1m[{task.name}]\033[0m Live view URL: {live_view_url}")
 
         if "browser_use" in agent_version:
             await run_browseruse_task(cdp_url, prompt, task.start_url)
@@ -202,16 +203,16 @@ async def run_task(
 
         # evaluate the task
         eval_result = await env.evaluate()
-        logger.info(f"[{task.name}] Evaluation result: {eval_result}")
+        logger.info(f"\033[1m[{task.name}]\033[0m Evaluation result: {eval_result}")
 
     except asyncio.CancelledError:
-        logger.info(f"[{task.name}] Task cancelled")
+        logger.info(f"\033[1m[{task.name}]\033[0m Task cancelled")
     except Exception as e:
-        logger.error(f"[{task.name}] Error running task: {e}", traceback.format_exc())
+        logger.error(f"\033[1m[{task.name}]\033[0m Error running task: {e}", traceback.format_exc())
     finally:
-        logger.info(f"[{task.name}] Closing environment")
+        logger.info(f"\033[1m[{task.name}]\033[0m Closing environment")
         await env.close()
-        logger.info(f"[{task.name}] Closing client")
+        logger.info(f"\033[1m[{task.name}]\033[0m Closing client")
         await client.close()
 
 
