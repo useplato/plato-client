@@ -3,6 +3,7 @@ import os
 import argparse
 import traceback
 import logging
+import colorlog
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -26,10 +27,28 @@ from models.openai.computers.remote_playwright import RemotePlaywrightComputer
 
 load_dotenv(dotenv_path=".env")
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Configure colorful logging
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Remove any existing handlers to avoid duplicate logs
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+handler = colorlog.StreamHandler()
+handler.setFormatter(colorlog.ColoredFormatter(
+    '%(log_color)s%(asctime)s - %(levelname)s - %(message)s',
+    log_colors={
+        'DEBUG': 'cyan',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'red,bg_white',
+    },
+    secondary_log_colors={},
+    style='%'
+))
+logger.addHandler(handler)
 
 # Load required environment variables
 PLATO_API_KEY = os.environ.get("PLATO_API_KEY")
@@ -38,7 +57,7 @@ if not PLATO_API_KEY:
         "PLATO_API_KEY environment variable is not set. Please set it in your .env file."
     )
 
-PLATO_API_URL = os.environ.get("PLATO_API_URL", "https://staging.plato.so/api")
+PLATO_API_URL = os.environ.get("PLATO_API_URL", "https://plato.so/api")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please set it in your .env file."
 
