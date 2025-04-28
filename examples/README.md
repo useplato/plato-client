@@ -84,28 +84,28 @@ uv run main.py --task-set roundcube --agent anthropic
 - Simulates food ordering process
 - Can add items to cart and view total price
 - Requires user permission for checkout
-- [View DoorDash Tasks](python/src/plato/examples/doordash_tasks.py)
+- [View DoorDash Tasks](../python/src/plato/examples/doordash_tasks.py)
 
 ### EspoCRM
 - CRM system automation
 - Default credentials:
   - Username: admin
   - Password: password
-- [View EspoCRM Tasks](python/src/plato/examples/espocrm_tasks.py)
+- [View EspoCRM Tasks](../python/src/plato/examples/espocrm_tasks.py)
 
 ### Roundcube
 - Webmail system automation
 - Default credentials:
   - Username: sarah.chen@technova.io
   - Password: password
-- [View Roundcube Tasks](python/src/plato/examples/roundcube_tasks.py)
+- [View Roundcube Tasks](../python/src/plato/examples/roundcube_tasks.py)
 
 ### Mattermost
 - Team collaboration platform automation
 - Default credentials:
   - Username: alex.reynolds
   - Password: password
-- [View Mattermost Tasks](python/src/plato/examples/mattermost_tasks.py)
+- [View Mattermost Tasks](../python/src/plato/examples/mattermost_tasks.py)
 
 ## License
 
