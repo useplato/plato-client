@@ -46,13 +46,14 @@ async def llm_judge_eval_fn(data: dict, prompt: str) -> Tuple[bool, str]:
 login_prompt = """
 Log in to Mattermost at mattermost:8065 using the credentials username: alex.reynolds, password: password.
 """
+url = "http://slack.com"
 
 # Category 1: Posts
 post_tasks = [
     PlatoTask(
         name="reply_to_welcome_message",
         prompt=login_prompt + "Find the message about welcoming Jordan in the Town Square channel and reply with 'Welcome to the team, Jordan! Let me know if you need any help getting started.'",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -62,7 +63,7 @@ post_tasks = [
     PlatoTask(
         name="reply_to_project_atlas_message",
         prompt=login_prompt + "Find Chris's message about Project Atlas in Town Square. Reply with 'The Project Atlas launch was a great success! Thanks to everyone who contributed.'",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -72,7 +73,7 @@ post_tasks = [
     PlatoTask(
         name="reply_with_formatted_text",
         prompt=login_prompt + "Get the most recent message in the Development channel and reply with a message that includes both bold text and a code block.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -82,7 +83,7 @@ post_tasks = [
     PlatoTask(
         name="reply_with_emoji",
         prompt=login_prompt + "Get the most recent message in the Marketing channel and reply with a message that includes the 🚀 emoji.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -92,7 +93,7 @@ post_tasks = [
     PlatoTask(
         name="reply_with_bulleted_list",
         prompt=login_prompt + "Get the most recent message in the Sales channel and reply with a bulleted list of 3 sales priorities.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -102,7 +103,7 @@ post_tasks = [
     PlatoTask(
         name="reply_with_mention",
         prompt=login_prompt + "Get the most recent message in the Development channel and reply with a message that mentions @ashleigh_lang31.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -112,7 +113,7 @@ post_tasks = [
     PlatoTask(
         name="save_message",
         prompt=login_prompt + "Get the most recent message in the Sales channel and save it.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -122,7 +123,7 @@ post_tasks = [
     PlatoTask(
         name="pin_message",
         prompt=login_prompt + "Get the most recent message in the Sales channel and pin it.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig( 
           type="custom",
@@ -132,7 +133,7 @@ post_tasks = [
     PlatoTask(
         name="pin_and_unpin_message",
         prompt=login_prompt + "Get the most recent message in the Sales channel and save it.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -142,7 +143,7 @@ post_tasks = [
     PlatoTask(
         name="edit_message_content",
         prompt=login_prompt + "Get your most recent message in the General channel and edit it to say 'Final message: team meeting at 3pm tomorrow'.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -152,7 +153,7 @@ post_tasks = [
     PlatoTask(
         name="delete_message",
         prompt=login_prompt + "Get your most recent message in the Marketing channel and delete it.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig( 
           type="custom",
@@ -162,7 +163,7 @@ post_tasks = [
     PlatoTask(
         name="edit_to_add_mention",
         prompt=login_prompt + "Get your most recent message in the Marketing channel and edit it to include a mention of @ashleigh_lang31.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -172,7 +173,7 @@ post_tasks = [
     PlatoTask(
         name="edit_to_add_formatting",
         prompt=login_prompt + "Get your most recent message in the Sales channel and edit it to add bold formatting to at least one word.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -186,7 +187,7 @@ channel_tasks = [
     PlatoTask(
         name="create_new_channel",
         prompt=login_prompt + "Create a new public channel called 'product-updates'",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -196,7 +197,7 @@ channel_tasks = [
     PlatoTask(
         name="create_private_channel",
         prompt=login_prompt + "Create a new private channel called 'leadership-team'",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -206,7 +207,7 @@ channel_tasks = [
     PlatoTask(
         name="create_channel_and_post",
         prompt=login_prompt + "Create a new public channel called 'events' and post a the message 'Welcome to the events channel!'",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -216,14 +217,14 @@ channel_tasks = [
     PlatoTask(
         name="create_channel_with_purpose",
         prompt=login_prompt + "Create a new public channel called 'product-updates' with the purpose 'Sharing product updates and release notes'.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         
     ),
     PlatoTask(
         name="create_channel_with_header",
         prompt=login_prompt + "Create a new public channel called 'CI/CD' with a header that includes the message 'This channel is for discussing CI/CD topics.'",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -233,7 +234,7 @@ channel_tasks = [
     PlatoTask(
         name="delete_channel",
         prompt=login_prompt + "Delete the 'Development' channel.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -243,7 +244,7 @@ channel_tasks = [
     PlatoTask(
         name="rename_channel",
         prompt=login_prompt + "Rename the 'Development' channel to 'Engineering'.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -253,7 +254,7 @@ channel_tasks = [
     PlatoTask(
         name="edit_channel_purpose",
         prompt=login_prompt + "Edit the purpose of the 'Sales' channel to 'Discussion of sales pipelines and client opportunities'.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -263,7 +264,7 @@ channel_tasks = [
     PlatoTask(
         name="edit_channel_header",
         prompt=login_prompt + "Edit the header of the 'Marketing' channel to 'Discussion of marketing strategies and campaigns'.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -273,7 +274,7 @@ channel_tasks = [
     PlatoTask(
         name="create_channel_add_member",
         prompt=login_prompt + "Create a new public channel called 'product-updates' and add @ashleigh_lang31 to it.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -288,7 +289,7 @@ team_tasks = [
     PlatoTask(
         name="join_new_team",
         prompt=login_prompt + "Navigate to the team selection menu, join the 'Nebula Tech', and post a message in its Town Square channel.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -298,7 +299,7 @@ team_tasks = [
     PlatoTask(
         name="create_team",
         prompt=login_prompt + "Create a new team called 'Project X' and post a message in its Town Square channel.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -315,7 +316,7 @@ status_tasks = [
     PlatoTask(
         name="set_status_message",
         prompt=login_prompt + "Set your status message to 'Working on project documentation'.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -325,7 +326,7 @@ status_tasks = [
     PlatoTask(
         name="change_availability",
         prompt=login_prompt + "Change your availability status from 'Online' to 'Away', then back to 'Online'.",
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
@@ -341,7 +342,7 @@ mattermost_tasks = [
     PlatoTask(
         name="login_to_mattermost",
         prompt=login_prompt,
-        start_url="http://mattermost:8065",
+        start_url=url,
         env_id="mattermost",
         eval_config=CustomEvalConfig(
           type="custom",
