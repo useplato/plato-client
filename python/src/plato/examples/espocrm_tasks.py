@@ -355,7 +355,7 @@ multi_step_tasks = [
         type="custom",
         score_fn=lambda x: llm_judge_eval_fn(
           x,
-          "Accounts with names 'Wagner and Sons' and 'Wilson-Olson' should have a task assigned with the description 'Please send updated financial statements for the new fiscal year'.",
+          "Accounts with names 'Wagner and Sons' (account_id cdfa988475394882a) and 'Wilson-Olson' (account_id ed05672c90aa47c0b) should have a task regarding updated financial statements for the new fiscal year.",
         ),
       ),
     ),
