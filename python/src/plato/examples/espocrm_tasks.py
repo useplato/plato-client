@@ -1,6 +1,6 @@
 import json
 from typing import Tuple
-from plato.models.task import CustomEvalConfig, PlatoTask
+from plato.models.task import CustomEvalConfig, MutationVariable, PlatoTask, StateMutationMatch, StateMutationMatchEvalConfig
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
@@ -69,12 +69,110 @@ opportunities_tasks = [
         prompt="Create a new opportunity with Frost, Simmons and Blackwell account for $45,000 in the Qualification stage with a 30% probability and assign it to Jason Doyle with a close date of May 15, 2025.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "There should be a new opportunity with Frost, Simmons and Blackwell account for $45,000 in the Qualification stage with a 30% probability, assigned to Jason Doyle (user id 15852d37407e45bab) with a close date of May 15, 2025.",
-            ),
+        # eval_config=CustomEvalConfig(
+        #     type="custom",
+        #     score_fn=lambda x: llm_judge_eval_fn(
+        #         x,
+        #         "There should be a new opportunity with Frost, Simmons and Blackwell account for $45,000 in the Qualification stage with a 30% probability, assigned to Jason Doyle (user id 15852d37407e45bab) with a close date of May 15, 2025.",
+        #     ),
+        # ),
+        eval_config=StateMutationMatchEvalConfig(
+            mutations=[
+                StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                      "deleted": False,
+                      "user_id": "680b027de457da0c5",
+                      "username": "admin",
+                      "is_denied": False,
+                      "portal_id": None,
+                      "denial_reason": None,
+                      "request_method": "GET",
+                      "authentication_method": "Espo"
+                  }
+                ),
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="INSERT",
+                    values={
+                      "id": MutationVariable(name="opportunity_id"),
+                      "stage": "Qualification",
+                      "amount": 45000,
+                      "deleted": False,
+                      "account_id": "2a9b328d29544b88a",
+                      "close_date": "2025-05-15",
+                      "contact_id": None,
+                      "last_stage": "Qualification",
+                      "campaign_id": None,
+                      "description": None,
+                      "lead_source": None,
+                      "probability": 30,
+                      "created_by_id": "680b027de457da0c5",
+                      "modified_by_id": None,
+                      "amount_currency": "USD",
+                      "assigned_user_id": "15852d37407e45bab",
+                    },
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                      "data": "{\"assignedUserId\":\"15852d37407e45bab\",\"assignedUserName\":\"Jason Doyle\",\"statusValue\":\"Qualification\",\"statusField\":\"stage\",\"statusStyle\":\"default\"}",
+                      "post": None,
+                      "type": "Create",
+                      "number": 1,
+                      "deleted": False,
+                      "is_global": False,
+                      "is_pinned": False,
+                      "parent_id": MutationVariable(name="opportunity_id"),
+                      "related_id": None,
+                      "is_internal": False,
+                      "parent_type": "Opportunity",
+                      "target_type": None,
+                      "related_type": None,
+                      "created_by_id": "680b027de457da0c5",
+                      "modified_by_id": None,
+                      "super_parent_id": "2a9b328d29544b88a",
+                      "super_parent_type": "Account"
+                    },
+                ),
+                StateMutationMatch(
+                    tablename="note_user",
+                    action="INSERT",
+                    values={
+                      "deleted": False,
+                      "user_id": "15852d37407e45bab"
+                    },
+                ),
+                StateMutationMatch(
+                    tablename="account",
+                    action="UPDATE",
+                    values={
+                      "name": "Frost, Simmons and Blackwell",
+                      "type": "Investor",
+                      "deleted": False,
+                      "website": "http://www.henson.info/",
+                      "industry": "Technology",
+                      "sic_code": None,
+                      "campaign_id": None,
+                      "description": "Process Mrs might. Capital north writer move above discuss figure. We box partner south industry public report.",
+                      "created_by_id": "ba1345ba10c14590b",
+                      "modified_by_id": None,
+                      "assigned_user_id": "fed7cbf15f5e4aada",
+                      "billing_address_city": "Blackburnmouth",
+                      "billing_address_state": "Florida",
+                      "shipping_address_city": None,
+                      "billing_address_street": "5030 Sherry Summit Apt. 355",
+                      "shipping_address_state": None,
+                      "billing_address_country": "El Salvador",
+                      "shipping_address_street": None,
+                      "shipping_address_country": None,
+                      "billing_address_postal_code": "17608",
+                      "shipping_address_postal_code": None
+                    },
+                ),
+            ],
         ),
     ),
     PlatoTask(

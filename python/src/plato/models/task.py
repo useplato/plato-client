@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, Literal, List, Callable, Tuple
+from pydantic import BaseModel, ConfigDict, field_serializer
+from typing import Any, Dict, Optional, Literal, List, Callable
 
 
 class BasePlatoEvalConfig(BaseModel):
@@ -12,9 +12,17 @@ class BasePlatoEvalConfig(BaseModel):
         type (Literal["base", "state_mutation_match"]): The type of evaluation configuration.
             Can be either "base" or "state_mutation_match".
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     type: Literal["state_mutation_match", "custom"]
 
+class StateMutationMatch(BaseModel):
+    tablename: str
+    action: Literal["INSERT", "UPDATE", "DELETE"]
+    values: Dict[str, Any]
+
+class MutationVariable(BaseModel):
+    type: Literal["mutation_variable"] = "mutation_variable"
+    name: str
 
 class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """Configuration for state mutation matching evaluation.
@@ -31,7 +39,7 @@ class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """
 
     type: Literal["state_mutation_match"] = "state_mutation_match"
-    state_mutations: List[Tuple[str, str]]
+    mutations: List[StateMutationMatch]
 
 
 class CustomEvalConfig(BasePlatoEvalConfig):
@@ -47,6 +55,9 @@ class CustomEvalConfig(BasePlatoEvalConfig):
 
     type: Literal["custom"] = "custom"
     score_fn: Callable
+    @field_serializer('score_fn')
+    def serialize_score_fn(self, score_fn: Callable, _info):
+        return score_fn.__name__
 
 
 class EvaluationResult(BaseModel):
@@ -78,3 +89,7 @@ class PlatoTask(BaseModel):
     env_id: str
     start_url: str
     eval_config: Optional[BasePlatoEvalConfig] = None
+
+    @field_serializer('eval_config')
+    def serialize_eval_config(self, eval_config: Optional[BasePlatoEvalConfig], _info):
+        return eval_config.model_dump() if eval_config else None

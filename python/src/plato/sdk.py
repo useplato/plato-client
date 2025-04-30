@@ -178,7 +178,7 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"X-API-Key": self.api_key}
-        body = {"task": task.dict() if task else None, "agent_version": agent_version}
+        body = {"task": task.model_dump() if task else None, "agent_version": agent_version}
         start_time = time.time()
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/reset", headers=headers, json=body
@@ -296,6 +296,20 @@ class Plato:
             response.raise_for_status()
             return await response.json()
 
+    async def evaluate(self, session_id: str, agent_version: Optional[str] = None) -> Dict[str, Any]:
+        """Evaluate the environment.
+
+        Args:
+            session_id (str): The ID of the session to evaluate.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/env/session/{session_id}/evaluate",
+            headers=headers,
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
     async def post_evaluation_result(
         self,
         session_id: str,
@@ -324,18 +338,19 @@ class Plato:
             response.raise_for_status()
             return await response.json()
 
-    async def log(self, session_id: str, log: dict) -> Dict[str, Any]:
+    async def log(self, session_id: str, log: dict, type: str = "info") -> Dict[str, Any]:
         """Log a message to the server.
 
         Args:
             session_id (str): The ID of the session to log the message for.
             log (dict): The log to log.
+            type (str): The type of log to log.
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
             f"{self.base_url}/env/{session_id}/log", headers=headers, json={
                 "source": "agent",
-                "type": "info",
+                "type": type,
                 "message": log,
                 "timestamp": datetime.now().isoformat()
             }

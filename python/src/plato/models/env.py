@@ -1,3 +1,4 @@
+from plato.models.task import CustomEvalConfig
 from pydantic import Field
 from plato.models import PlatoTask, EvaluationResult
 from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
@@ -291,30 +292,7 @@ class PlatoEnvironment:
 
         eval_config = self._current_task.eval_config
 
-        if eval_config.type == "state_mutation_match":
-            mutations = await self.get_state_mutations()
-
-            # Get expected mutations from config
-            expected_mutations = eval_config.state_mutations
-
-            # Check each expected mutation against the current state
-            for key_path, expected_value in expected_mutations:
-                try:
-                    actual_value = self._get_nested_value(mutations, key_path)
-                    if actual_value != expected_value:
-                        return EvaluationResult(
-                            success=False,
-                            reason=f"Mismatch at '{key_path}': expected {expected_value}, got {actual_value}"
-                        )
-                except (KeyError, IndexError, TypeError) as e:
-                    return EvaluationResult(
-                        success=False,
-                        reason=f"Failed to access path '{key_path}': {str(e)}"
-                    )
-
-            return EvaluationResult(success=True)
-
-        elif eval_config.type == "custom":
+        if isinstance(eval_config, CustomEvalConfig):
             # Get current state for custom evaluation
             state = await self.get_state()
 
@@ -345,16 +323,28 @@ class PlatoEnvironment:
             )
 
     async def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
-        evaluation_result = await self.get_evaluation_result()
-        state = await self.get_state()
-        state = state.get('state', {})
-        mutations = state.get('mutations', [])
-        if self._run_session_id:
-            await self._client.post_evaluation_result(self._run_session_id, evaluation_result, agent_version, mutations)
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
 
-        return evaluation_result
+        eval_config = self._current_task.eval_config
+        if isinstance(eval_config, CustomEvalConfig):
+            evaluation_result = await self.get_evaluation_result()
+            state = await self.get_state()
+            state = state.get('state', {})
+            mutations = state.get('mutations', [])
+            if self._run_session_id:
+                await self._client.post_evaluation_result(self._run_session_id, evaluation_result, agent_version, mutations)
+            return evaluation_result
+        else:
+            # call /evaluate endpoint
+            response = await self._client.evaluate(self._run_session_id, agent_version)
+            return EvaluationResult(
+                success=response.get('success', False),
+                reason=response.get('reason', None)
+            )
 
-    async def log(self, log: dict) -> None:
+
+    async def log(self, log: dict, type: str = "info") -> None:
         """Log a message to the environment.
 
         Args:
@@ -362,7 +352,7 @@ class PlatoEnvironment:
         """
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
-        await self._client.log(self._run_session_id, log)
+        await self._client.log(self._run_session_id, log, type)
 
     async def get_live_view_url(self) -> str:
         """Get the URL for accessing the live view of the environment.
