@@ -1,6 +1,6 @@
 import json
 from typing import Tuple
-from plato.models.task import CustomEvalConfig, MutationVariable, PlatoTask, StateMutationMatch, StateMutationMatchEvalConfig
+from plato.models.task import CustomEvalConfig, MutationVariable, PlatoTask, SemanticMatchVariable, StateMutationMatch, StateMutationMatchEvalConfig
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
@@ -69,13 +69,6 @@ opportunities_tasks = [
         prompt="Create a new opportunity with Frost, Simmons and Blackwell account for $45,000 in the Qualification stage with a 30% probability and assign it to Jason Doyle with a close date of May 15, 2025.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        # eval_config=CustomEvalConfig(
-        #     type="custom",
-        #     score_fn=lambda x: llm_judge_eval_fn(
-        #         x,
-        #         "There should be a new opportunity with Frost, Simmons and Blackwell account for $45,000 in the Qualification stage with a 30% probability, assigned to Jason Doyle (user id 15852d37407e45bab) with a close date of May 15, 2025.",
-        #     ),
-        # ),
         eval_config=StateMutationMatchEvalConfig(
             mutations=[
                 StateMutationMatch(
@@ -180,26 +173,215 @@ opportunities_tasks = [
         prompt="Update the 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner from Qualification stage to Proposal stage and increase the probability from 50% to 70%.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "The 'Function-based zero-defect standardization' opportunity with Sanchez-Gardner should be updated from Qualification stage to Proposal stage and the probability should be increased from 50% to 70%.",
-            ),
-        ),
+        eval_config=StateMutationMatchEvalConfig(
+            mutations=[
+                StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5",
+                        "username": "admin",
+                        "is_denied": False,
+                        "portal_id": None,
+                        "denial_reason": None,
+                        "request_method": "GET",
+                        "authentication_method": "Espo"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "50537be92ef34e6f8",
+                        "name": "Function-based zero-defect standardization",
+                        "stage": "Proposal",
+                        "amount": 72031.44,
+                        "deleted": False,
+                        "account_id": "14c93a41929243df9",
+                        "close_date": "2025-09-22",
+                        "contact_id": "b8f11f5440e94ac5b",
+                        "last_stage": "Proposal",
+                        "campaign_id": None,
+                        "description": "Someone drive near those. Bed morning to. Position entire some past management well any.",
+                        "lead_source": "Web Site",
+                        "probability": 70,
+                        "created_by_id": "15852d37407e45bab",
+                        "modified_by_id": "680b027de457da0c5",
+                        "amount_currency": "USD",
+                        "assigned_user_id": "f69beb4defc149fd9"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id"),
+                        "data": "{\"field\":\"stage\",\"value\":\"Proposal\",\"style\":\"primary\"}",
+                        "post": None,
+                        "type": "Status",
+                        "number": 1,
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "50537be92ef34e6f8",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": "14c93a41929243df9",
+                        "super_parent_type": "Account"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note_user",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "note_id": MutationVariable(name="note_id"),
+                        "user_id": "f69beb4defc149fd9"
+                    }
+                )
+            ]
+        )
     ),
     PlatoTask(
         name="update_opportunity_contact_and_amount",
         prompt="Update the 'Quality-focused bandwidth-monitored knowledge user' opportunity with Miller, Mason and Harris by adding a new contact Thomas Wilson as an influencer and changing the amount from $303,248.66 to $325,000.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "The 'Quality-focused bandwidth-monitored knowledge user' opportunity with Miller, Mason and Harris should have a new contact Thomas Wilson added as an influencer and the amount should be changed from $303,248.66 to $325,000.",
-            ),
-        ),
+        eval_config=StateMutationMatchEvalConfig(
+            mutations=[
+                StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5",
+                        "username": "admin",
+                        "is_denied": False,
+                        "portal_id": None,
+                        "denial_reason": None,
+                        "request_method": "GET",
+                        "authentication_method": "Espo"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="contact",
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="contact_id"),
+                        "deleted": False,
+                        "last_name": "Wilson",
+                        "first_name": "Thomas",
+                        "account_id": "e0cc971e38eb48e29", # Miller, Mason and Harris
+                        "salutation_name": "Mr.",
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="account_contact",
+                    action="INSERT",
+                    values={
+                        "role": None, # Role on account is null
+                        "deleted": False,
+                        "account_id": "e0cc971e38eb48e29",
+                        "contact_id": MutationVariable(name="contact_id"),
+                        "is_inactive": False
+                    }
+                ),
+                 StateMutationMatch(
+                    tablename="note", # Contact creation note
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id_contact"),
+                        "data": "{}",
+                        "post": None,
+                        "type": "Create",
+                        "number": 1,
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": MutationVariable(name="contact_id"),
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Contact",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": "e0cc971e38eb48e29",
+                        "super_parent_type": "Account"
+                    }
+                 ),
+                StateMutationMatch(
+                    tablename="account", # Ensure account exists
+                    action="UPDATE", # Even though only stream updated, check core fields
+                    values={
+                      "id": "e0cc971e38eb48e29",
+                      "name": "Miller, Mason and Harris",
+                      "type": "Reseller",
+                      "deleted": False,
+                      "website": "http://harper.org/",
+                      "industry": "Energy"
+                    },
+                ),
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "aa177ada650c43c9a",
+                        "name": "Quality-focused bandwidth-monitored knowledge user",
+                        "amount": 325000.0, # Assert the specific amount change requested
+                        "deleted": False,
+                        "account_id": "e0cc971e38eb48e29",
+                        "contact_id": "a2931cff08844d64a", # Original contact
+                        "lead_source": "Email",
+                        "amount_currency": "USD",
+                        "modified_by_id": "680b027de457da0c5"
+                        # Note: Stage and probability also changed in the data, but not requested in prompt
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="contact_opportunity", # Link contact to opportunity
+                    action="INSERT",
+                    values={
+                        "role": "Influencer", # Assert the role specified in prompt
+                        "deleted": False,
+                        "contact_id": MutationVariable(name="contact_id"),
+                        "opportunity_id": "aa177ada650c43c9a"
+                    }
+                ),
+                 StateMutationMatch(
+                    tablename="note", # Opportunity update note
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id_opp_update"),
+                        "data": "{\"fields\":[\"amount\"],\"attributes\":{\"was\":{\"amountCurrency\":\"USD\",\"amount\":303248.66},\"became\":{\"amountCurrency\":\"USD\",\"amount\":325000}}}",
+                        "post": None,
+                        "type": "Update",
+                        "number": 2,
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "aa177ada650c43c9a",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                 )
+            ]
+        )
     ),
 ]
 
@@ -216,39 +398,284 @@ contacts_and_accounts_tasks = [
         prompt="Update contact Diana Huynh's role from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and schedule a follow-up meeting for April 24, 2025 at 10:00 AM.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "Contact Diana Huynh's role should be updated from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and a follow-up meeting should be scheduled for April 24, 2025 at 10:00 AM which is 5:00 PM (17:00:00) UTC.",
-            ),
-        ),
+        eval_config=StateMutationMatchEvalConfig(
+            mutations=[
+                StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5", # Assuming admin performs the action
+                        "username": "admin",
+                        "is_denied": False,
+                        "portal_id": None,
+                        "denial_reason": None,
+                        "request_method": "GET", # Or appropriate method
+                        "authentication_method": "Espo"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="contact",
+                    action="UPDATE", # Core fields should remain the same
+                    values={
+                        "id": "1351defd1dd045919",
+                        "deleted": False,
+                        "last_name": "Huynh",
+                        "first_name": "Diana",
+                        "account_id": "f8dc614113844eeaa", # Peterson LLC
+                        "salutation_name": "Mr.",
+                        "modified_by_id": "680b027de457da0c5" # User performing action
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="account_contact", # The key role update
+                    action="UPDATE",
+                    values={
+                        "role": "Decision Maker", # Assert the new role
+                        "deleted": False,
+                        "account_id": "f8dc614113844eeaa", # Peterson LLC
+                        "contact_id": "1351defd1dd045919", # Diana Huynh
+                        "is_inactive": False
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="meeting", # Meeting creation
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="meeting_id"),
+                        "name": "Follow-up Meeting with Diana Huynh",
+                        "status": "Planned",
+                        "deleted": False,
+                        "date_start": "2025-04-24T17:00:00", # 10 AM local -> 17:00 UTC
+                        "date_end": "2025-04-24T18:00:00",   # Assumes 1 hour meeting
+                        "is_all_day": False,
+                        "created_by_id": "680b027de457da0c5",
+                        "assigned_user_id": "680b027de457da0c5" # Assuming assigned to creator
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="contact_meeting", # Link contact to meeting
+                    action="INSERT",
+                    values={
+                        "status": "None",
+                        "deleted": False,
+                        "contact_id": "1351defd1dd045919", # Diana Huynh
+                        "meeting_id": MutationVariable(name="meeting_id")
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="meeting_user", # Link user to meeting
+                    action="INSERT",
+                    values={
+                        "status": "Accepted",
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5", # User performing action
+                        "meeting_id": MutationVariable(name="meeting_id")
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note", # Meeting creation note
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id_meeting_create"),
+                        "data": "{\"assignedUserId\":\"680b027de457da0c5\",\"assignedUserName\":\"Admin\",\"statusValue\":\"Planned\",\"statusField\":\"status\",\"statusStyle\":\"default\"}",
+                        "post": None,
+                        "type": "Create",
+                        "number": 1,
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": MutationVariable(name="meeting_id"),
+                        "parent_type": "Meeting",
+                        "created_by_id": "680b027de457da0c5"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note", # CreateRelated note (linking meeting to contact)
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id_create_related"),
+                        "data": None,
+                        "post": None,
+                        "type": "CreateRelated",
+                        "number": 2, # Note the number increment
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "1351defd1dd045919", # Diana Huynh
+                        "parent_type": "Contact",
+                        "related_id": MutationVariable(name="meeting_id"),
+                        "related_type": "Meeting",
+                        "created_by_id": "680b027de457da0c5"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note_user", # User for CreateRelated note
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "note_id": MutationVariable(name="note_id_create_related"),
+                        "user_id": "680b027de457da0c5"
+                    }
+                )
+            ]
+        )
     ),
     PlatoTask(
         name="create_new_contact",
         prompt="Create a new contact named Robert Farlow associated with the Green Ltd account, with role 'Technical Contact' and email address robert.farlow@green.com.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "There should be a new contact named Robert Farlow associated with the Green Ltd account, with role 'Technical Contact' and email address robert.farlow@green.com.",
-            ),
-        ),
+        eval_config=StateMutationMatchEvalConfig(
+            mutations=[
+                StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5",
+                        "username": "admin",
+                        "is_denied": False,
+                        "portal_id": None,
+                        "denial_reason": None,
+                        "request_method": "GET",
+                        "authentication_method": "Espo"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="contact",
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="contact_id"),
+                        "deleted": False,
+                        "last_name": "Farlow",
+                        "first_name": "Robert",
+                        "account_id": "8579744dd6d8410d8",
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="email_address",
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="email_id"),
+                        "name": "robert.farlow@green.com",
+                        "lower": "robert.farlow@green.com",
+                        "deleted": False,
+                        "invalid": False,
+                        "opt_out": False
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="entity_email_address",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "primary": True,
+                        "entity_id": MutationVariable(name="contact_id"),
+                        "entity_type": "Contact",
+                        "email_address_id": MutationVariable(name="email_id")
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="account_contact",
+                    action="INSERT",
+                    values={
+                        "role": "Technical Contact",
+                        "deleted": False,
+                        "account_id": "8579744dd6d8410d8",
+                        "contact_id": MutationVariable(name="contact_id"),
+                        "is_inactive": False
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "type": "Create",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": MutationVariable(name="contact_id"),
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Contact",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": "8579744dd6d8410d8",
+                        "super_parent_type": "Account"
+                    }
+                )
+            ]
+        )
     ),
     PlatoTask(
         name="create_new_account_with_note",
-        prompt="Create a new account 'Technovate Solutions' with type 'Customer', industry 'Technology', assign it to Cynthia Cuevas, and add a note that they were referred by the Wagner and Sons account.",
+        prompt="Create a new account 'Technovate Solutions' with type 'Customer', industry 'Technology', assign it to Cynthia Cuevas, and add a note in the account description that they were referred by the Wagner and Sons account.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "There should be a new account 'Technovate Solutions' with type 'Customer', industry 'Technology', assigned to Cynthia Cuevas, with a note that they were referred by the Wagner and Sons account.",
-            ),
-        ),
+        eval_config=StateMutationMatchEvalConfig(
+            mutations=[
+                 StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5",
+                        "username": "admin",
+                        "is_denied": False,
+                        "portal_id": None,
+                        "denial_reason": None,
+                        "request_method": "GET",
+                        "authentication_method": "Espo"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="account",
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="account_id"),
+                        "name": "Technovate Solutions",
+                        "type": "Customer",
+                        "deleted": False,
+                        "website": None,
+                        "industry": "Technology",
+                        "description": SemanticMatchVariable(description="Referred by the Wagner and Sons account"), # Note text ended up here in data
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "assigned_user_id": "6f29af2910204ffbb" # Cynthia Cuevas
+                    }
+                ),
+                 StateMutationMatch(
+                    tablename="note", # Account creation note (with assignment info)
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id"),
+                        "data": "{\"assignedUserId\":\"6f29af2910204ffbb\",\"assignedUserName\":\"Cynthia Cuevas\"}",
+                        "post": None,
+                        "type": "Create",
+                        "number": 1,
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": MutationVariable(name="account_id"),
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Account",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                 )
+            ]
+        )
     ),
 ]
 
@@ -434,13 +861,92 @@ multi_step_tasks = [
         prompt="Write a comment on all opportunities in the 'Qualification' stage with amounts over $400,000 asking if there are any updates.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "Opportunities with names 'Grass-roots reciprocal archive', 'Compatible discrete infrastructure' should have a comment asking if there are any updates.",
-            ),
-        ),
+        eval_config=StateMutationMatchEvalConfig(
+          mutations=[
+              StateMutationMatch(
+                  tablename="auth_log_record",
+                  action="INSERT",
+                  values={
+                      "deleted": False,
+                      "user_id": "680b027de457da0c5",
+                      "username": "admin",
+                      "is_denied": False,
+                      "portal_id": None,
+                      "denial_reason": None,
+                      "request_method": "GET",
+                      "authentication_method": "Espo"
+                  }
+              ),
+              StateMutationMatch(
+                  tablename="note",
+                  action="INSERT",
+                  values={
+                      "data": "{}",
+                      "post": "Are there any updates on this opportunity?",
+                      "type": "Post",
+                      "deleted": False,
+                      "is_global": False,
+                      "is_pinned": False,
+                      "parent_id": "981b6365f14f4befa",
+                      "related_id": None,
+                      "is_internal": False,
+                      "parent_type": "Opportunity",
+                      "target_type": None,
+                      "related_type": None,
+                      "created_by_id": "680b027de457da0c5",
+                      "modified_by_id": None,
+                      "super_parent_id": None,
+                      "super_parent_type": None
+                  }
+              ),
+              StateMutationMatch(
+                  tablename="opportunity",
+                  action="UPDATE",
+                  values={
+                      "id": "981b6365f14f4befa",
+                      "name": "Compatible discrete infrastructure",
+                      "stage": "Qualification",
+                      "amount": 421657.76,
+                      "deleted": False,
+                      "amount_currency": "USD"
+                  }
+              ),
+              StateMutationMatch(
+                  tablename="note",
+                  action="INSERT",
+                  values={
+                      "data": "{}",
+                      "post": "Are there any updates on this opportunity?",
+                      "type": "Post",
+                      "deleted": False,
+                      "is_global": False,
+                      "is_pinned": False,
+                      "parent_id": "607d6db461c54870a",
+                      "related_id": None,
+                      "is_internal": False,
+                      "parent_type": "Opportunity",
+                      "target_type": None,
+                      "related_type": None,
+                      "created_by_id": "680b027de457da0c5",
+                      "modified_by_id": None,
+                      "super_parent_id": None,
+                      "super_parent_type": None
+                  }
+              ),
+              StateMutationMatch(
+                  tablename="opportunity",
+                  action="UPDATE",
+                  values={
+                      "id": "607d6db461c54870a",
+                      "name": "Grass-roots reciprocal archive",
+                      "stage": "Qualification",
+                      "amount": 437089.68,
+                      "deleted": False,
+                      "amount_currency": "USD"
+                  }
+              )
+          ]
+        )
     ),
 
     # Add a task for all Accounts in Singapore to request updated financial statements for the new fiscal year

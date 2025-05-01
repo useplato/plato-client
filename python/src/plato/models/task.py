@@ -24,6 +24,10 @@ class MutationVariable(BaseModel):
     type: Literal["mutation_variable"] = "mutation_variable"
     name: str
 
+class SemanticMatchVariable(BaseModel):
+    type: Literal["semantic_match_variable"] = "semantic_match_variable"
+    description: str
+
 class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """Configuration for state mutation matching evaluation.
 
