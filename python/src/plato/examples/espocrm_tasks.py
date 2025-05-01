@@ -278,7 +278,6 @@ opportunities_tasks = [
                         "last_name": "Wilson",
                         "first_name": "Thomas",
                         "account_id": "e0cc971e38eb48e29", # Miller, Mason and Harris
-                        "salutation_name": "Mr.",
                         "created_by_id": "680b027de457da0c5",
                         "modified_by_id": None
                     }
@@ -423,7 +422,6 @@ contacts_and_accounts_tasks = [
                         "last_name": "Huynh",
                         "first_name": "Diana",
                         "account_id": "f8dc614113844eeaa", # Peterson LLC
-                        "salutation_name": "Mr.",
                         "modified_by_id": "680b027de457da0c5" # User performing action
                     }
                 ),
