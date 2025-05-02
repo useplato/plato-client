@@ -750,26 +750,313 @@ leads_tasks = [
         prompt="Convert lead Michael Diaz from 'New' status to a contact, creating a new account called 'Diaz Enterprises' with industry type 'Technology' and assign both to Adam Dudley.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "Lead Michael Diaz should be converted from 'New' status to a contact, with a new account called 'Diaz Enterprises' with industry type 'Technology' and both should be assigned to Adam Dudley.",
-            ),
-        ),
+        eval_config=StateMutationMatchEvalConfig(
+            mutations=[
+                StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5",
+                        "username": "admin",
+                        "is_denied": False,
+                        "portal_id": None,
+                        "denial_reason": None,
+                        "request_method": "GET",
+                        "authentication_method": "Espo"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="account",
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="account_id"),
+                        "name": "Diaz Enterprises",
+                        "type": None, # Not specified in prompt
+                        "deleted": False,
+                        "website": None,
+                        "industry": "Technology", # Aligning with prompt
+                        "sic_code": None,
+                        "campaign_id": None,
+                        "description": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "assigned_user_id": "f69beb4defc149fd9", # Adam Dudley
+                        "billing_address_city": "Port Jerryport", # From lead data
+                        "billing_address_state": "New Jersey", # From lead data
+                        "billing_address_street": "65418 Baker Heights", # From lead data
+                        "billing_address_country": "Grenada", # From lead data
+                        "billing_address_postal_code": "06341" # From lead data
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note", # Account creation note
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id_account_create"),
+                        "data": "{\"assignedUserId\":\"f69beb4defc149fd9\",\"assignedUserName\":\"Adam Dudley\"}",
+                        "post": None,
+                        "type": "Create",
+                        "number": 1,
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": MutationVariable(name="account_id"),
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Account",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="contact",
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="contact_id"),
+                        "deleted": False,
+                        "last_name": "Diaz",
+                        "account_id": MutationVariable(name="account_id"),
+                        "first_name": "Michael",
+                        "campaign_id": None,
+                        "description": None,
+                        "do_not_call": False,
+                        "middle_name": None,
+                        "address_city": "Port Jerryport", # From lead data
+                        "address_state": "New Jersey", # From lead data
+                        "address_street": "65418 Baker Heights", # From lead data
+                        "address_country": "Grenada", # From lead data
+                        "address_postal_code": "06341", # From lead data
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "salutation_name": "Mr.",
+                        "assigned_user_id": "f69beb4defc149fd9" # Adam Dudley
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note", # Contact creation note
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id_contact_create"),
+                        "data": "{\"assignedUserId\":\"f69beb4defc149fd9\",\"assignedUserName\":\"Adam Dudley\"}",
+                        "post": None,
+                        "type": "Create",
+                        "number": 2, # Note number increment
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": MutationVariable(name="contact_id"),
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Contact",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": MutationVariable(name="account_id"),
+                        "super_parent_type": "Account"
+                    }
+                ),
+                 StateMutationMatch(
+                    tablename="note_user", # Link user to contact creation note
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "note_id": MutationVariable(name="note_id_contact_create"),
+                        "user_id": "f69beb4defc149fd9" # Adam Dudley
+                    }
+                 ),
+                StateMutationMatch(
+                    tablename="account_contact",
+                    action="INSERT",
+                    values={
+                        # "role": None, # Role not specified in prompt
+                        "deleted": False,
+                        "account_id": MutationVariable(name="account_id"),
+                        "contact_id": MutationVariable(name="contact_id"),
+                        "is_inactive": False
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="lead",
+                    action="UPDATE",
+                    values={
+                        "id": "78cb4af7bea04bd08", # Original Lead ID
+                        "status": "Converted",
+                        "deleted": False,
+                        "modified_by_id": "680b027de457da0c5",
+                        "created_account_id": MutationVariable(name="account_id"),
+                        "created_contact_id": MutationVariable(name="contact_id"),
+                        # converted_at is omitted due to timestamp variability
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note", # Lead status change note
+                    action="INSERT",
+                    values={
+                        "id": MutationVariable(name="note_id_lead_status"),
+                        "data": "{\"field\":\"status\",\"value\":\"Converted\",\"style\":\"success\"}",
+                        "post": None,
+                        "type": "Status",
+                        "number": 3, # Note number increment
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "78cb4af7bea04bd08", # Original Lead ID
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Lead",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="email",
+                    action="UPDATE",
+                    values={
+                        "id": "a339b59583c44f889",
+                        "parent_id": MutationVariable(name="account_id"),
+                        "account_id": MutationVariable(name="account_id"),
+                        "parent_type": "Account",
+                        "modified_by_id": "680b027de457da0c5"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="email",
+                    action="UPDATE",
+                    values={
+                        "id": "48cdb0b5dffe453c9",
+                        "parent_id": MutationVariable(name="account_id"),
+                        "account_id": MutationVariable(name="account_id"),
+                        "parent_type": "Account",
+                        "modified_by_id": "680b027de457da0c5"
+                    }
+                )
+            ]
+        )
     ),
     PlatoTask(
         name="change_lead_status_and_log_call",
-        prompt="Change the status of lead Cynthia Cowan from 'Assigned' to 'In Process' and log a call noting that she requested a product demo next week.",
+        prompt="Change the status of lead Cynthia Cowan from 'Assigned' to 'In Process' and log a call with a title and description noting that she requested a product demo next week.",
         env_id="espocrm",
         start_url="http://espocrm.com",
-        eval_config=CustomEvalConfig(
-            type="custom",
-            score_fn=lambda x: llm_judge_eval_fn(
-                x,
-                "The status of lead Cynthia Cowan should be changed from 'Assigned' to 'In Process' and a call should be logged noting that she requested a product demo next week.",
+        eval_config=StateMutationMatchEvalConfig(
+          mutations=[
+            StateMutationMatch(
+                tablename="auth_log_record",
+                action="INSERT",
+                values={
+                    "deleted": False,
+                    "user_id": "680b027de457da0c5",
+                    "username": "admin",
+                    "is_denied": False,
+                    "request_method": "GET",
+                    "authentication_method": "Espo"
+                }
             ),
-        ),
+            StateMutationMatch(
+                tablename="lead",
+                action="UPDATE",
+                values={
+                    "id": "a1547d73ae764581b", # Cynthia Cowan
+                    "status": "In Process", # Changed from Assigned
+                    "deleted": False,
+                    "first_name": "Cynthia",
+                    "last_name": "Cowan",
+                    "modified_by_id": "680b027de457da0c5"
+                }
+            ),
+            StateMutationMatch(
+                tablename="note", # Status change note
+                action="INSERT",
+                values={
+                    "id": MutationVariable(name="note_id_status_change"),
+                    "data": '{"field":"status","value":"In Process","style":"primary"}',
+                    "type": "Status",
+                    "deleted": False,
+                    "parent_id": "a1547d73ae764581b", # Link to Lead
+                    "parent_type": "Lead",
+                    "created_by_id": "680b027de457da0c5"
+                }
+            ),
+            StateMutationMatch(
+                tablename="call", # Logged call
+                action="INSERT",
+                values={
+                    "id": MutationVariable(name="call_id"),
+                    "name": SemanticMatchVariable(description="Product Demo Request Call"), # Title reflecting prompt
+                    "status": "Held", # Default status for logged past call
+                    "deleted": False,
+                    "direction": "Outbound",
+                    "parent_id": "a1547d73ae764581b", # Link to Lead
+                    "parent_type": "Lead",
+                    # Description not explicitly captured in DB diff, but title reflects intent
+                    "description": SemanticMatchVariable(description="requested a product demo next week"),
+                    "created_by_id": "680b027de457da0c5",
+                    "assigned_user_id": "680b027de457da0c5"
+                }
+            ),
+            StateMutationMatch(
+                tablename="call_lead", # Link call to lead
+                action="INSERT",
+                values={
+                    "deleted": False,
+                    "call_id": MutationVariable(name="call_id"),
+                    "lead_id": "a1547d73ae764581b"
+                }
+            ),
+            StateMutationMatch(
+                tablename="call_user", # Link call to user
+                action="INSERT",
+                values={
+                    "status": "Accepted",
+                    "deleted": False,
+                    "call_id": MutationVariable(name="call_id"),
+                    "user_id": "680b027de457da0c5"
+                }
+            ),
+            StateMutationMatch(
+                tablename="note", # CreateRelated note for call linkage
+                action="INSERT",
+                values={
+                    "id": MutationVariable(name="note_id_create_related"),
+                    "type": "CreateRelated",
+                    "deleted": False,
+                    "parent_id": "a1547d73ae764581b", # Link to Lead
+                    "parent_type": "Lead",
+                    "related_id": MutationVariable(name="call_id"), # Link to Call
+                    "related_type": "Call",
+                    "created_by_id": "680b027de457da0c5"
+                }
+            ),
+            StateMutationMatch(
+                tablename="note_user", # Link user to CreateRelated note
+                action="INSERT",
+                values={
+                    "deleted": False,
+                    "note_id": MutationVariable(name="note_id_create_related"),
+                    "user_id": "680b027de457da0c5"
+                }
+            ),
+            # Optional: Include the second lead update for stream timestamp if desired
+            StateMutationMatch(
+                tablename="lead",
+                action="UPDATE",
+                values={
+                    "id": "a1547d73ae764581b",
+                    # only stream_updated_at changed here
+                }
+            )
+          ]
+        )
     ),
 ]
 
@@ -941,7 +1228,7 @@ multi_step_tasks = [
                   action="INSERT",
                   values={
                       "data": "{}",
-                      "post": "Are there any updates on this opportunity?",
+                      "post": SemanticMatchVariable(description="Are there any updates on this opportunity?"),
                       "type": "Post",
                       "deleted": False,
                       "is_global": False,
