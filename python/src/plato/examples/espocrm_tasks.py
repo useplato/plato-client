@@ -519,6 +519,7 @@ contacts_and_accounts_tasks = [
             ]
         )
     ),
+
     PlatoTask(
         name="create_new_contact",
         prompt="Create a new contact named Robert Farlow associated with the Green Ltd account, with role 'Technical Contact' and email address robert.farlow@green.com.",
@@ -545,12 +546,23 @@ contacts_and_accounts_tasks = [
                     action="INSERT",
                     values={
                         "id": MutationVariable(name="contact_id"),
-                        "deleted": False,
-                        "last_name": "Farlow",
-                        "first_name": "Robert",
-                        "account_id": "8579744dd6d8410d8",
-                        "created_by_id": "680b027de457da0c5",
-                        "modified_by_id": None
+                          "deleted": False,
+                          "last_name": "Farlow",
+                          "account_id": "8579744dd6d8410d8",
+                          "first_name": "Robert",
+                          "campaign_id": None,
+                          "description": None,
+                          "do_not_call": False,
+                          "middle_name": None,
+                          "address_city": None,
+                          "address_state": None,
+                          "created_by_id": "680b027de457da0c5",
+                          "address_street": None,
+                          "modified_by_id": None,
+                          "address_country": None,
+                          "salutation_name": "Mr.",
+                          "assigned_user_id": None,
+                          "address_postal_code": None
                     }
                 ),
                 StateMutationMatch(
@@ -577,6 +589,26 @@ contacts_and_accounts_tasks = [
                     }
                 ),
                 StateMutationMatch(
+                    tablename="entity_email_address",
+                    action="UPDATE",
+                    values={
+                        "primary": False,
+                        "entity_id": MutationVariable(name="contact_id"),
+                        "entity_type": "Contact",
+                        "email_address_id": MutationVariable(name="email_id")
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="entity_email_address",
+                    action="UPDATE",
+                    values={
+                        "primary": True,
+                        "entity_id": MutationVariable(name="contact_id"),
+                        "entity_type": "Contact",
+                        "email_address_id": MutationVariable(name="email_id")
+                    }
+                ),
+                StateMutationMatch(
                     tablename="account_contact",
                     action="INSERT",
                     values={
@@ -591,7 +623,9 @@ contacts_and_accounts_tasks = [
                     tablename="note",
                     action="INSERT",
                     values={
+                        "id": MutationVariable(name="note_id"),
                         "data": "{}",
+                        "post": None,
                         "type": "Create",
                         "deleted": False,
                         "is_global": False,
@@ -606,6 +640,33 @@ contacts_and_accounts_tasks = [
                         "modified_by_id": None,
                         "super_parent_id": "8579744dd6d8410d8",
                         "super_parent_type": "Account"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="account",
+                    action="UPDATE",
+                    values={
+                      "id": "8579744dd6d8410d8",
+                      "name": "Green Ltd",
+                      "type": "Customer",
+                      "deleted": False,
+                      "website": "https://www.cruz.net/",
+                      "industry": "Manufacturing",
+                      "sic_code": None,
+                      "campaign_id": None,
+                      "description": "Anything too bar budget consumer prevent social. Risk design plan those pretty job. Husband against crime develop coach one.",
+                      "created_by_id": "93a49f0db93242168",
+                      "assigned_user_id": "2d87a39b7bdb419aa",
+                      "billing_address_city": "Christophershire",
+                      "billing_address_state": "Nebraska",
+                      "shipping_address_city": None,
+                      "billing_address_street": "7958 Robin Track",
+                      "shipping_address_state": None,
+                      "billing_address_country": "Mozambique",
+                      "shipping_address_street": None,
+                      "shipping_address_country": None,
+                      "billing_address_postal_code": "30662",
+                      "shipping_address_postal_code": None
                     }
                 )
             ]
