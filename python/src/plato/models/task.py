@@ -28,6 +28,10 @@ class SemanticMatchVariable(BaseModel):
     type: Literal["semantic_match_variable"] = "semantic_match_variable"
     description: str
 
+class EnumMatchVariable(BaseModel):
+    type: Literal["enum_match_variable"] = "enum_match_variable"
+    values: List[Any]
+
 class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """Configuration for state mutation matching evaluation.
 

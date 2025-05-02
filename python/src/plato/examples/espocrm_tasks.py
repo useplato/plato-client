@@ -1,6 +1,6 @@
 import json
 from typing import Tuple
-from plato.models.task import MutationVariable, PlatoTask, SemanticMatchVariable, StateMutationMatch, StateMutationMatchEvalConfig
+from plato.models.task import EnumMatchVariable, MutationVariable, PlatoTask, SemanticMatchVariable, StateMutationMatch, StateMutationMatchEvalConfig
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
@@ -559,7 +559,7 @@ contacts_and_accounts_tasks = [
                           "address_street": None,
                           "modified_by_id": None,
                           "address_country": None,
-                          "salutation_name": "Mr.",
+                          "salutation_name": EnumMatchVariable(values=["Mr.", None]),
                           "assigned_user_id": None,
                           "address_postal_code": None
                     }
@@ -832,7 +832,7 @@ leads_tasks = [
                         "address_postal_code": "06341", # From lead data
                         "created_by_id": "680b027de457da0c5",
                         "modified_by_id": None,
-                        "salutation_name": "Mr.",
+                        "salutation_name": EnumMatchVariable(values=["Mr.", None]),
                         "assigned_user_id": "f69beb4defc149fd9" # Adam Dudley
                     }
                 ),
