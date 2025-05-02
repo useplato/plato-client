@@ -86,20 +86,6 @@ opportunities_tasks = [
                     }
                 ),
                 StateMutationMatch(
-                    tablename="auth_log_record",
-                    action="INSERT",
-                    values={
-                      "deleted": False,
-                      "user_id": "680b027de457da0c5",
-                      "username": "admin",
-                      "is_denied": False,
-                      "portal_id": None,
-                      "denial_reason": None,
-                      "request_method": "GET",
-                      "authentication_method": "Espo"
-                    }
-                ),
-                StateMutationMatch(
                     tablename="opportunity",
                     action="INSERT",
                     values={
