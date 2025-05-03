@@ -1294,7 +1294,7 @@ meetings_tasks = [
                   values={
                       "id": MutationVariable(name="meeting_id"),
                       "uid": MutationVariable(name="meeting_uid"),
-                      "name": "Q2 Pipeline Review",
+                      "name": SemanticMatchVariable(description="Q2 Pipeline Review"),
                       "status": "Planned",
                       "deleted": False,
                       "date_end": "2025-04-25T20:30:00",
