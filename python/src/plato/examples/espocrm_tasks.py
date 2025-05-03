@@ -1970,7 +1970,7 @@ multi_step_tasks = [
                     "address_street": "555 Madison Avenue, Suite 1200",
                     "modified_by_id": "680b027de457da0c5",
                     "address_country": SemanticMatchVariable(description="United States, US, USA, etc"),
-                    "address_postal_code": "1022"
+                    "address_postal_code": "10022"
                 }
             )
         ]
