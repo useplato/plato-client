@@ -1093,7 +1093,7 @@ meetings_tasks = [
                     values={
                         "id": "4f2c746b3fd7413c9",
                         "name": "Persevering local forecast",
-                        "stage": "Proposal/Price Quote",
+                        "stage": "Proposal",
                         "amount": 292179.69,
                         "deleted": False,
                         "account_id": "6f74727cab6e4bec8",
@@ -1108,7 +1108,7 @@ meetings_tasks = [
                     action="INSERT",
                     values={
                         "id": MutationVariable(name="meeting_id"),
-                        "name": "Meeting: Persevering local forecast",
+                        "name": SemanticMatchVariable(description="Meeting: Persevering local forecast"),
                         "status": "Planned",
                         "deleted": False,
                         "date_end": "2025-04-23T22:00:00",
