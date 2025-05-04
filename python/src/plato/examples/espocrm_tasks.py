@@ -702,7 +702,7 @@ contacts_and_accounts_tasks = [
                         "deleted": False,
                         "website": None,
                         "industry": "Technology",
-                        "description": SemanticMatchVariable(description="Referred by the Wagner and Sons account"), # Note text ended up here in data
+                        "description": SemanticMatchVariable(description="something that mentions referred by the Wagner and Sons account"), # Note text ended up here in data
                         "created_by_id": "680b027de457da0c5",
                         "modified_by_id": None,
                         "assigned_user_id": "6f29af2910204ffbb" # Cynthia Cuevas
@@ -991,14 +991,14 @@ leads_tasks = [
                 action="INSERT",
                 values={
                     "id": MutationVariable(name="call_id"),
-                    "name": SemanticMatchVariable(description="Product Demo Request Call"), # Title reflecting prompt
+                    "name": SemanticMatchVariable(description="something like 'Product Demo Request Call'"), # Title reflecting prompt
                     "status": "Held", # Default status for logged past call
                     "deleted": False,
                     "direction": "Outbound",
                     "parent_id": "a1547d73ae764581b", # Link to Lead
                     "parent_type": "Lead",
                     # Description not explicitly captured in DB diff, but title reflects intent
-                    "description": SemanticMatchVariable(description="requested a product demo next week"),
+                    "description": SemanticMatchVariable(description="something like 'requested a product demo next week'"),
                     "created_by_id": "680b027de457da0c5",
                     "assigned_user_id": "680b027de457da0c5"
                 }
@@ -1092,7 +1092,7 @@ meetings_tasks = [
                     action="INSERT",
                     values={
                         "id": MutationVariable(name="meeting_id"),
-                        "name": SemanticMatchVariable(description="Discuss Persevering local forecast opportunity"),
+                        "name": SemanticMatchVariable(description="something like 'Discuss Persevering local forecast opportunity'"),
                         "status": "Planned",
                         "deleted": False,
                         "date_end": "2025-04-23T22:00:00",
@@ -1334,7 +1334,7 @@ meetings_tasks = [
                   values={
                       "id": MutationVariable(name="meeting_id"),
                       "uid": MutationVariable(name="meeting_uid"),
-                      "name": SemanticMatchVariable(description="Q2 Pipeline Review"),
+                      "name": SemanticMatchVariable(description="something like 'Q2 Pipeline Review'"),
                       "status": "Planned",
                       "deleted": False,
                       "date_end": "2025-04-25T20:30:00",
@@ -2316,7 +2316,7 @@ multi_step_tasks = [
                 action="INSERT",
                 values={
                     "id": MutationVariable(name="task_id_1"),
-                    "name": SemanticMatchVariable(description="Request/Update financial statements"),
+                    "name": SemanticMatchVariable(description="somehing like request or update financial statements"),
                     "status": "Not Started",
                     "deleted": False,
                     "date_end": "2025-05-05T07:00:00",
@@ -2327,7 +2327,7 @@ multi_step_tasks = [
                     "created_by_id": "680b027de457da0c5",
                     "date_end_date": "2025-05-04",
                     "assigned_user_id": "680b027de457da0c5",
-                    "description": SemanticMatchVariable(description="update financial statements")
+                    "description": SemanticMatchVariable(description="something like update financial statements")
                 }
             ),
             StateMutationMatch(
@@ -2394,7 +2394,7 @@ multi_step_tasks = [
                 action="INSERT",
                 values={
                     "id": MutationVariable(name="task_id_2"),
-                    "name": SemanticMatchVariable(description="Request/Update financial statements"),
+                    "name": SemanticMatchVariable(description="somehing like request or update financial statements"),
                     "status": "Not Started",
                     "deleted": False,
                     "date_end": "2025-05-05T07:00:00",
@@ -2405,7 +2405,7 @@ multi_step_tasks = [
                     "created_by_id": "680b027de457da0c5",
                     "date_end_date": "2025-05-04",
                     "assigned_user_id": "680b027de457da0c5",
-                    "description": SemanticMatchVariable(description="update financial statements")
+                    "description": SemanticMatchVariable(description="something like update financial statements")
                 }
             ),
             StateMutationMatch(
