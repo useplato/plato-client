@@ -394,7 +394,7 @@ opportunities_tasks = [
 contacts_and_accounts_tasks = [
     PlatoTask(
         name="update_contact_role_and_schedule_meeting",
-        prompt="Update contact Diana Huynh's role from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and schedule a follow-up meeting for April 24, 2025 at 10:00 AM.",
+        prompt="Update contact Diana Huynh's role from 'Business Contact' to 'Decision Maker' for the Peterson LLC account and schedule a follow-up 1 hour meeting for April 24, 2025 at 10:00 AM.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=StateMutationMatchEvalConfig(
@@ -441,7 +441,7 @@ contacts_and_accounts_tasks = [
                     action="INSERT",
                     values={
                         "id": MutationVariable(name="meeting_id"),
-                        "name": "Follow-up Meeting with Diana Huynh",
+                        "name": SemanticMatchVariable(description="something like 'Follow-up Meeting with Diana Huynh'"),
                         "status": "Planned",
                         "deleted": False,
                         "date_start": "2025-04-24T17:00:00", # 10 AM local -> 17:00 UTC
