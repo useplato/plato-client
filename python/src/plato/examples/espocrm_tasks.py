@@ -1088,27 +1088,11 @@ meetings_tasks = [
                     }
                 ),
                 StateMutationMatch(
-                    tablename="opportunity",
-                    action="UPDATE",
-                    values={
-                        "id": "4f2c746b3fd7413c9",
-                        "name": "Persevering local forecast",
-                        "stage": "Proposal",
-                        "amount": 292179.69,
-                        "deleted": False,
-                        "account_id": "6f74727cab6e4bec8",
-                        "close_date": "2025-05-03",
-                        "contact_id": "fff375f0b25542ab8",
-                        "probability": 30,
-                        "assigned_user_id": "ba1345ba10c14590b"
-                    }
-                ),
-                StateMutationMatch(
                     tablename="meeting",
                     action="INSERT",
                     values={
                         "id": MutationVariable(name="meeting_id"),
-                        "name": SemanticMatchVariable(description="Meeting: Persevering local forecast"),
+                        "name": SemanticMatchVariable(description="Discuss Persevering local forecast opportunity"),
                         "status": "Planned",
                         "deleted": False,
                         "date_end": "2025-04-23T22:00:00",
@@ -1120,17 +1104,31 @@ meetings_tasks = [
                         "description": None,
                         "parent_type": "Opportunity",
                         "created_by_id": "680b027de457da0c5",
-                        "modified_by_id": None
+                        "modified_by_id": None,
+                        "assigned_user_id": "680b027de457da0c5"
                     }
                 ),
                 StateMutationMatch(
-                    tablename="contact_meeting",
+                    tablename="note",
                     action="INSERT",
                     values={
-                        "status": "None",
+                        "data": "{\"assignedUserId\":\"680b027de457da0c5\",\"assignedUserName\":\"Admin\",\"statusValue\":\"Planned\",\"statusField\":\"status\",\"statusStyle\":\"default\"}",
+                        "post": None,
+                        "type": "Create",
+                        "number": 1,
                         "deleted": False,
-                        "contact_id": "aae6f6b05d3d43189",
-                        "meeting_id": MutationVariable(name="meeting_id")
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": MutationVariable(name="meeting_id"),
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Meeting",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": "6f74727cab6e4bec8",
+                        "super_parent_type": "Account"
                     }
                 ),
                 StateMutationMatch(
@@ -1154,27 +1152,13 @@ meetings_tasks = [
                     }
                 ),
                 StateMutationMatch(
-                    tablename="note",
+                    tablename="contact_meeting",
                     action="INSERT",
                     values={
-                        "id": MutationVariable(name="note_id_meeting_create"),
-                        "data": "{\"assignedUserId\":\"680b027de457da0c5\",\"assignedUserName\":\"Admin\",\"statusValue\":\"Planned\",\"statusField\":\"status\",\"statusStyle\":\"default\"}",
-                        "post": None,
-                        "type": "Create",
-                        "number": 1,
+                        "status": "None",
                         "deleted": False,
-                        "is_global": False,
-                        "is_pinned": False,
-                        "parent_id": MutationVariable(name="meeting_id"),
-                        "related_id": None,
-                        "is_internal": False,
-                        "parent_type": "Meeting",
-                        "target_type": None,
-                        "related_type": None,
-                        "created_by_id": "680b027de457da0c5",
-                        "modified_by_id": None,
-                        "super_parent_id": "6f74727cab6e4bec8",
-                        "super_parent_type": "Account"
+                        "contact_id": "aae6f6b05d3d43189",
+                        "meeting_id": MutationVariable(name="meeting_id")
                     }
                 ),
                 StateMutationMatch(
@@ -1196,22 +1180,9 @@ meetings_tasks = [
                     }
                 ),
                 StateMutationMatch(
-                    tablename="account",
-                    action="UPDATE",
-                    values={
-                        "id": "6f74727cab6e4bec8",
-                        "name": "Gonzales, George and Guzman",
-                        "type": "Customer",
-                        "deleted": False,
-                        "website": "https://www.bell.org/",
-                        "industry": "Retail"
-                    }
-                ),
-                StateMutationMatch(
                     tablename="note",
                     action="INSERT",
                     values={
-                        "id": MutationVariable(name="note_id_opp_related"),
                         "data": None,
                         "post": None,
                         "type": "CreateRelated",
@@ -1247,6 +1218,75 @@ meetings_tasks = [
                         "deleted": False,
                         "note_id": MutationVariable(name="note_id_opp_related"),
                         "user_id": "680b027de457da0c5"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": None,
+                        "post": None,
+                        "type": "CreateRelated",
+                        "number": 3,
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "aae6f6b05d3d43189",
+                        "related_id": MutationVariable(name="meeting_id"),
+                        "is_internal": False,
+                        "parent_type": "Contact",
+                        "target_type": None,
+                        "related_type": "Meeting",
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": "6f74727cab6e4bec8",
+                        "super_parent_type": "Account"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note_user",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "note_id": MutationVariable(name="note_id_contact_related"),
+                        "user_id": "ba1345ba10c14590b"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note_user",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "note_id": MutationVariable(name="note_id_contact_related"),
+                        "user_id": "680b027de457da0c5"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "4f2c746b3fd7413c9",
+                        "name": "Persevering local forecast",
+                        "stage": "Proposal",
+                        "amount": 292179.69,
+                        "deleted": False,
+                        "account_id": "6f74727cab6e4bec8",
+                        "close_date": "2025-05-03",
+                        "contact_id": "fff375f0b25542ab8",
+                        "probability": 30,
+                        "assigned_user_id": "ba1345ba10c14590b"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="account",
+                    action="UPDATE",
+                    values={
+                        "id": "6f74727cab6e4bec8",
+                        "name": "Gonzales, George and Guzman",
+                        "type": "Customer",
+                        "deleted": False,
+                        "website": "https://www.bell.org/",
+                        "industry": "Retail"
                     }
                 ),
                 StateMutationMatch(
