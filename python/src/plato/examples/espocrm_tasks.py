@@ -2020,95 +2020,272 @@ multi_step_tasks = [
     # Write a comment on all opportunities in the Qualification stage with amounts over $400,000 asking if there are any updates.
 
     PlatoTask(
-        name="write_comment_on_qualification_opportunities",
-        prompt="Write a comment on all opportunities in the 'Qualification' stage with amounts over $400,000 asking if there are any updates.",
+        name="write_comments_on_qualification_opportunities",
+        prompt="Write a comment on opportunities in the Qualification stage with amounts over $400,000 asking if there are any updates.",
         env_id="espocrm",
         start_url="http://espocrm.com",
         eval_config=StateMutationMatchEvalConfig(
-          mutations=[
-              StateMutationMatch(
-                  tablename="auth_log_record",
-                  action="INSERT",
-                  values={
-                      "deleted": False,
-                      "user_id": "680b027de457da0c5",
-                      "username": "admin",
-                      "is_denied": False,
-                      "portal_id": None,
-                      "denial_reason": None,
-                      "request_method": "GET",
-                      "authentication_method": "Espo"
-                  }
-              ),
-              StateMutationMatch(
-                  tablename="note",
-                  action="INSERT",
-                  values={
-                      "data": "{}",
-                      "post": SemanticMatchVariable(description="Are there any updates on this opportunity?"),
-                      "type": "Post",
-                      "deleted": False,
-                      "is_global": False,
-                      "is_pinned": False,
-                      "parent_id": "981b6365f14f4befa",
-                      "related_id": None,
-                      "is_internal": False,
-                      "parent_type": "Opportunity",
-                      "target_type": None,
-                      "related_type": None,
-                      "created_by_id": "680b027de457da0c5",
-                      "modified_by_id": None,
-                      "super_parent_id": None,
-                      "super_parent_type": None
-                  }
-              ),
-              StateMutationMatch(
-                  tablename="opportunity",
-                  action="UPDATE",
-                  values={
-                      "id": "981b6365f14f4befa",
-                      "name": "Compatible discrete infrastructure",
-                      "stage": "Qualification",
-                      "amount": 421657.76,
-                      "deleted": False,
-                      "amount_currency": "USD"
-                  }
-              ),
-              StateMutationMatch(
-                  tablename="note",
-                  action="INSERT",
-                  values={
-                      "data": "{}",
-                      "post": "Are there any updates on this opportunity?",
-                      "type": "Post",
-                      "deleted": False,
-                      "is_global": False,
-                      "is_pinned": False,
-                      "parent_id": "607d6db461c54870a",
-                      "related_id": None,
-                      "is_internal": False,
-                      "parent_type": "Opportunity",
-                      "target_type": None,
-                      "related_type": None,
-                      "created_by_id": "680b027de457da0c5",
-                      "modified_by_id": None,
-                      "super_parent_id": None,
-                      "super_parent_type": None
-                  }
-              ),
-              StateMutationMatch(
-                  tablename="opportunity",
-                  action="UPDATE",
-                  values={
-                      "id": "607d6db461c54870a",
-                      "name": "Grass-roots reciprocal archive",
-                      "stage": "Qualification",
-                      "amount": 437089.68,
-                      "deleted": False,
-                      "amount_currency": "USD"
-                  }
-              )
-          ]
+            mutations=[
+                StateMutationMatch(
+                    tablename="auth_log_record",
+                    action="INSERT",
+                    values={
+                        "deleted": False,
+                        "user_id": "680b027de457da0c5",
+                        "username": "admin",
+                        "is_denied": False,
+                        "portal_id": None,
+                        "denial_reason": None,
+                        "request_method": "GET",
+                        "authentication_method": "Espo"
+                    }
+                ),
+                # Opportunity 1: "Diverse regional hierarchy"
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "1bc5e158e16946a3a",
+                        "name": "Diverse regional hierarchy",
+                        "stage": "Qualification",
+                        "amount": 482038.88,
+                        "deleted": False,
+                        "amount_currency": "USD"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "post": SemanticMatchVariable(description="question asking if there are any updates"),
+                        "type": "Post",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "1bc5e158e16946a3a",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                # Opportunity 2: "Reverse-engineered mission-critical process improvement"
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "3ac031b6dd8847cbb",
+                        "name": "Reverse-engineered mission-critical process improvement",
+                        "stage": "Qualification",
+                        "amount": 468546.6,
+                        "deleted": False,
+                        "amount_currency": "USD"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "post": SemanticMatchVariable(description="question asking if there are any updates"),
+                        "type": "Post",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "3ac031b6dd8847cbb",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                # Opportunity 3: "Robust homogeneous groupware"
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "8fd0e5081bbd4186a",
+                        "name": "Robust homogeneous groupware",
+                        "stage": "Qualification",
+                        "amount": 438407.89,
+                        "deleted": False,
+                        "amount_currency": "USD"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "post": SemanticMatchVariable(description="question asking if there are any updates"),
+                        "type": "Post",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "8fd0e5081bbd4186a",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                # Opportunity 4: "Grass-roots reciprocal archive"
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "607d6db461c54870a",
+                        "name": "Grass-roots reciprocal archive",
+                        "stage": "Qualification",
+                        "amount": 437089.68,
+                        "deleted": False,
+                        "amount_currency": "USD"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "post": SemanticMatchVariable(description="question asking if there are any updates"),
+                        "type": "Post",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "607d6db461c54870a",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                # Opportunity 5: "Centralized eco-centric emulation"
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "5dbc1ba645304b5a9",
+                        "name": "Centralized eco-centric emulation",
+                        "stage": "Qualification",
+                        "amount": 424414.53,
+                        "deleted": False,
+                        "amount_currency": "USD"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "post": SemanticMatchVariable(description="question asking if there are any updates"),
+                        "type": "Post",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "5dbc1ba645304b5a9",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                # Opportunity 6: "Compatible discrete infrastructure"
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "981b6365f14f4befa",
+                        "name": "Compatible discrete infrastructure",
+                        "stage": "Qualification",
+                        "amount": 421657.76,
+                        "deleted": False,
+                        "amount_currency": "USD"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "post": SemanticMatchVariable(description="question asking if there are any updates"),
+                        "type": "Post",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "981b6365f14f4befa",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                ),
+                # Opportunity 7: "Quality-focused directional database"
+                StateMutationMatch(
+                    tablename="opportunity",
+                    action="UPDATE",
+                    values={
+                        "id": "11be4a8d2dbb4cc7a",
+                        "name": "Quality-focused directional database",
+                        "stage": "Qualification",
+                        "amount": 405848.5,
+                        "deleted": False,
+                        "amount_currency": "USD"
+                    }
+                ),
+                StateMutationMatch(
+                    tablename="note",
+                    action="INSERT",
+                    values={
+                        "data": "{}",
+                        "post": SemanticMatchVariable(description="question asking if there are any updates"),
+                        "type": "Post",
+                        "deleted": False,
+                        "is_global": False,
+                        "is_pinned": False,
+                        "parent_id": "11be4a8d2dbb4cc7a",
+                        "related_id": None,
+                        "is_internal": False,
+                        "parent_type": "Opportunity",
+                        "target_type": None,
+                        "related_type": None,
+                        "created_by_id": "680b027de457da0c5",
+                        "modified_by_id": None,
+                        "super_parent_id": None,
+                        "super_parent_type": None
+                    }
+                )
+            ]
         )
     ),
 
