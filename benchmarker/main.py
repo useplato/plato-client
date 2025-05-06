@@ -336,9 +336,9 @@ async def main():
         action="store_true",
         help="List all available tasks in the specified simulator and exit",
     )
-    parser.add_argument("--runs", type=int, default=1, help="Number of runs per task")
+    parser.add_argument("--runs", type=int, help="Number of runs per task")
     parser.add_argument(
-        "--concurrency", type=int, default=5, help="Number of concurrent tasks"
+        "--concurrency", type=int, help="Number of concurrent tasks"
     )
     parser.add_argument(
         "--agent",
@@ -348,13 +348,11 @@ async def main():
             "anthropic",
             "openai_cua",
         ],
-        default="browser_use",
         help="Agent to use for the tasks",
     )
     parser.add_argument(
         "--tag",
         type=str,
-        default=None,
         help="Tag for agent version, ex: '20250423'",
     )
     args = parser.parse_args()
@@ -391,7 +389,6 @@ async def main():
         task_names = task_choice.split(",")
         tests_to_run = [t for t in simulator_tasks if t["name"] in task_names]
 
-
     if args.agent:
         agent_version = args.agent
     else:
@@ -416,10 +413,10 @@ async def main():
     sem = asyncio.Semaphore(concurrency)
 
     tasks_to_run = [PlatoTask(
-        env_id=task["simulator_id"],
+        env_id=task['simulator']['name'],
         name=task["name"],
         prompt=task["prompt"],
-        start_url=task["start_url"],
+        start_url=task["startUrl"],
     ) for task in tests_to_run]
 
     # Create tasks
