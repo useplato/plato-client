@@ -357,3 +357,39 @@ class Plato:
         ) as response:
             response.raise_for_status()
             return await response.json()
+
+    async def list_simulators(self) -> List[Dict[str, Any]]:
+        """List all environments.
+
+        Returns:
+            List[Dict[str, Any]]: List of dictionaries containing environments.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/env/simulators", headers=headers
+        ) as response:
+            response.raise_for_status()
+            simulators = await response.json()
+            return [s for s in simulators if s["enabled"]]
+
+    async def list_simulator_tasks(self, simulator_id: str) -> List[Dict[str, Any]]:
+        """Get all tasks associated with an environment.
+
+        Args:
+            simulator_id (str): The ID of the simulator to get tasks for.
+
+        Returns:
+            List[Dict[str, Any]]: List of dictionaries containing tasks and pagination information.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/testcases?simulator_id={simulator_id}&page_size=1000", headers=headers
+        ) as response:
+            response.raise_for_status()
+            res = await response.json()
+            return res["testcases"]
+
+
