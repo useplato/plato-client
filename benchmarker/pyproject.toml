@@ -10,6 +10,6 @@ dependencies = [
     "ipdb>=0.13.13",
     "lmnr>=0.5.1",
     "openai>=1.66.3",
-    "plato-sdk @ file:///Users/robfarlow/Documents/plato-client/python",
+    "plato-sdk>=1.0.26",
     "playwright>=1.50.0",
 ]

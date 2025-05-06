@@ -1117,25 +1117,18 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "1.0.26a8"
-source = { directory = "../python" }
+version = "1.0.26"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = ">=3.11.13" },
-    { name = "openai", specifier = ">=1.70.0" },
-    { name = "pydantic", specifier = ">=2.10.6" },
-    { name = "pydantic-settings", specifier = ">=2.8.1" },
+sdist = { url = "https://files.pythonhosted.org/packages/1a/1a/d3c5760673c6852a65aad17dcd9f62a224019d65be6a7a9f376fd36b87f2/plato_sdk-1.0.26.tar.gz", hash = "sha256:9fbb73987faa63483120dc8407cfc5e709dd272b41f9fefb77213b3fa7c7ada8", size = 109979 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/0c/262a0af8da78205025c51ffc491f5c154aff4ed335ae97616bab93768b13/plato_sdk-1.0.26-py3-none-any.whl", hash = "sha256:f65cb951723435bf62539a2ff5ea30039de44d08d9cd94646f76f0743e034057", size = 44715 },
 ]
-
-[package.metadata.requires-dev]
-dev = [{ name = "playwright", specifier = ">=1.50.0" }]
 
 [[package]]
 name = "plato-sdk-test"
@@ -1158,7 +1151,7 @@ requires-dist = [
     { name = "ipdb", specifier = ">=0.13.13" },
     { name = "lmnr", specifier = ">=0.5.1" },
     { name = "openai", specifier = ">=1.66.3" },
-    { name = "plato-sdk", directory = "../python" },
+    { name = "plato-sdk", specifier = ">=1.0.26" },
     { name = "playwright", specifier = ">=1.50.0" },
 ]
 
