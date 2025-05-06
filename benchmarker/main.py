@@ -323,7 +323,7 @@ async def main():
         type=str,
         default=None,
         help="Simulator name to run tasks from",
-        required=True,
+        required=False,
     )
     parser.add_argument(
         "--task-name",
