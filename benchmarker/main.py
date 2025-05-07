@@ -182,8 +182,9 @@ async def run_task(
             await run_anthropic_cua_task(cdp_url, prompt, task.start_url)
 
         # evaluate the task
-        eval_result = await env.evaluate()
-        logger.info(f"[{task.name}] Evaluation result: {eval_result}")
+        if task.eval_config:
+            eval_result = await env.evaluate()
+            logger.info(f"[{task.name}] Evaluation result: {eval_result}")
 
     except asyncio.CancelledError:
         logger.info(f"[{task.name}] Task cancelled")
