@@ -21,7 +21,7 @@ from plato.examples.doordash_tasks import all_tasks as doordash_tasks
 from plato.examples.espocrm_tasks import all_tasks as espocrm_tasks
 from plato.examples.roundcube_tasks import all_tasks as roundcube_tasks
 from plato.examples.mattermost_tasks import all_tasks as mattermost_tasks
-
+from plato.examples.outline_tasks import all_tasks as outline_tasks
 from models.openai.computers.remote_playwright import RemotePlaywrightComputer
 
 load_dotenv(dotenv_path=".env")
@@ -96,6 +96,19 @@ Here is the task:
 The login credentials are:
 username: alex.reynolds
 password: password
+""",
+    },
+    "outline": {
+        "tasks": outline_tasks,
+        "base_prompt": """
+You are a helpful assistant that can help me use Outline.
+start by going to {start_url}. Do not navigate to other websites.
+Here is the task:
+{prompt}
+
+The login credentials are:
+username: admin
+password: admin
 """,
     },
 }
