@@ -14,10 +14,10 @@ async def test_environment_lifecycle():
     """Test the lifecycle of a Plato environment including creation, reset, and closure."""
     # Initialize the client
     # client = Plato(base_url="https://plato.so/api")
-    client = Plato(base_url="https://staging.plato.so/api")
+    client = Plato(base_url="http://localhost:8080/api")
     # client = Plato(base_url="http://54.219.32.250:8080/api")
     # Create and initialize the environment
-    env = await client.make_environment("roundcube")
+    env = await client.make_environment("mattermost")
 
     try:
         print(env.id)
@@ -124,3 +124,4 @@ if __name__ == "__main__":
     asyncio.run(test_environment_lifecycle())
     # Uncomment to run the multiple contexts test
     # asyncio.run(test_multiple_contexts())
+
