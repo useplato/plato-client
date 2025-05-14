@@ -372,7 +372,22 @@ class Plato:
             simulators = await response.json()
             return [s for s in simulators if s["enabled"]]
 
-    async def list_simulator_tasks(self, simulator_id: str) -> List[Dict[str, Any]]:
+    async def load_tasks(self, simulator_name: str) -> List[Dict[str, Any]]:
+        """Load tasks from a simulator.
+
+        Args:
+            simulator_name (str): The name of the simulator to load tasks from. Ex: "espocrm", "doordash"
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000", headers=headers
+        ) as response:
+            response.raise_for_status()
+            res = await response.json()
+            return res["testcases"]
+
+
+    async def list_simulator_tasks_by_id(self, simulator_id: str) -> List[Dict[str, Any]]:
         """Get all tasks associated with an environment.
 
         Args:

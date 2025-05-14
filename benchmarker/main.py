@@ -49,8 +49,7 @@ TASK_SETS = {
         "base_prompt": """
 You are a helpful assistant that can help me buy food from doordash.
 start by going to {start_url}. Do not navigate to other websites.
-While you can't finish the checkout process becuase you need user permission,
-you can add items to cart and see the total price. Do not end the task until you have added the necessary items to cart.
+Do not end the task until you have completed and paid for the order.
 Here is the task:
 {prompt}
 
@@ -182,9 +181,11 @@ async def run_task(
             await run_anthropic_cua_task(cdp_url, prompt, task.start_url)
 
         # evaluate the task
-        if task.eval_config:
+        try:
             eval_result = await env.evaluate()
             logger.info(f"[{task.name}] Evaluation result: {eval_result}")
+        except Exception as e:
+            logger.error(f"[{task.name}] Error evaluating task: {e}", traceback.format_exc())
 
     except asyncio.CancelledError:
         logger.info(f"[{task.name}] Task cancelled")
@@ -197,116 +198,6 @@ async def run_task(
         await env.close()
         logger.info(f"[{task.name}] Closing client")
         await client.close()
-
-
-async def main_old():
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Run Plato benchmark tasks")
-    parser.add_argument(
-        "--simulator",
-        type=str,
-        default=None,
-        help="Simulator name to run tasks from",
-        required=True,
-    )
-    parser.add_argument(
-        "--task-name",
-        type=str,
-        default=None,
-        help="Specific task name to run (if not specified, all tasks in the simulator will run)",
-    )
-    parser.add_argument(
-        "--list-tasks",
-        action="store_true",
-        help="List all available tasks in the specified simulator and exit",
-    )
-    parser.add_argument("--runs", type=int, default=1, help="Number of runs per task")
-    parser.add_argument(
-        "--concurrency", type=int, default=5, help="Number of concurrent tasks"
-    )
-    parser.add_argument(
-        "--agent",
-        type=str,
-        choices=[
-            "browser_use",
-            "anthropic",
-            "openai_cua",
-        ],
-        default="browser_use",
-        help="Agent to use for the tasks",
-    )
-    parser.add_argument(
-        "--tag",
-        type=str,
-        default=None,
-        help="Tag for agent version, ex: '20250423'",
-    )
-    args = parser.parse_args()
-
-    # Initialize Plato client with API URL and key from environment variables
-    client = Plato(base_url=PLATO_API_URL, api_key=PLATO_API_KEY)
-
-    # Get available simulators
-    simulators = await client.list_simulators()
-
-    # Find the selected simulator by name
-    selected_simulator = None
-    for simulator in simulators:
-        if simulator["name"] == args.simulator:
-            selected_simulator = simulator
-            break
-
-    if not selected_simulator:
-        available_simulators = [s["name"] for s in simulators]
-        logger.error(f"Error: Simulator '{args.simulator}' not found.")
-        logger.error(f"Available simulators: {', '.join(available_simulators)}")
-        await client.close()
-        return
-
-    # Get tasks for the selected simulator
-    simulator_tasks = await client.list_simulator_tasks(selected_simulator["id"])
-
-    # If --list-tasks is specified, print available tasks and exit
-    if args.list_tasks:
-        task_names = [task["name"] for task in simulator_tasks]
-        logger.info(f"Available tasks in '{args.simulator}' simulator:")
-        for name in sorted(task_names):
-            logger.info(f"  - {name}")
-        await client.close()
-        return
-
-    num_concurrent = args.concurrency
-    sem = asyncio.Semaphore(num_concurrent)
-
-    num_runs_per_task = args.runs
-    agent_version = args.agent + (f"_v{args.tag}" if args.tag else "")
-
-    # Filter tasks if a specific task name is provided
-    if args.task_name:
-        tasks_to_run = [task for task in simulator_tasks if task["name"] == args.task_name]
-        if not tasks_to_run:
-            available_tasks = [task["name"] for task in simulator_tasks]
-            logger.error(
-                f"Error: Task '{args.task_name}' not found in simulator '{args.simulator_name}'."
-            )
-            logger.error(f"Available tasks: {', '.join(available_tasks)}")
-            await client.close()
-            return
-    else:
-        tasks_to_run = simulator_tasks
-
-    async_tasks = []
-    for task in tasks_to_run:
-        for _ in range(num_runs_per_task):
-            async_tasks.append(
-                run_with_semaphore(
-                    sem, client, task, agent_version=agent_version, task_set=selected_simulator["name"].lower()
-                )
-            )
-
-    await asyncio.gather(*async_tasks)
-    await client.close()
-
 
 async def main():
     """
@@ -364,21 +255,21 @@ async def main():
     simulators = await client.list_simulators()
     print("Available simulators:")
     for i, simulator in enumerate(simulators):
-        print(f"{simulator['name']} ({simulator['id']})")
+        print(f"{simulator['name']}")
 
 
-    selected_simulator_id = None
+    selected_simulator_name = None
     if args.simulator:
         selected_simulator = next(s for s in simulators if s["name"] == args.simulator)
-        selected_simulator_id = selected_simulator["id"]
+        selected_simulator_name = selected_simulator["name"]
     else:
-        while not selected_simulator_id:
+        while not selected_simulator_name:
           simulator_choice = input("Select simulator (name): ")
           selected_simulator = next(s for s in simulators if s["name"] == simulator_choice)
-          selected_simulator_id = selected_simulator["id"]
+          selected_simulator_name = selected_simulator["name"]
 
     # Get tasks for the selected simulator
-    simulator_tasks = await client.list_simulator_tasks(selected_simulator_id)
+    simulator_tasks = await client.load_tasks(selected_simulator_name)
 
     for task in simulator_tasks:
         print(f"{task['name']}")

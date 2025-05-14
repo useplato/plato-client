@@ -15,29 +15,61 @@ PLATO_API_KEY=
 
 **Create an enviornment and connect to it using the cdp_url**
 ```python
-from plato import Plato
+import asyncio
+import os
+from plato import Plato, PlatoTask
+from plato.examples.doordash_tasks import all_tasks as doordash_tasks
 
-client = Plato()
+base_prompt = """
+You are a helpful assistant that can help me buy food from doordash.
+start by going to {start_url}. Do not navigate to other websites.
+While you can't finish the checkout process becuase you need user permission,
+you can add items to cart and see the total price. Do not end the task until you have added the necessary items to cart.
+Here is the task:
+{prompt}
 
-async def run():
-    env = await client.make_environment("doordash")
+Make sure to complete the checkout process once you've added the necessary items to cart.
+The task is not complete until the order is sent and paid for.
+You do not need my permission to and place an order.
+"""
+
+async def run_task(client: Plato, task: PlatoTask):
+    env = await client.make_environment(task.env_id, open_page_on_start=False)
+
     await env.wait_for_ready()
+    await env.reset(task)
+
     cdp_url = await env.get_cdp_url()
 
-    # connect to browser and do modifications
-    browser = await playwright.chromium.connect_over_cdp(cdp_url)
+    prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
-    # run agent, perform actions
-    ...
+    # live view url to watch live
+    live_view_url = await env.get_live_view_url()
+    print(f"Live view URL: {live_view_url}")
 
-    # get state
-    state_mutations: dict = env.get_state()
 
-    # run evals
-    ...
+    try:
+        # connect agent and run
+        await YourAgent.run(cdp_url, prompt)
 
-    await env.close()
-    await client.close()
+        result = await env.evaluate()
+        print(f"Evaluation result: {result}")
+
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        await env.close()
+
+
+async def main():
+    client = Plato(api_key=os.environ.get("PLATO_API_KEY"))
+    for task in doordash_tasks:
+        await run_task(client, task)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
 ```
 
 
