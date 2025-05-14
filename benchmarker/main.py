@@ -284,7 +284,7 @@ async def main():
 
     print(f"\nAvailable tasks for '{selected_simulator['name']}' simulator:")
     for task in simulator_tasks:
-        print(f"- {task['name']}")
+        print(f"{task['name']}")
 
     task_choice = args.task_name or input("\nInput comma separated task names or 'all' for all tasks: ")
     if task_choice.lower() == 'all':
