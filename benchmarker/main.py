@@ -272,14 +272,14 @@ async def main():
     simulator_tasks = await client.load_tasks(selected_simulator_name)
 
     for task in simulator_tasks:
-        print(f"{task['name']}")
+        print(f"{task.name}")
 
     task_choice = args.task_name or input("Input comma separated task names or 'all' for all tasks: ")
     if task_choice.lower() == 'all':
         tests_to_run = simulator_tasks
     else:
         task_names = task_choice.split(",")
-        tests_to_run = [t for t in simulator_tasks if t["name"] in task_names]
+        tests_to_run = [t for t in simulator_tasks if t.name in task_names]
 
     if args.agent:
         agent_version = args.agent
@@ -304,16 +304,9 @@ async def main():
     # Setup semaphore for concurrency
     sem = asyncio.Semaphore(concurrency)
 
-    tasks_to_run = [PlatoTask(
-        env_id=task['simulator']['name'],
-        name=task["name"],
-        prompt=task["prompt"],
-        start_url=task["startUrl"],
-    ) for task in tests_to_run]
-
     # Create tasks
     async_tasks = []
-    for task in tasks_to_run:
+    for task in tests_to_run:
         for _ in range(num_runs):
             async_tasks.append(
                 run_with_semaphore(
