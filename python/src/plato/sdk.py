@@ -373,7 +373,7 @@ class Plato:
             simulators = await response.json()
             return [s for s in simulators if s["enabled"]]
 
-    async def load_tasks(self, simulator_name: str) -> List[PlatoTask]:
+    async def load_tasks(self, simulator_name: str) -> List[Dict[str, Any]]:
         """Load tasks from a simulator.
 
         Args:
@@ -385,14 +385,7 @@ class Plato:
         ) as response:
             response.raise_for_status()
             res = await response.json()
-            test_cases = res["testcases"]
-            return [PlatoTask(
-                public_id=t["publicId"],
-                name=t["name"],
-                prompt=t["prompt"],
-                start_url=t["startUrl"],
-                env_id=t["simulator"]["name"]
-            ) for t in test_cases]
+            return res["testcases"]
 
 
     async def list_simulator_tasks_by_id(self, simulator_id: str) -> List[Dict[str, Any]]:

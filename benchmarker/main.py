@@ -274,7 +274,7 @@ async def main():
           selected_simulator_name = selected_simulator["name"]
 
     # Get tasks for the selected simulator
-    simulator_tasks = await client.list_simulator_tasks(selected_simulator_id)
+    simulator_tasks = await client.load_tasks(selected_simulator_name)
 
     # Check if there are any tasks available
     if not simulator_tasks:
