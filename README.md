@@ -1,53 +1,67 @@
-# Plato Client SDK
-
-A Python SDK for building and testing AI agents on web automation tasks. This SDK provides a framework for creating, testing, and evaluating AI agents across different web platforms.
-
-## Installation
-
-1. Clone the repository
-2. Install dependencies:
-```bash
-uv sync
-```
 
 ## Quick Start
 
 Here's a basic example of how to use the Plato Client SDK:
 
+
+**Create an enviornment and connect to it using the cdp_url**
 ```python
+import asyncio
+import os
 from plato import Plato, PlatoTask
-from plato.models.env import PlatoEnvironment
 
-# Initialize the Plato client
-client = Plato(base_url="https://plato.so/api", api_key="your_api_key")
+base_prompt = """
+You are a helpful assistant that can help me buy food from doordash.
+start by going to {start_url}. Do not navigate to other websites.
+Do not end the task until you have completed and paid for the order.
+Here is the task:
+{prompt}
 
-# Create a task
-task = PlatoTask(
-    name="example_task",
-    prompt="Your task description here",
-    start_url="https://example.com",
-    env_id="your_env_id"
-)
+Make sure to complete the checkout process once you've added the necessary items to cart.
+The task is not complete until the order is sent and paid for.
+You do not need my permission to and place an order.
+"""
 
-# Create an environment
-env = await client.make_environment(task.env_id)
+async def run_task(client: Plato, task: PlatoTask):
+    env = await client.make_environment(task.env_id, open_page_on_start=False)
 
-# Run the task
-await env.reset(task, agent_version="your_agent_version")
-cdp_url = await env.get_cdp_url()
+    await env.wait_for_ready()
+    await env.reset(task)
 
-# Get live view URL for monitoring
-live_view_url = await env.get_live_view_url()
+    cdp_url = await env.get_cdp_url()
 
-# Run your agent here using the cdp_url
+    prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
-# Evaluate the task
-eval_result = await env.evaluate()
+    # live view url to watch live
+    live_view_url = await env.get_live_view_url()
+    print(f"Live view URL: {live_view_url}")
 
-# Clean up
-await env.close()
-await client.close()
+
+    try:
+        # connect agent and run
+        await YourAgent.run(cdp_url, prompt)
+
+        result = await env.evaluate()
+        print(f"Evaluation result: {result}")
+
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        await env.close()
+
+
+async def main():
+    client = Plato(api_key=os.environ.get("PLATO_API_KEY"))
+    tasks = await client.load_tasks("doordash")
+    for task in doordash_tasks:
+        await run_task(client, task)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
 ```
+
 
 ## Core Components
 
@@ -62,12 +76,12 @@ client = Plato(base_url="https://plato.so/api", api_key="your_api_key")
 Represents a task to be performed by an AI agent. Contains the task description, starting URL, and environment configuration.
 
 ```python
-task = PlatoTask(
-    name="task_name",
-    prompt="Task description",
-    start_url="https://example.com",
-    env_id="env_id"
-)
+class PlatoTask:
+    name: str # ex: order_medium_cheese_pizza
+    prompt: str # ex: Order a medium cheese pizza from the nearest papa john's
+    start_url: str # ex: https://www.doordash.com
+    env_id: str # ex: doordash
+
 ```
 
 ### PlatoEnvironment
@@ -103,4 +117,4 @@ Required environment variables:
 
 ## License
 
-[License information to be added] 
+[License information to be added]
