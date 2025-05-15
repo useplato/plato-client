@@ -17,10 +17,6 @@ from dotenv import load_dotenv
 from models.anthropic.agent import AnthropicAgent
 from models.anthropic.tools.computer_browser import ComputerBrowserTool20250124
 from models.openai.agent.agent import Agent as OpenAIAgent
-from plato.examples.doordash_tasks import all_tasks as doordash_tasks
-from plato.examples.espocrm_tasks import all_tasks as espocrm_tasks
-from plato.examples.roundcube_tasks import all_tasks as roundcube_tasks
-from plato.examples.mattermost_tasks import all_tasks as mattermost_tasks
 
 from models.openai.computers.remote_playwright import RemotePlaywrightComputer
 
@@ -45,7 +41,6 @@ assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please s
 # Task set configuration
 TASK_SETS = {
     "doordash": {
-        "tasks": doordash_tasks,
         "base_prompt": """
 You are a helpful assistant that can help me buy food from doordash.
 start by going to {start_url}. Do not navigate to other websites.
@@ -59,7 +54,6 @@ You do not need my permission to and place an order.
 """,
     },
     "espocrm": {
-        "tasks": espocrm_tasks[::-1],
         "base_prompt": """
 You are a helpful assistant that can help me use EspoCRM.
 start by going to {start_url}. Do not navigate to other websites.
@@ -72,7 +66,6 @@ password: password
 """,
     },
     "roundcube": {
-        "tasks": roundcube_tasks,
         "base_prompt": """
 You are a helpful assistant that can help me use Roundcube webmail.
 start by going to {start_url}. Do not navigate to other websites.
@@ -85,7 +78,6 @@ password: password
 """,
     },
     "mattermost": {
-        "tasks": mattermost_tasks,
         "base_prompt": """
 You are a helpful assistant that can help me use Mattermost.
 start by going to {start_url}. Do not navigate to other websites.

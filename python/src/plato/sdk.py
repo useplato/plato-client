@@ -178,7 +178,7 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"X-API-Key": self.api_key}
-        body = {"task": task.model_dump() if task else None, "agent_version": agent_version}
+        body = {"test_case_public_id": task.public_id if task else None, "agent_version": agent_version}
         start_time = time.time()
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/reset", headers=headers, json=body
@@ -386,6 +386,7 @@ class Plato:
             res = await response.json()
             test_cases = res["testcases"]
             return [PlatoTask(
+                public_id=t["publicId"],
                 name=t["name"],
                 prompt=t["prompt"],
                 start_url=t["startUrl"],

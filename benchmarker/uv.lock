@@ -1117,7 +1117,7 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "1.0.28"
+version = "1.0.29"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1125,9 +1125,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/aa/e1/1846938d8bca78e5848e879d6bf17445b22b61eada34a6b210a16055000d/plato_sdk-1.0.28.tar.gz", hash = "sha256:319e06b814020c80c27d71ac6f7de64f330de3e5df8ce222150aaec9eca6af3c", size = 110599 }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/59/77f57f0157fd96c4deeef0fa337ac4b84def45d59c488475caa0cfd6ae2e/plato_sdk-1.0.29.tar.gz", hash = "sha256:88a09a6f01976d97e5b0a7b86f7791baaaec0155688c08af5e3e90f81404bb6f", size = 110670 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ea/0d/7b12b1731c064ea54f7edcbbe444cfd4e45fc426c7421b33fffccf6e1fed/plato_sdk-1.0.28-py3-none-any.whl", hash = "sha256:0f6bcd31fed38d4e77d9b4ffb7afe51aab43563a2a01187850b0fd1a5cf41ee5", size = 45397 },
+    { url = "https://files.pythonhosted.org/packages/40/8a/402cb4e1089900493876de354c0c91f5eb9c2a7e4a2125fe061884ebdef8/plato_sdk-1.0.29-py3-none-any.whl", hash = "sha256:24988b2075d9b79bf3f4feb0317f2f179807f26d87f4602a95a1a502d3399280", size = 45416 },
 ]
 
 [[package]]
@@ -1151,7 +1151,7 @@ requires-dist = [
     { name = "ipdb", specifier = ">=0.13.13" },
     { name = "lmnr", specifier = ">=0.5.1" },
     { name = "openai", specifier = ">=1.66.3" },
-    { name = "plato-sdk", specifier = ">=1.0.28" },
+    { name = "plato-sdk", specifier = ">=1.0.29" },
     { name = "playwright", specifier = ">=1.50.0" },
 ]
 

@@ -91,7 +91,7 @@ class PlatoTask(BaseModel):
         prompt (str): The prompt describing what should be done in this task.
         start_url (str): The URL where the task should begin execution.
     """
-
+    public_id: str
     name: str
     prompt: str
     env_id: str
