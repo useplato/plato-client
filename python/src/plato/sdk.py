@@ -380,7 +380,7 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000", headers=headers
+            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000&scoring_config_type=state_mutation_match", headers=headers
         ) as response:
             response.raise_for_status()
             res = await response.json()
