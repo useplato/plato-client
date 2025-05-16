@@ -8,7 +8,6 @@ export const PlatoTaskSchema = z.object({
   name: z.string(),
   prompt: z.string(),
   start_url: z.string(),
-
 });
 
 export type PlatoTask = z.infer<typeof PlatoTaskSchema>;
@@ -53,8 +52,8 @@ export class PlatoEnvironment {
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
    * @returns The response from the server
    */
-  async reset(task?: PlatoTask | { name: string; prompt: string; start_url: string }) {
-    const result = await this.client.resetEnvironment(this.id, task);
+  async reset(task?: PlatoTask | { name: string; prompt: string; start_url: string }, test_case_public_id?: string) {
+    const result = await this.client.resetEnvironment(this.id, task, test_case_public_id);
     // Ensure heartbeat is running after reset
     this.startHeartbeat();
     return result;
@@ -247,10 +246,11 @@ export class Plato {
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
    * @returns The response from the server
    */
-  async resetEnvironment(jobId: string, task?: PlatoTask | { name: string; prompt: string; start_url: string }) {
+  async resetEnvironment(jobId: string, task?: PlatoTask | { name: string; prompt: string; start_url: string }, test_case_public_id?: string) {
     try {
       const response = await this.http.post(`/env/${jobId}/reset`, {
         task: task || null,
+        test_case_public_id: test_case_public_id || null,
       });
       return response.data;
     } catch (error) {
