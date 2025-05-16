@@ -308,7 +308,8 @@ class Plato:
             headers=headers,
         ) as response:
             response.raise_for_status()
-            return await response.json()
+            res_data = await response.json()
+            return res_data["score"]
 
     async def post_evaluation_result(
         self,
