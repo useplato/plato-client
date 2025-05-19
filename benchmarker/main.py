@@ -227,13 +227,15 @@ async def run_task(
     return run_session_id
 
 async def calculate_ood_requests(run_session_ids_results) -> tuple[int, int]:
-    total_runs_for_csv = 0
+    # TODO: this is a hack to get the number of runs done in exploration phase, might be a better way to do this
+    # total_runs_for_csv = 0
     ood_requests_overall = 0
 
     async with httpx.AsyncClient() as http_client:
         for session_id in run_session_ids_results:
+            # TODO: do we need this check?
             if session_id:
-                total_runs_for_csv += 1
+                # total_runs_for_csv += 1
                 try:
                     logs_url = f"{PLATO_API_URL}/session/{session_id}"
                     headers = {"X-API-Key": PLATO_API_KEY}
@@ -279,7 +281,8 @@ async def calculate_ood_requests(run_session_ids_results) -> tuple[int, int]:
             else:
                 logger.warning("A task run failed or did not return a session_id. Skipping log processing for it.")
 
-    return total_runs_for_csv, ood_requests_overall
+    # return total_runs_for_csv, ood_requests_overall
+    return ood_requests_overall
 
 async def main():
     """
@@ -341,6 +344,15 @@ async def main():
         default=None,
         help="Enable or disable passthrough to the agent, ex: 'true' or 'false'"
     )
+    # TODO: this is a hack to get the number of runs done in exploration phase, might be a better way to do this
+    parser.add_argument(
+        "--total-runs",
+        type=int,
+        default=None,
+        help="Number of runs done in exploration phase. Allows for proper benchmarking of eval runs.",
+        required=False
+    )
+
     args = parser.parse_args()
 
     client = Plato(base_url=PLATO_API_URL, api_key=PLATO_API_KEY)
@@ -428,7 +440,9 @@ async def main():
 
     # only calculate OOD requests for eval runs
     if not passthrough:
-        total_runs_for_csv, ood_requests_overall = await calculate_ood_requests(run_session_ids_results)
+        # total_runs_for_csv, ood_requests_overall = await calculate_ood_requests(run_session_ids_results)
+        ood_requests_overall = await calculate_ood_requests(run_session_ids_results)
+        total_runs_for_csv = args.total_runs
 
         logger.info(
             f"CSV Logging: Total runs processed for logs = {total_runs_for_csv}. OOD Requests Overall = {ood_requests_overall}."

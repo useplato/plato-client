@@ -31,7 +31,7 @@ for i in range(11):
             "--concurrency", "1",
             "--agent", "browser_use",
             "--record-network-requests", "true",
-            "--passthrough", "true"
+            "--passthrough", "true" # don't need --total-runs for exploration phase since ood requests are not calculated here anyways
         ]
         print(f"    Executing: {' '.join(explore_command)}")
         try:
@@ -60,7 +60,8 @@ for i in range(11):
             "--concurrency", "1",
             "--agent", "browser_use",
             "--record-network-requests", "true",
-            "--passthrough", "false"
+            "--passthrough", "false",
+            "--total-runs", str(N_exploration_runs) # TODO: hack to get the number of runs done in exploration phase
         ]
         print(f"    Executing: {' '.join(eval_command)}")
         try:
