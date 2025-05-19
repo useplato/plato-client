@@ -46,9 +46,11 @@ for i in range(11):
 
 
     # 2. Run M eval runs on T eval tasks
-    print(f"\nPHASE 2: EVALUATION - Running {M_EVAL_RUNS} eval runs for each of {len(TASKS_FOR_EVALUATION)} eval tasks.")
+    # print(f"\nPHASE 2: EVALUATION - Running {M_EVAL_RUNS} eval runs for each of {len(TASKS_FOR_EVALUATION)} eval tasks.")
+    print(f"\nPHASE 2: EVALUATION - Running {M_EVAL_RUNS} eval runs for each of {len(TASKS_FOR_EXPLORATION)} exploration tasks.")
     print("----------------------------------------------------------------------")
-    for eval_task_obj in TASKS_FOR_EVALUATION:
+    # for eval_task_obj in TASKS_FOR_EVALUATION:
+    for eval_task_obj in TASKS_FOR_EXPLORATION:
         eval_task_name = eval_task_obj.name
         print(f"  Task: {eval_task_name} (Evaluation)")
 
