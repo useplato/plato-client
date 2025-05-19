@@ -223,6 +223,61 @@ async def run_task(
         logger.info(f"[{task.name}] Closing environment")
         await env.close()
 
+async def calculate_ood_requests(run_session_ids_results) -> tuple[int, int]:
+    total_runs_for_csv = 0
+    ood_requests_overall = 0
+
+    async with httpx.AsyncClient() as http_client:
+        for session_id in run_session_ids_results:
+            if session_id:
+                total_runs_for_csv += 1
+                try:
+                    logs_url = f"{PLATO_API_URL}/session/{session_id}"
+                    headers = {"X-API-Key": PLATO_API_KEY}
+
+                    logger.info(f"Fetching logs for run_session_id: {session_id} from {logs_url}")
+                    response = await http_client.get(logs_url, headers=headers)
+                    response.raise_for_status()
+                    
+                    logs = response.json()
+                    logs_list = logs.get("logs")
+
+                    session_ood_requests = 0
+                    if logs_list and isinstance(logs_list, list):
+                        for log_entry in logs_list:
+                            if isinstance(log_entry, dict) and "logData" in log_entry:
+                                log_data_str = log_entry.get("logData")
+                                try:
+                                    if isinstance(log_data_str, str):
+                                        parsed_log_data = json.loads(log_data_str)
+                                    elif isinstance(log_data_str, dict):
+                                        parsed_log_data = log_data_str
+                                    else:
+                                        parsed_log_data = {}
+
+                                    if parsed_log_data.get("type") == "ood_request":
+                                        session_ood_requests += 1
+                                except json.JSONDecodeError:
+                                    logger.warning(f"Failed to parse log_data JSON for session {session_id}: {log_data_str}")
+                                except Exception as e:
+                                    logger.warning(f"Error processing log_data for session {session_id}: {e}")
+
+                        logger.info(f"Found {session_ood_requests} OOD requests for session_id: {session_id}")
+                        ood_requests_overall += session_ood_requests
+                    else:
+                        logger.warning(f"Unexpected log format for session {session_id}. Expected a list, got {type(logs)}")
+
+                except httpx.HTTPStatusError as e:
+                    logger.error(f"HTTP error fetching logs for session {session_id}: {e.response.status_code} - {e.response.text}")
+                except httpx.RequestError as e:
+                    logger.error(f"Request error fetching logs for session {session_id}: {e}")
+                except Exception as e:
+                    logger.error(f"Error processing logs for session {session_id}: {e}", traceback.format_exc())
+            else:
+                logger.warning("A task run failed or did not return a session_id. Skipping log processing for it.")
+
+    return total_runs_for_csv, ood_requests_overall
+
 async def main():
     """
     go through steps of getting user input.
@@ -364,82 +419,27 @@ async def main():
 
     # Run tasks
     print(f"\nRunning {len(async_tasks)} tasks with agent: {agent_version}")
-    # Results will now contain run_session_ids (or None for failed tasks)
     run_session_ids_results = await asyncio.gather(*async_tasks)
 
     print("\nAll tasks completed!")
 
-    # TODO: Make this a function
-    # --- Store OOD statistics --- #
-    total_runs_for_csv = 0 # Will be calculated based on successful runs with session IDs
-    ood_requests_overall = 0
+    # only calculate OOD requests for eval runs
+    if not passthrough:
+        total_runs_for_csv, ood_requests_overall = await calculate_ood_requests(run_session_ids_results)
 
-    # --- Fetch and process logs for OOD requests --- #
-    # Ensure PLATO_API_URL and PLATO_API_KEY are accessible here
-    # These are already loaded globally, so they should be fine.
+        logger.info(
+            f"CSV Logging: Total runs processed for logs = {total_runs_for_csv}. OOD Requests Overall = {ood_requests_overall}."
+        )
 
-    async with httpx.AsyncClient() as http_client:
-        for session_id in run_session_ids_results:
-            if session_id: # Process only if a session_id was returned
-                total_runs_for_csv += 1 # Count this as a run for CSV
-                try:
-                    logs_url = f"{PLATO_API_URL}/session/{session_id}"
-                    headers = {"X-API-Key": PLATO_API_KEY}
-
-                    logger.info(f"Fetching logs for run_session_id: {session_id} from {logs_url}")
-                    response = await http_client.get(logs_url, headers=headers)
-                    response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
-                    
-                    logs = response.json()
-                    session_ood_requests = 0
-                    if isinstance(logs, list): # Expecting a list of log entries
-                        for log_entry in logs:
-                            if isinstance(log_entry, dict) and "logData" in log_entry:
-                                log_data_str = log_entry.get("logData")
-                                try:
-                                    if isinstance(log_data_str, str):
-                                        parsed_log_data = json.loads(log_data_str)
-                                    elif isinstance(log_data_str, dict): # If already parsed
-                                        parsed_log_data = log_data_str
-                                    else:
-                                        parsed_log_data = {}
-
-                                    if parsed_log_data.get("type") == "ood_request":
-                                        session_ood_requests += 1
-                                except json.JSONDecodeError:
-                                    logger.warning(f"Failed to parse log_data JSON for session {session_id}: {log_data_str}")
-                                except Exception as e:
-                                    logger.warning(f"Error processing log_data for session {session_id}: {e}")
-
-                        logger.info(f"Found {session_ood_requests} OOD requests for session_id: {session_id}")
-                        ood_requests_overall += session_ood_requests
-                    else:
-                        logger.warning(f"Unexpected log format for session {session_id}. Expected a list, got {type(logs)}")
-
-                except httpx.HTTPStatusError as e:
-                    logger.error(f"HTTP error fetching logs for session {session_id}: {e.response.status_code} - {e.response.text}")
-                except httpx.RequestError as e:
-                    logger.error(f"Request error fetching logs for session {session_id}: {e}")
-                except Exception as e:
-                    logger.error(f"Error processing logs for session {session_id}: {e}", traceback.format_exc())
-            else:
-                logger.warning("A task run failed or did not return a session_id. Skipping log processing for it.")
-
-
-    logger.info(
-        f"CSV Logging: Total runs processed for logs = {total_runs_for_csv}. OOD Requests Overall = {ood_requests_overall}."
-    )
-
-    csv_file_name = "ood_stats.csv"
-    try:
-        with open(csv_file_name, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["total_runs", "ood_requests_overall"])
-            writer.writerow([total_runs_for_csv, ood_requests_overall])
-        logger.info(f"OOD statistics saved to {csv_file_name}")
-    except IOError as e:
-        logger.error(f"Failed to write OOD statistics to CSV {csv_file_name}: {e}")
-    # --- End of Store OOD statistics --- #
+        csv_file_name = "ood_stats.csv"
+        try:
+            with open(csv_file_name, "w", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["total_runs", "ood_requests_overall"])
+                writer.writerow([total_runs_for_csv, ood_requests_overall])
+            logger.info(f"OOD statistics saved to {csv_file_name}")
+        except IOError as e:
+            logger.error(f"Failed to write OOD statistics to CSV {csv_file_name}: {e}")
 
     await client.close()
 
