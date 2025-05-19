@@ -100,6 +100,7 @@ class Plato:
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
                 "env_config": {},
+                "record_network_requests": record_network_requests,
             },
             headers=headers,
         ) as response:
