@@ -208,6 +208,76 @@ class Agent:
 
         return items
 
+
+    async def run_single_action(self, prompt, n_samples=1):
+        """Run the agent in a single turn, processing user input and generating responses.
+        Continues running until a non-screenshot computer_call is received.
+
+        Args:
+            prompt: Initial user prompt
+        """
+        if not self.computer:
+            raise ValueError("Computer object not provided to Agent for run_single_action")
+
+        items = [{"role": "user", "content": prompt}]
+
+        tools = [
+            {
+                "type": "computer-preview",
+                "display_width": self.computer.dimensions[0],
+                "display_height": self.computer.dimensions[1],
+                "environment": self.computer.environment,
+            }
+        ]
+
+        while True:
+            response = await create_response(
+                model="computer-use-preview",
+                input=items,
+                tools=tools,
+                truncation="auto",
+            )
+
+            if "output" not in response:
+                print(response)
+                continue
+
+            for item in response["output"]:
+                if item["type"] == "reasoning":
+                    continue
+                if item["type"] == "computer_call" and item["action"]["type"] != "screenshot":
+                    # regenerate n_samples number of times to record the distrubtion of actions
+                    tasks = []
+                    responses = []
+                    for _ in range(n_samples):
+                        tasks.append(create_response(
+                            model="computer-use-preview",
+                            input=items,
+                            tools=tools,
+                            truncation="auto",
+                        ))
+
+                    responses = await asyncio.gather(*tasks)
+
+                    actions = [item["action"]]
+                    for response in responses:
+                        if "output" not in response:
+                            print(response)
+                        else:
+                            actions.append(response["output"][-1]["action"])
+
+                    return items, actions
+
+                items.append(item)
+
+                items += await self.handle_item(item)
+
+            # If we get an assistant response, continue with "continue"
+            if items[-1].get("role") == "assistant":
+                return items, []
+
+        return items, []
+
     async def run_in_loop_generator(self, prompt, max_steps=30):
         """Run the agent in a loop, processing user input and generating responses.
         This is an async generator version that yields each item as it's processed.
