@@ -268,6 +268,7 @@ specific_restaurant_tasks = [
     name="order_little_caesars_pizza",
     prompt="Order thin crust cheese pizza from Little Caesars",
     start_url="https://www.doordash.com",
+    public_id="order_little_caesars_pizza",
     env_id="doordash",
     eval_config=CustomEvalConfig(
       type="custom",
@@ -277,6 +278,7 @@ specific_restaurant_tasks = [
   PlatoTask(
     name="order_proposition_wings",
     prompt="Order buffalo wings from Proposition Chicken",
+    public_id="43dc71d8-58e6-483d-ac0b-5c15385a4c8f",
     start_url="https://www.doordash.com",
     env_id="doordash",
     eval_config=CustomEvalConfig(
@@ -287,6 +289,7 @@ specific_restaurant_tasks = [
   PlatoTask(
     name="order_north_beach_pizza",
     prompt="Order an extra large pepperoni pizza from North Beach pizza",
+    public_id="94053ed7-3bb5-40c5-a176-b221b129a312",
     start_url="https://www.doordash.com",
     env_id="doordash",
     eval_config=CustomEvalConfig(
@@ -302,6 +305,7 @@ advanced_customization_tasks = [
     name="order_mcdonalds_nuggets_meal_2",
     prompt="Order a 10 piece Chicken McNuggets from McDonalds meal with a large coke, spicy buffalo sauce and hot mustard sauce",
     start_url="https://www.doordash.com",
+    public_id="4dd76fd4-54e1-4969-add6-b6617808a651",
     env_id="doordash",
     eval_config=CustomEvalConfig(
       type="custom",
@@ -311,6 +315,7 @@ advanced_customization_tasks = [
   PlatoTask(
     name="order_mcdonalds_custom_burger",
     prompt="Order a Double Cheeseburger from McDonalds with no Onions and extra cheese",
+    public_id="029e4108-1f38-4a2f-a7e8-5e684140c34a",
     start_url="https://www.doordash.com",
     env_id="doordash",
     eval_config=CustomEvalConfig(
@@ -321,6 +326,7 @@ advanced_customization_tasks = [
   PlatoTask(
     name="order_feng_cha_milk_tea",
     prompt="Order a milk tea from Feng Cha with a jasmine green tea base, Regular Ice, 50% sweet, oat milk, boba pearls and grass jelly",
+    public_id="5b39329f-ed68-47d2-a6b0-c96763763598",
     start_url="https://www.doordash.com",
     env_id="doordash",
     eval_config=CustomEvalConfig(
@@ -331,6 +337,7 @@ advanced_customization_tasks = [
   PlatoTask(
     name="order_ea_cafe_poke",
     prompt="Get a poke bowl from Ea Cafe with spicy crab meat cucumber, sweet corn, miso sauce, cabbage, and pineapple",
+    public_id="853c5c3e-9322-478a-86bc-67acd5da1505",
     start_url="https://www.doordash.com",
     env_id="doordash",
     eval_config=CustomEvalConfig(
@@ -341,6 +348,7 @@ advanced_customization_tasks = [
   PlatoTask(
     name="order_popeyes_combo_2",
     prompt="Order a 3Pc spicy Tenders Combo from Popeyes with blackened ranch sauce, cajun fries and a diet coke",
+    public_id="d3c41375-71c4-4f00-85a5-5e4c4fa7999d",
     start_url="https://www.doordash.com",
     env_id="doordash",
     eval_config=CustomEvalConfig(
@@ -350,6 +358,7 @@ advanced_customization_tasks = [
   ),
   PlatoTask(
     name="order_kfc_fan_box",
+    public_id="2307f342-4a27-4b44-960c-40ab9d74c0bf",
     prompt="Order a Fan Favorite Box from KFC with extra crispy chicken, 2x gravy and 2x ranch,4 large Starrys, and a 10 piece cherry pie popper with a plate",
     start_url="https://www.doordash.com",
     env_id="doordash",
@@ -364,6 +373,7 @@ advanced_customization_tasks = [
 multiple_items_tasks = [
   PlatoTask(
     name="order_papa_johns_combo_2_liters",
+    public_id="06127157-8ebc-4c65-97ab-cba3bb86a471",
     prompt="Order a cheese pizza and a 2 liter pepsi from papa johns",
     start_url="https://www.doordash.com",
     env_id="doordash",
@@ -374,6 +384,7 @@ multiple_items_tasks = [
   ),
   PlatoTask(
     name="order_dumpling_time_combo",
+    public_id="00058649-92cb-48ec-92bf-5e320edd0f5f",
     prompt="Order Steamed BBQ Pork Bao, Shrimp & Pork Siu Mai, Tom Yum, and Crispy Sesame Tofu Squares from Dumpling Time",
     start_url="https://www.doordash.com",
     env_id="doordash",
@@ -384,6 +395,7 @@ multiple_items_tasks = [
   ),
   PlatoTask(
     name="order_newa_indian_combo",
+    public_id="ce3307dc-39dc-465b-8318-cec56c0527f6",
     prompt="Get 2 orders of Chicken Tikka Masalas, 2 Basmati Rices, 1 garlic naan and 1 plain naan from NEWA Nepalese Indian Resturant",
     start_url="https://www.doordash.com",
     env_id="doordash",
@@ -409,6 +421,7 @@ bonus_tasks = [
     name="order_rt_rotisserie_with_tip",
     prompt="Order a Umami Fries from RT Rotisserie and tip 30%",
     start_url="https://www.doordash.com",
+    public_id="00058649-92cb-48ec-92bf-5e320edd0f5f",
     env_id="doordash",
     eval_config=CustomEvalConfig(
       type="custom",
