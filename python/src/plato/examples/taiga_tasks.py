@@ -3,6 +3,14 @@ from typing import Tuple
 from plato.models.task import EnumMatchVariable, MutationVariable, PlatoTask, SemanticMatchVariable, StateMutationMatch, StateMutationMatchEvalConfig
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+from __future__ import annotations
+
+import json
+from typing import Dict, List, Tuple
+
+from openai import AsyncOpenAI
+from pydantic import BaseModel
+from plato.models.task import CustomEvalConfig, PlatoTask
 
 client = AsyncOpenAI()
 
@@ -58,7 +66,7 @@ async def llm_judge_eval_fn(data: dict, prompt: str) -> Tuple[bool, str]:
 # Project setup and user management tasks
 project_setup_tasks = [
     PlatoTask(
-        name="create_new_user username:'t' ",
+        name="create_a_new_user",
         prompt="Create a new user",
         env_id="taiga",
     ),

@@ -17,7 +17,7 @@ async def test_environment_lifecycle():
     client = Plato(base_url="http://localhost:8080/api")
     # client = Plato(base_url="http://54.219.32.250:8080/api")
     # Create and initialize the environment
-    env = await client.make_environment("mattermost")
+    env = await client.make_environment("taiga")
 
     try:
         print(env.id)

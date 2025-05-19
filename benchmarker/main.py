@@ -1,8 +1,12 @@
 import asyncio
 import os
+import sys
 import argparse
 import traceback
 import logging
+
+# Add the plato-client/python/src directory to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'python', 'src')))
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -87,6 +91,19 @@ Here is the task:
 The login credentials are:
 username: alex.reynolds
 password: password
+""",
+    },
+    "taiga": {
+        "tasks": [],
+        "base_prompt": """
+You are a helpful assistant that can help me use Taiga.
+start by going to {start_url}. Do not navigate to other websites.
+Here is the task:
+{prompt}
+
+The login credentials are:
+username: admin
+password: admin
 """,
     },
 }
