@@ -41,12 +41,16 @@ class PlatoEnvironment:
     )
     _heartbeat_task: Optional[asyncio.Task] = None
     _heartbeat_interval: int = 30  # seconds
+    _sim_job_id: Optional[str] = Field(
+        description="The ID of the simulation job", default=None
+    )
 
-    def __init__(self, client: "Plato", id: str):
+    def __init__(self, client: "Plato", id: str, sim_job_id: Optional[str] = None):
         self._client = client
         self.id = id
         self._run_session_id = None
         self._heartbeat_task = None
+        self._sim_job_id = sim_job_id
 
     async def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.

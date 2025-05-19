@@ -103,7 +103,7 @@ class Plato:
         ) as response:
             response.raise_for_status()
             data = await response.json()
-            return PlatoEnvironment(client=self, id=data["job_id"])
+            return PlatoEnvironment(client=self, id=data["job_id"], sim_job_id=data.get("sim_job_id"))
 
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
