@@ -274,7 +274,7 @@ async def main():
           selected_simulator_name = selected_simulator["name"]
 
     # Get tasks for the selected simulator
-    simulator_tasks = await client.load_tasks(selected_simulator_name)
+    simulator_tasks = await client.list_simulator_tasks(selected_simulator_id)
 
     # Check if there are any tasks available
     if not simulator_tasks:
@@ -284,8 +284,9 @@ async def main():
 
     print(f"\nAvailable tasks for '{selected_simulator['name']}' simulator:")
     for task in simulator_tasks:
-        print(f"{task['name']}")
+        print(f"- {task['name']}")
 
+    task_choice = args.task_name or input("\nInput comma separated task names or 'all' for all tasks: ")
     task_choice = args.task_name or input("\nInput comma separated task names or 'all' for all tasks: ")
     if task_choice.lower() == 'all':
         tests_to_run = simulator_tasks
