@@ -99,7 +99,9 @@ class Plato:
                 "source": "SDK",
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
-                "env_config": {},
+                "env_config": {
+                    "passthrough_all_ood_requests": passthrough
+                },
                 "record_network_requests": record_network_requests,
             },
             headers=headers,

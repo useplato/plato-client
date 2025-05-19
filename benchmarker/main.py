@@ -3,6 +3,9 @@ import os
 import argparse
 import traceback
 import logging
+import csv
+import json
+import httpx
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -34,7 +37,7 @@ if not PLATO_API_KEY:
         "PLATO_API_KEY environment variable is not set. Please set it in your .env file."
     )
 
-PLATO_API_URL = os.environ.get("PLATO_API_URL", "https://plato.so/api")
+PLATO_API_URL = os.environ.get("PLATO_API_URL", "http://localhost:8080/api")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please set it in your .env file."
 
@@ -118,9 +121,10 @@ password: admin
 async def run_with_semaphore(sem, *args, **kwargs):
     async with sem:
         try:
-            await run_task(*args, **kwargs)
+            return await run_task(*args, **kwargs)
         except Exception as e:
             logger.error(f"Error running task: {e}", traceback.format_exc())
+            return None
 
 
 async def run_browseruse_task(cdp_url, prompt, start_url):
@@ -135,7 +139,7 @@ async def run_browseruse_task(cdp_url, prompt, start_url):
     agent = BrowserUseAgent(
         browser=browser,
         task=prompt,
-        llm=ChatOpenAI(model="gpt-4o"),
+        llm=ChatOpenAI(model="gpt-4.1"),
     )
     await agent.run(max_steps=40)
 
@@ -165,9 +169,11 @@ async def run_task(
     timeout: float = 400,
     agent_version: str = "browser_use_test",
     task_set: str = "espocrm",
+    record_network_requests: bool = False,
+    passthrough: bool = False,
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
-    env = await client.make_environment(task.env_id, open_page_on_start=False)
+    env = await client.make_environment(task.env_id, open_page_on_start=False, record_network_requests=record_network_requests, passthrough=passthrough)
 
     logger.info(f"[{task.name}] Waiting for environment to be ready ({task.env_id})")
     await env.wait_for_ready()
@@ -183,6 +189,11 @@ async def run_task(
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
     cdp_url = await env.get_cdp_url()
+
+    # Placeholder for run_session_id. Assuming env.id is the identifier.
+    # This might need adjustment based on how PlatoEnvironment exposes the run session's unique ID.
+    run_session_id = env._run_session_id 
+    logger.info(f"[{task.name}] Current run session ID: {run_session_id}")
 
     try:
         live_view_url = await env.get_live_view_url()
@@ -260,6 +271,18 @@ async def main():
         type=str,
         help="Tag for agent version, ex: '20250423'",
     )
+    parser.add_argument(
+        "--record-network-requests",
+        type=str,
+        default=None,
+        help="Enable or disable network request recording ('true' or 'false'). If not set, uses SDK/server default."
+    )
+    parser.add_argument(
+        "--passthrough",
+        type=str,
+        default=None,
+        help="Enable or disable passthrough to the agent, ex: 'true' or 'false'"
+    )
     args = parser.parse_args()
 
     client = Plato(base_url=PLATO_API_URL, api_key=PLATO_API_KEY)
@@ -283,6 +306,8 @@ async def main():
 
     # Get tasks for the selected simulator
     simulator_tasks = await client.load_tasks(selected_simulator_name)
+    # DO NOT COMMIT THIS
+    simulator_tasks = TASK_SETS[selected_simulator_name]["tasks"]
 
     for task in simulator_tasks:
         print(f"{task.name}")
@@ -314,6 +339,16 @@ async def main():
     num_runs = args.runs or int(input("Enter number of runs per task: ") or "1")
     concurrency = args.concurrency or int(input("Enter concurrency (max parallel tasks): ") or "5")
 
+    if args.record_network_requests is not None:
+        record_network_requests = args.record_network_requests == "true"
+    else:
+        record_network_requests = input("Record network requests? (y/n): ") == "y"
+
+    if args.passthrough:
+        passthrough = args.passthrough == "true"
+    else:
+        passthrough = input("Passthrough to the agent? (y/n): ") == "y"
+
     # Setup semaphore for concurrency
     sem = asyncio.Semaphore(concurrency)
 
@@ -323,15 +358,89 @@ async def main():
         for _ in range(num_runs):
             async_tasks.append(
                 run_with_semaphore(
-                    sem, client, task, agent_version=agent_version, task_set=selected_simulator["name"].lower()
+                    sem, client, task, agent_version=agent_version, task_set=selected_simulator["name"].lower(), record_network_requests=record_network_requests, passthrough=passthrough
                 )
             )
 
     # Run tasks
     print(f"\nRunning {len(async_tasks)} tasks with agent: {agent_version}")
-    await asyncio.gather(*async_tasks)
+    # Results will now contain run_session_ids (or None for failed tasks)
+    run_session_ids_results = await asyncio.gather(*async_tasks)
 
     print("\nAll tasks completed!")
+
+    # TODO: Make this a function
+    # --- Store OOD statistics --- #
+    total_runs_for_csv = 0 # Will be calculated based on successful runs with session IDs
+    ood_requests_overall = 0
+
+    # --- Fetch and process logs for OOD requests --- #
+    # Ensure PLATO_API_URL and PLATO_API_KEY are accessible here
+    # These are already loaded globally, so they should be fine.
+
+    async with httpx.AsyncClient() as http_client:
+        for session_id in run_session_ids_results:
+            if session_id: # Process only if a session_id was returned
+                total_runs_for_csv += 1 # Count this as a run for CSV
+                try:
+                    logs_url = f"{PLATO_API_URL}/session/{session_id}"
+                    headers = {"X-API-Key": PLATO_API_KEY}
+
+                    logger.info(f"Fetching logs for run_session_id: {session_id} from {logs_url}")
+                    response = await http_client.get(logs_url, headers=headers)
+                    response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+                    
+                    logs = response.json()
+                    session_ood_requests = 0
+                    if isinstance(logs, list): # Expecting a list of log entries
+                        for log_entry in logs:
+                            if isinstance(log_entry, dict) and "logData" in log_entry:
+                                log_data_str = log_entry.get("logData")
+                                try:
+                                    if isinstance(log_data_str, str):
+                                        parsed_log_data = json.loads(log_data_str)
+                                    elif isinstance(log_data_str, dict): # If already parsed
+                                        parsed_log_data = log_data_str
+                                    else:
+                                        parsed_log_data = {}
+
+                                    if parsed_log_data.get("type") == "ood_request":
+                                        session_ood_requests += 1
+                                except json.JSONDecodeError:
+                                    logger.warning(f"Failed to parse log_data JSON for session {session_id}: {log_data_str}")
+                                except Exception as e:
+                                    logger.warning(f"Error processing log_data for session {session_id}: {e}")
+
+                        logger.info(f"Found {session_ood_requests} OOD requests for session_id: {session_id}")
+                        ood_requests_overall += session_ood_requests
+                    else:
+                        logger.warning(f"Unexpected log format for session {session_id}. Expected a list, got {type(logs)}")
+
+                except httpx.HTTPStatusError as e:
+                    logger.error(f"HTTP error fetching logs for session {session_id}: {e.response.status_code} - {e.response.text}")
+                except httpx.RequestError as e:
+                    logger.error(f"Request error fetching logs for session {session_id}: {e}")
+                except Exception as e:
+                    logger.error(f"Error processing logs for session {session_id}: {e}", traceback.format_exc())
+            else:
+                logger.warning("A task run failed or did not return a session_id. Skipping log processing for it.")
+
+
+    logger.info(
+        f"CSV Logging: Total runs processed for logs = {total_runs_for_csv}. OOD Requests Overall = {ood_requests_overall}."
+    )
+
+    csv_file_name = "ood_stats.csv"
+    try:
+        with open(csv_file_name, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["total_runs", "ood_requests_overall"])
+            writer.writerow([total_runs_for_csv, ood_requests_overall])
+        logger.info(f"OOD statistics saved to {csv_file_name}")
+    except IOError as e:
+        logger.error(f"Failed to write OOD statistics to CSV {csv_file_name}: {e}")
+    # --- End of Store OOD statistics --- #
+
     await client.close()
 
 
