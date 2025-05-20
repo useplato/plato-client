@@ -3,6 +3,9 @@ from typing import Tuple
 from plato.models.task import CustomEvalConfig, PlatoTask
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
 
 client = AsyncOpenAI()
 
