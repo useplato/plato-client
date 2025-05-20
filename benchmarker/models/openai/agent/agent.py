@@ -259,12 +259,12 @@ class Agent:
 
                     responses = await asyncio.gather(*tasks)
 
-                    actions = [item["action"]]
+                    actions = [item]
                     for response in responses:
                         if "output" not in response:
                             print(response)
                         else:
-                            actions.append(response["output"][-1]["action"])
+                            actions.append(response["output"][-1])
 
                     return items, actions
 
