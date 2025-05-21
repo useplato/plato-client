@@ -340,7 +340,7 @@ class PlatoEnvironment:
             response = await self._client.evaluate(self._run_session_id, agent_version)
             return EvaluationResult(
                 success=response.get('success', False),
-                reason=response.get('reason', None)
+                reason=response.get('message', None)
             )
 
 

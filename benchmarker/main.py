@@ -133,8 +133,8 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url):
             api_key=os.getenv("ANTHROPIC_API_KEY") or "",
         )
         await computer.goto(start_url)
-        await agent.run(prompt, browser_tool=computer)
-
+        messages = await agent.run(prompt, browser_tool=computer)
+        return messages
 
 async def run_task(
     client: Plato,
@@ -156,6 +156,9 @@ async def run_task(
     # Format the prompt with task-specific information
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
+    if task.eval_config.type == "data_match":
+        prompt += "\n\nAfter you complete all of the tool_calls you wish to execute, return only what you are asked for in the task as text. Do not include any other text or response blocks."
+
     logger.info(f"[{task.name}] Resetting environment")
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
@@ -170,7 +173,14 @@ async def run_task(
         elif "openai" in agent_version:
             await run_openai_cua_task(cdp_url, prompt, task.start_url, env)
         elif "anthropic" in agent_version:
-            await run_anthropic_cua_task(cdp_url, prompt, task.start_url)
+            messages = await run_anthropic_cua_task(cdp_url, prompt, task.start_url)
+
+        if task.eval_config.type == "data_match":
+            last_message = messages[-1]
+            if last_message["role"] == "assistant":
+                for block in last_message["content"]:
+                    if block["type"] == "text":
+                        await env.log(log=block, type="data_match")
 
         # evaluate the task
         try:
@@ -296,7 +306,6 @@ async def main():
     # Setup semaphore for concurrency
     sem = asyncio.Semaphore(concurrency)
 
-    # Create tasks
     async_tasks = []
     for task in tests_to_run:
         for _ in range(num_runs):
