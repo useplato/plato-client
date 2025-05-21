@@ -205,6 +205,7 @@ class BaseComputerBrowserTool:
       "up": "ArrowUp",
       "arrowdown": "ArrowDown",
       "down": "ArrowDown",
+      "super": "Meta",
     }
     return key_mapping.get(key, key)
 

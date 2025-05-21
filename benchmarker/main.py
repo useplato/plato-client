@@ -188,8 +188,6 @@ async def run_task(
     finally:
         logger.info(f"[{task.name}] Closing environment")
         await env.close()
-        logger.info(f"[{task.name}] Closing client")
-        await client.close()
 
 async def main():
     """
