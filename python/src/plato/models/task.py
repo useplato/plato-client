@@ -13,7 +13,7 @@ class BasePlatoEvalConfig(BaseModel):
             Can be either "base" or "state_mutation_match".
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    type: Literal["state_mutation_match", "custom", "data_match"]
+    type: Literal["state_mutation_match", "custom", "answer"]
 
 class StateMutationMatch(BaseModel):
     tablename: str
@@ -32,15 +32,15 @@ class EnumMatchVariable(BaseModel):
     type: Literal["enum_match_variable"] = "enum_match_variable"
     values: List[Any]
 
-class DataMatchEvalConfig(BasePlatoEvalConfig):
+class AnswerEvalConfig(BasePlatoEvalConfig):
     """Configuration for data matching evaluation.
 
     This class defines the configuration for evaluating tasks based on matching
     data. It inherits from BasePlatoEvalConfig and specifies
     data that should be matched during evaluation.
     """
-    type: Literal["data_match"] = "data_match"
-    data: List[Dict[str, Any]]
+    type: Literal["answer"] = "answer"
+    answers: List[Dict[str, Any]]
 
 class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """Configuration for state mutation matching evaluation.
@@ -88,6 +88,11 @@ class EvaluationResult(BaseModel):
 
     success: bool
     reason: Optional[str] = None
+    diffs: Optional[List[Dict[str, Any]]] = None
+    expected_mutations: Optional[List[Dict[str, Any]]] = None
+    actual_mutations: Optional[List[Dict[str, Any]]] = None
+    expected_answers: Optional[List[Dict[str, Any]]] = None
+    actual_answers: Optional[List[Dict[str, Any]]] = None
 
 
 class PlatoTask(BaseModel):

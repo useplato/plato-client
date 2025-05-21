@@ -3,6 +3,7 @@ import os
 import argparse
 import traceback
 import logging
+import re
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -99,6 +100,17 @@ async def run_with_semaphore(sem, *args, **kwargs):
         except Exception as e:
             logger.error(f"Error running task: {e}", traceback.format_exc())
 
+async def log_all_answers(env: PlatoEnvironment, text: str = None):
+    if text:
+        pattern = r'<answer>(.*?)</answer>'
+        # Find all matches
+        matches = re.findall(pattern, text, re.DOTALL)
+        for match in matches:
+            log = {
+                "type": "text",
+                "text": match,
+            }
+            await env.log(log=log, type="answer")
 
 async def run_browseruse_task(cdp_url, prompt, start_url):
     browser = BrowserUseBrowser(
@@ -114,8 +126,8 @@ async def run_browseruse_task(cdp_url, prompt, start_url):
         task=prompt,
         llm=ChatOpenAI(model="gpt-4o"),
     )
-    await agent.run(max_steps=40)
-
+    history = await agent.run(max_steps=40)
+    return history.history[-1].model_output.current_state.memory
 
 async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
     async with RemotePlaywrightComputer(cdp_url) as computer:
@@ -123,9 +135,11 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
             computer=computer,
         )
         await computer.goto(start_url)
+        last_item = None
         async for item in agent.run_in_loop_generator(prompt, max_steps=100):
             await env.log(item)
-
+            last_item = item
+        return last_item
 
 async def run_anthropic_cua_task(cdp_url, prompt, start_url):
     async with ComputerBrowserTool20250124(cdp_url) as computer:
@@ -156,8 +170,8 @@ async def run_task(
     # Format the prompt with task-specific information
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
-    if task.eval_config.type == "data_match":
-        prompt += "\n\nAfter you complete all of the tool_calls you wish to execute, return only what you are asked for in the task as one text block. Do not include any other text or response blocks. Wrap your each of your answers in <data_match> tags.\nFor example, if your answer is 'Matthew Thompson', then your final response should include <data_match>Matthew Thompson</data_match>."
+    if task.eval_config.type == "answer":
+        prompt += "\n\nAfter you complete all of the tool_calls you wish to execute, return only what you are asked for in the task as one text block. Do not include any other text or response blocks. Wrap your each of your answers in <answer> tags.\nFor example, if your answers are 'Matthew Thompson' and 'Vanessa Nguyen', then your final response should include both '<answer>Matthew Thompson</answer>' and '<answer>Vanessa Nguyen</answer>'."
 
     logger.info(f"[{task.name}] Resetting environment")
     await env.reset(task, agent_version=agent_version)
@@ -169,27 +183,31 @@ async def run_task(
         logger.info(f"[{task.name}] Live view URL: {live_view_url}")
 
         if "browser_use" in agent_version:
-            await run_browseruse_task(cdp_url, prompt, task.start_url)
+            last_history_output_memory = await run_browseruse_task(cdp_url, prompt, task.start_url)
+
+            if task.eval_config.type == "answer":
+                await log_all_answers(env, last_history_output_memory)
         elif "openai" in agent_version:
-            await run_openai_cua_task(cdp_url, prompt, task.start_url, env)
+            last_item = await run_openai_cua_task(cdp_url, prompt, task.start_url, env)
+
+            if task.eval_config.type == "answer":
+                if isinstance(last_item, str):
+                    await log_all_answers(env, last_item)
+                elif isinstance(last_item, dict):
+                    if last_item.get("role") == "assistant":
+                        for content in last_item.get("content", []):
+                            if content.get("type") == "text":
+                                await log_all_answers(env, content.get("text"))
+
         elif "anthropic" in agent_version:
             messages = await run_anthropic_cua_task(cdp_url, prompt, task.start_url)
 
-        if task.eval_config.type == "data_match":
-            last_message = messages[-1]
-            if last_message["role"] == "assistant":
-                for block in last_message["content"]:
-                    if block["type"] == "text":
-                        import re
-                        pattern = r'<data_match>(.*?)</data_match>'
-                        # Find all matches
-                        matches = re.findall(pattern, block["text"], re.DOTALL)
-                        for match in matches:
-                            log = {
-                                "type": "text",
-                                "text": match,
-                            }
-                            await env.log(log=log, type="data_match")
+            if task.eval_config.type == "answer":
+                last_message = messages[-1]
+                if last_message["role"] == "assistant":
+                    for block in last_message["content"]:
+                        if block["type"] == "text":
+                            await log_all_answers(env, block["text"])
 
         # evaluate the task
         try:

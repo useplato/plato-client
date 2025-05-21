@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
 from plato.exceptions import PlatoClientError
-from plato.models.task import EvaluationResult, DataMatchEvalConfig
+from plato.models.task import EvaluationResult, AnswerEvalConfig
 
 import aiohttp
 import os
@@ -309,7 +309,7 @@ class Plato:
         ) as response:
             response.raise_for_status()
             res_data = await response.json()
-            return res_data
+            return res_data["score"]
 
     async def post_evaluation_result(
         self,
@@ -392,7 +392,7 @@ class Plato:
                 prompt=t["prompt"],
                 start_url=t["startUrl"],
                 env_id=t["simulator"]["name"],
-                eval_config=DataMatchEvalConfig(**t["defaultScoringConfig"]) if t["defaultScoringConfig"]["type"] == "data_match" else None
+                eval_config=AnswerEvalConfig(**t["defaultScoringConfig"]) if t["defaultScoringConfig"]["type"] == "answer" else None
             ) for t in test_cases]
 
 
