@@ -40,7 +40,7 @@ class AnswerEvalConfig(BasePlatoEvalConfig):
     data that should be matched during evaluation.
     """
     type: Literal["answer"] = "answer"
-    answers: List[Dict[str, Any]]
+    answer: Dict[str, Any]
 
 class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """Configuration for state mutation matching evaluation.
@@ -77,23 +77,20 @@ class CustomEvalConfig(BasePlatoEvalConfig):
     def serialize_score_fn(self, score_fn: Callable, _info):
         return score_fn.__name__
 
-
 class EvaluationResult(BaseModel):
-    """Result of an evaluation containing both success status and reason if failed.
-
-    Attributes:
-        success: Whether the evaluation was successful
-        reason: If success is False, contains the reason for failure. None if successful.
-    """
-
     success: bool
     reason: Optional[str] = None
+
+class StateMutationMatchEvaluationResult(EvaluationResult):
+    type: Literal["state_mutation_match"] = "state_mutation_match"
     diffs: Optional[List[Dict[str, Any]]] = None
     expected_mutations: Optional[List[Dict[str, Any]]] = None
     actual_mutations: Optional[List[Dict[str, Any]]] = None
-    expected_answers: Optional[List[Dict[str, Any]]] = None
-    actual_answers: Optional[List[Dict[str, Any]]] = None
 
+class AnswerEvaluationResult(EvaluationResult):
+    type: Literal["answer"] = "answer"
+    answer: Optional[Dict[str, Any]] = None
+    expected_answer: Optional[Dict[str, Any]] = None
 
 class PlatoTask(BaseModel):
     """Represents a task in the Plato system.

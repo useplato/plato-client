@@ -1,6 +1,6 @@
 from plato.models.task import CustomEvalConfig
 from pydantic import Field
-from plato.models import PlatoTask, EvaluationResult
+from plato.models import PlatoTask, EvaluationResult, AnswerEvaluationResult, StateMutationMatchEvaluationResult
 from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
@@ -322,9 +322,12 @@ class PlatoEnvironment:
                 reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
-    async def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
+    async def evaluate(self, answer: Optional[dict] = None, agent_version: Optional[str] = None) -> EvaluationResult:
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
+        
+        if answer:
+            await self._client.log(self._run_session_id, answer, "answer")
 
         eval_config = self._current_task.eval_config
         if isinstance(eval_config, CustomEvalConfig):
@@ -339,16 +342,26 @@ class PlatoEnvironment:
             # call /evaluate endpoint
             response = await self._client.evaluate(self._run_session_id, agent_version)
             result = response['result']
-            return EvaluationResult(
-                success=result.get('correct', False),
-                reason=result.get('reason', None),
-                diffs=result.get('diffs', None),
-                expected_mutations=result.get('expected_mutations', None),
-                actual_mutations=result.get('mutations', None),
-                expected_answers=result.get('expected_answers', None),
-                actual_answers=result.get('answers', None),
-            )
-
+            if result['type'] == 'state_mutation':
+                return StateMutationMatchEvaluationResult(
+                    success=result.get('correct', False),
+                    reason=result.get('reason', None),
+                    diffs=result.get('diffs', None),
+                    expected_mutations=result.get('expected_mutations', None),
+                    actual_mutations=result.get('mutations', None)
+                )
+            elif result['type'] == 'answer':
+                return AnswerEvaluationResult(
+                    success=result.get('correct', False),
+                    reason=result.get('reason', None),
+                    answer=result.get('answer', None),
+                    expected_answer=result.get('expected_answer', None)
+                )
+            else:
+                return EvaluationResult(
+                    success=False,
+                    reason=f"Unknown result type: {result['type']}"
+                )
 
     async def log(self, log: dict, type: str = "info") -> None:
         """Log a message to the environment.

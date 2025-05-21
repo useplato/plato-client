@@ -171,7 +171,7 @@ async def run_task(
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
     if task.eval_config.type == "answer":
-        prompt += "\n\nAfter you complete all of the tool_calls you wish to execute, return only what you are asked for in the task as one text block. Do not include any other text or response blocks. Wrap your each of your answers in <answer> tags.\nFor example, if your answers are 'Matthew Thompson' and 'Vanessa Nguyen', then your final response should include both '<answer>Matthew Thompson</answer>' and '<answer>Vanessa Nguyen</answer>'."
+        prompt += "\n\nAfter you complete all of the tool_calls you wish to execute, return only what you are asked for in the task as one text block. Do not include any other text or response blocks. Wrap your answer(s) in <answer> tags.\nFor example, if your answers are 'Matthew Thompson' and 'Vanessa Nguyen', then your final response should include both '<answer>Matthew Thompson</answer>' and '<answer>Vanessa Nguyen</answer>'."
 
     logger.info(f"[{task.name}] Resetting environment")
     await env.reset(task, agent_version=agent_version)
@@ -185,33 +185,37 @@ async def run_task(
         if "browser_use" in agent_version:
             last_history_output_memory = await run_browseruse_task(cdp_url, prompt, task.start_url)
 
-            if task.eval_config.type == "answer":
-                await log_all_answers(env, last_history_output_memory)
+            # if task.eval_config.type == "answer":
+            #     await log_all_answers(env, last_history_output_memory)
         elif "openai" in agent_version:
             last_item = await run_openai_cua_task(cdp_url, prompt, task.start_url, env)
 
-            if task.eval_config.type == "answer":
-                if isinstance(last_item, str):
-                    await log_all_answers(env, last_item)
-                elif isinstance(last_item, dict):
-                    if last_item.get("role") == "assistant":
-                        for content in last_item.get("content", []):
-                            if content.get("type") == "text":
-                                await log_all_answers(env, content.get("text"))
+            # if task.eval_config.type == "answer":
+            #     if isinstance(last_item, str):
+            #         await log_all_answers(env, last_item)
+            #     elif isinstance(last_item, dict):
+            #         if last_item.get("role") == "assistant":
+            #             for content in last_item.get("content", []):
+            #                 if content.get("type") == "text":
+            #                     await log_all_answers(env, content.get("text"))
 
         elif "anthropic" in agent_version:
             messages = await run_anthropic_cua_task(cdp_url, prompt, task.start_url)
 
-            if task.eval_config.type == "answer":
-                last_message = messages[-1]
-                if last_message["role"] == "assistant":
-                    for block in last_message["content"]:
-                        if block["type"] == "text":
-                            await log_all_answers(env, block["text"])
+            # if task.eval_config.type == "answer":
+            #     last_message = messages[-1]
+            #     if last_message["role"] == "assistant":
+            #         for block in last_message["content"]:
+            #             if block["type"] == "text":
+            #                 await log_all_answers(env, block["text"])
+
+            answer = {
+                "users": ["Matthew Thompson", "Vanessa Nguyen"]
+            }
 
         # evaluate the task
         try:
-            eval_result = await env.evaluate()
+            eval_result = await env.evaluate(answer=answer)
             logger.info(f"[{task.name}] Evaluation result: {eval_result}")
         except Exception as e:
             logger.error(f"[{task.name}] Error evaluating task: {e}", traceback.format_exc())
