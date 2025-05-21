@@ -157,7 +157,7 @@ async def run_task(
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
     if task.eval_config.type == "data_match":
-        prompt += "\n\nAfter you complete all of the tool_calls you wish to execute, return only what you are asked for in the task as text. Do not include any other text or response blocks."
+        prompt += "\n\nAfter you complete all of the tool_calls you wish to execute, return only what you are asked for in the task as one text block. Do not include any other text or response blocks. Wrap your each of your answers in <data_match> tags.\nFor example, if your answer is 'Matthew Thompson', then your final response should include <data_match>Matthew Thompson</data_match>."
 
     logger.info(f"[{task.name}] Resetting environment")
     await env.reset(task, agent_version=agent_version)
@@ -180,7 +180,16 @@ async def run_task(
             if last_message["role"] == "assistant":
                 for block in last_message["content"]:
                     if block["type"] == "text":
-                        await env.log(log=block, type="data_match")
+                        import re
+                        pattern = r'<data_match>(.*?)</data_match>'
+                        # Find all matches
+                        matches = re.findall(pattern, block["text"], re.DOTALL)
+                        for match in matches:
+                            log = {
+                                "type": "text",
+                                "text": match,
+                            }
+                            await env.log(log=log, type="data_match")
 
         # evaluate the task
         try:
