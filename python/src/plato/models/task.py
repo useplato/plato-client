@@ -78,6 +78,9 @@ class EvaluationResult(BaseModel):
 
     success: bool
     reason: Optional[str] = None
+    diffs: Optional[List[Dict[str, Any]]] = None
+    expected_mutations: Optional[List[Dict[str, Any]]] = None
+    actual_mutations: Optional[List[Dict[str, Any]]] = None
 
 
 class PlatoTask(BaseModel):

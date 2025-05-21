@@ -338,9 +338,13 @@ class PlatoEnvironment:
         else:
             # call /evaluate endpoint
             response = await self._client.evaluate(self._run_session_id, agent_version)
+            result = response['result']
             return EvaluationResult(
-                success=response.get('success', False),
-                reason=response.get('reason', None)
+                success=result.get('success', False),
+                reason=result.get('reason', None),
+                diffs=result.get('diffs', None),
+                expected_mutations=result.get('expected_mutations', None),
+                actual_mutations=result.get('actual_mutations', None),
             )
 
 
