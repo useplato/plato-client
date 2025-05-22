@@ -55,8 +55,8 @@ class BaseComputerBrowserTool:
   """
 
   name: Literal["computer"] = "computer"
-  width: int = 1024  # Default width
-  height: int = 768  # Default height
+  width: int = 1280  # Default width
+  height: int = 720  # Default height
   display_num: int | None = None
 
   _screenshot_delay = 0.5
