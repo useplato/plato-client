@@ -89,6 +89,18 @@ username: alex.reynolds
 password: password
 """,
     },
+    "snipeit": {
+        "base_prompt": """
+You are a helpful assistant that can help me use Snipe-IT.
+start by going to {start_url}. Do not navigate to other websites.
+Here is the task:
+{prompt}
+
+The login credentials are:
+username: mrudulplato
+password: platodev
+""",
+    },
 }
 
 
