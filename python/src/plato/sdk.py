@@ -55,7 +55,7 @@ class Plato:
                 total=600,  # 10 minutes
                 connect=60,
                 sock_read=600,  # 10 minutes
-                sock_connect=60
+                sock_connect=60,
             )
             self._http_session = aiohttp.ClientSession(timeout=timeout)
         return self._http_session
@@ -67,12 +67,19 @@ class Plato:
             self._http_session = None
 
     async def make_environment(
-        self, env_id: str, open_page_on_start: bool = False
+        self,
+        env_id: str,
+        open_page_on_start: bool = False,
+        viewport_width: int = 1920,
+        viewport_height: int = 1080,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
         Args:
-            task (PlatoTask): The task to create an environment for.
+            env_id (str): The ID of the environment to create.
+            open_page_on_start (bool): Whether to open the page on start.
+            viewport_width (int): The width of the viewport.
+            viewport_height (int): The height of the viewport.
 
         Returns:
             PlatoEnvironment: The created environment instance.
@@ -85,8 +92,8 @@ class Plato:
             f"{self.base_url}/env/make2",
             json={
                 "interface_type": "browser",
-                "interface_width": 1920,
-                "interface_height": 1080,
+                "interface_width": viewport_width,
+                "interface_height": viewport_height,
                 "source": "SDK",
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
@@ -96,7 +103,7 @@ class Plato:
         ) as response:
             response.raise_for_status()
             data = await response.json()
-            return PlatoEnvironment(client=self, id=data["job_id"])
+            return PlatoEnvironment(client=self, id=data["job_id"], sim_job_id=data.get("sim_job_id"))
 
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
@@ -178,7 +185,10 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"X-API-Key": self.api_key}
-        body = {"test_case_public_id": task.public_id if task else None, "agent_version": agent_version}
+        body = {
+            "test_case_public_id": task.public_id if task else None,
+            "agent_version": agent_version,
+        }
         start_time = time.time()
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/reset", headers=headers, json=body
@@ -296,7 +306,9 @@ class Plato:
             response.raise_for_status()
             return await response.json()
 
-    async def evaluate(self, session_id: str, agent_version: Optional[str] = None) -> Dict[str, Any]:
+    async def evaluate(
+        self, session_id: str, agent_version: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Evaluate the environment.
 
         Args:
@@ -316,7 +328,7 @@ class Plato:
         session_id: str,
         evaluation_result: EvaluationResult,
         agent_version: Optional[str] = None,
-        mutations: Optional[List[dict]] = None
+        mutations: Optional[List[dict]] = None,
     ) -> Dict[str, Any]:
         """Post an evaluation result to the server.
 
@@ -328,7 +340,7 @@ class Plato:
             "success": evaluation_result.success,
             "reason": evaluation_result.reason,
             "agent_version": agent_version,
-            "mutations": mutations
+            "mutations": mutations,
         }
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
@@ -339,7 +351,9 @@ class Plato:
             response.raise_for_status()
             return await response.json()
 
-    async def log(self, session_id: str, log: dict, type: str = "info") -> Dict[str, Any]:
+    async def log(
+        self, session_id: str, log: dict, type: str = "info"
+    ) -> Dict[str, Any]:
         """Log a message to the server.
 
         Args:
@@ -349,12 +363,14 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
-            f"{self.base_url}/env/{session_id}/log", headers=headers, json={
+            f"{self.base_url}/env/{session_id}/log",
+            headers=headers,
+            json={
                 "source": "agent",
                 "type": type,
                 "message": log,
-                "timestamp": datetime.now().isoformat()
-            }
+                "timestamp": datetime.now().isoformat(),
+            },
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -381,11 +397,13 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000", headers=headers
+            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000",
+            headers=headers,
         ) as response:
             response.raise_for_status()
             res = await response.json()
             test_cases = res["testcases"]
+
             return [PlatoTask(
                 public_id=t["publicId"],
                 name=t["name"],
@@ -397,6 +415,7 @@ class Plato:
 
 
     async def list_simulator_tasks_by_id(self, simulator_id: str) -> List[Dict[str, Any]]:
+
         """Get all tasks associated with an environment.
 
         Args:
@@ -410,10 +429,9 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/testcases?simulator_id={simulator_id}&page_size=1000", headers=headers
+            f"{self.base_url}/testcases?simulator_id={simulator_id}&page_size=1000",
+            headers=headers,
         ) as response:
             response.raise_for_status()
             res = await response.json()
             return res["testcases"]
-
-

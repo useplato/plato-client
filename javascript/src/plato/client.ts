@@ -184,8 +184,8 @@ export class Plato {
     try {
       const response = await this.http.post('/env/make2', {
         interface_type: "browser",
-        interface_width: 1920,
-        interface_height: 1080,
+        interface_width: 1280,
+        interface_height: 720,
         source: "SDK",
         open_page_on_start: openPageOnStart,
         env_id: envId,

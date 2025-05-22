@@ -24,7 +24,10 @@ class RemotePlaywrightComputer(BasePlaywrightComputer):
         logger.info(f"Connected to browser: {browser}")
 
         # Always create a new context
-        context = await browser.new_context(viewport={"width": width, "height": height})
+        if len(browser.contexts) == 0:
+            context = await browser.new_context(viewport={"width": width, "height": height})
+        else:
+            context = browser.contexts[0]
         logger.info(f"Created new context: with dimensions {width}x{height}")
         # Add event listeners for page creation and closure
         context.on("page", self._handle_new_page) # Keep handlers sync for simplicity unless they need await
