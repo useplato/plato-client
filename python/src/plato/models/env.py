@@ -344,7 +344,7 @@ class PlatoEnvironment:
             response = await self._client.evaluate(self._run_session_id, agent_version)
             result = response['result']
             return EvaluationResult(
-                success=result.get('success', False),
+                success=result.get('correct', False),
                 reason=result.get('reason', None),
                 diffs=result.get('diffs', None),
                 expected_mutations=result.get('expected_mutations', None),
