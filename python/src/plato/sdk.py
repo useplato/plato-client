@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
 from plato.exceptions import PlatoClientError
-from plato.models.task import EvaluationResult
+from plato.models.task import EvaluationResult, AnswerEvalConfig
 
 import aiohttp
 import os
@@ -403,20 +403,19 @@ class Plato:
             response.raise_for_status()
             res = await response.json()
             test_cases = res["testcases"]
-            return [
-                PlatoTask(
-                    public_id=t["publicId"],
-                    name=t["name"],
-                    prompt=t["prompt"],
-                    start_url=t["startUrl"],
-                    env_id=t["simulator"]["name"],
-                )
-                for t in test_cases
-            ]
 
-    async def list_simulator_tasks_by_id(
-        self, simulator_id: str
-    ) -> List[Dict[str, Any]]:
+            return [PlatoTask(
+                public_id=t["publicId"],
+                name=t["name"],
+                prompt=t["prompt"],
+                start_url=t["startUrl"],
+                env_id=t["simulator"]["name"],
+                eval_config=AnswerEvalConfig(**t["defaultScoringConfig"]) if t["defaultScoringConfig"]["type"] == "answer" else None
+            ) for t in test_cases]
+
+
+    async def list_simulator_tasks_by_id(self, simulator_id: str) -> List[Dict[str, Any]]:
+
         """Get all tasks associated with an environment.
 
         Args:

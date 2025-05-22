@@ -13,7 +13,7 @@ class BasePlatoEvalConfig(BaseModel):
             Can be either "base" or "state_mutation_match".
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    type: Literal["state_mutation_match", "custom"]
+    type: Literal["state_mutation_match", "custom", "answer"]
 
 class StateMutationMatch(BaseModel):
     tablename: str
@@ -31,6 +31,16 @@ class SemanticMatchVariable(BaseModel):
 class EnumMatchVariable(BaseModel):
     type: Literal["enum_match_variable"] = "enum_match_variable"
     values: List[Any]
+
+class AnswerEvalConfig(BasePlatoEvalConfig):
+    """Configuration for data matching evaluation.
+
+    This class defines the configuration for evaluating tasks based on matching
+    data. It inherits from BasePlatoEvalConfig and specifies
+    data that should be matched during evaluation.
+    """
+    type: Literal["answer"] = "answer"
+    answer: Dict[str, Any]
 
 class StateMutationMatchEvalConfig(BasePlatoEvalConfig):
     """Configuration for state mutation matching evaluation.
@@ -67,21 +77,23 @@ class CustomEvalConfig(BasePlatoEvalConfig):
     def serialize_score_fn(self, score_fn: Callable, _info):
         return score_fn.__name__
 
-
 class EvaluationResult(BaseModel):
-    """Result of an evaluation containing both success status and reason if failed.
-
-    Attributes:
-        success: Whether the evaluation was successful
-        reason: If success is False, contains the reason for failure. None if successful.
-    """
-
     success: bool
     reason: Optional[str] = None
     diffs: Optional[List[Dict[str, Any]]] = None
     expected_mutations: Optional[List[Dict[str, Any]]] = None
     actual_mutations: Optional[List[Dict[str, Any]]] = None
 
+class StateMutationMatchEvaluationResult(EvaluationResult):
+    type: Literal["state_mutation_match"] = "state_mutation_match"
+    diffs: Optional[List[Dict[str, Any]]] = None
+    expected_mutations: Optional[List[Dict[str, Any]]] = None
+    actual_mutations: Optional[List[Dict[str, Any]]] = None
+
+class AnswerEvaluationResult(EvaluationResult):
+    type: Literal["answer"] = "answer"
+    answer: Optional[Dict[str, Any]] = None
+    expected_answer: Optional[Dict[str, Any]] = None
 
 class PlatoTask(BaseModel):
     """Represents a task in the Plato system.
