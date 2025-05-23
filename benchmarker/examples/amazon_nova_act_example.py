@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     # Initialize the synchronous Plato client
-    client = SyncPlato(base_url=os.getenv("PLATO_API_URL"))
+    client = SyncPlato()
 
     try:
         # Create a new environment
