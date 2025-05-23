@@ -50,15 +50,6 @@ def main():
                 "Navigate to espocrm.com and login with the credentials admin/password.",
             )
 
-        # Get the current state
-        state = env.get_state()
-        logger.info("Current environment state:")
-        logger.info(state)
-
-        # Evaluate the task
-        evaluation = env.evaluate()
-        logger.info(f"Task evaluation: {evaluation}")
-
     except Exception as e:
         logger.error(f"An error occurred: {e}")
     finally:
