@@ -192,15 +192,15 @@ class SyncPlatoEnvironment:
 
     def _start_heartbeat(self) -> None:
         """Start the heartbeat background thread if not already running."""
-        # Stop any existing heartbeat thread
-        self._stop_heartbeat()
+        # Stop any existing eartbeat thread
+        self._stop_heartbeat_thread()
 
         # Reset stop flag and start a new heartbeat thread
         self._stop_heartbeat = False
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
         self._heartbeat_thread.start()
 
-    def _stop_heartbeat(self) -> None:
+    def _stop_heartbeat_thread(self) -> None:
         """Stop the heartbeat background thread if it's running."""
         if self._heartbeat_thread and self._heartbeat_thread.is_alive():
             self._stop_heartbeat = True
@@ -384,7 +384,7 @@ class SyncPlatoEnvironment:
         through the API client and stopping the heartbeat thread.
         """
         # Stop sending heartbeats
-        self._stop_heartbeat()
+        self._stop_heartbeat_thread()
 
         # Close the environment through the API
         self._client.close_environment(self.id) 
