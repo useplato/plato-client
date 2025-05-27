@@ -72,7 +72,7 @@ async def scroll_page(page):
         page_height = 5000  
     
     while scrolled_distance < page_height:
-        await page.mouse.wheel(0, screen_height * 5)
+        await page.mouse.wheel(0, screen_height)
         await asyncio.sleep(0.5)
         
         try:
@@ -85,7 +85,7 @@ async def scroll_page(page):
             page_height = new_page_height
             logger.info(f"Page grew to {page_height}px")
             
-        scrolled_distance += screen_height * 5
+        scrolled_distance += screen_height
         
     await page.evaluate('window.scrollTo(0, 0);')
     logger.info("Completed scrolling through page")
@@ -131,6 +131,11 @@ async def scrape(client: Plato, task: PlatoTask):
             visited_urls = set()
 
             # Inititial URL for craigslist, remove after we know what categories we want to scrape
+            root_url = "https://www.craigslist.com/"
+            await page.goto(root_url, wait_until="domcontentloaded")
+            await scroll_page(page)
+            visited_urls.add(root_url)
+
             root_url = ROOT_URL
             await page.goto(root_url, wait_until="domcontentloaded")
             await scroll_page(page)
