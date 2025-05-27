@@ -9,7 +9,7 @@ import logging
 
 from plato import Plato, PlatoTask
 
-load_dotenv(dotenv_path="../.env")
+load_dotenv(dotenv_path=".env")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
