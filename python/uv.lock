@@ -503,7 +503,7 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "1.0.38"
+version = "1.0.41"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

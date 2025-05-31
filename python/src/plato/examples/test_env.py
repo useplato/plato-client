@@ -27,10 +27,12 @@ async def test_environment_lifecycle():
 
         print("Environment ready")
         start_time = time.time()
-        await env.reset()
-        print("Environment reset")
+        session_id = await env.reset()
+        print(f"Environment reset with session ID: {session_id}")
         end_time = time.time()
-        print(f"Time taken to reset environment: {end_time - start_time} seconds")
+
+        session_url = await env.get_session_url()
+        print(f"Session URL: {session_url}")
 
         # Get the CDP URL for browser connection
         print("Getting CDP URL")
@@ -48,7 +50,6 @@ async def test_environment_lifecycle():
             print("Connected to browser")
             context = await browser.new_context()
             page = await context.new_page()
-            breakpoint()
             await asyncio.sleep(10000)
             await page.goto("https://www.doordash.com/")
             print("Navigating to Doordash")
@@ -87,12 +88,15 @@ async def test_multiple_contexts():
         print("Waiting for environment to be ready")
         await env.wait_for_ready(timeout=30.0)
         print("Environment ready")
-        await env.reset()
-        print("Environment reset")
+        session_id = await env.reset()
+        print(f"Environment reset with session ID: {session_id}")
 
         print("Getting CDP URL")
         cdp_url = await env.get_cdp_url()
-        print(f"Environment ready with CDP URL: {cdp_url}")
+        # print(f"Environment ready with CDP URL: {cdp_url}")
+
+        session_url = await env.get_session_url()
+        print(f"Session URL: {session_url}")
 
         async with async_playwright() as p:
             browser = await p.chromium.connect_over_cdp(cdp_url)

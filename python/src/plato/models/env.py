@@ -1,3 +1,4 @@
+import os
 from plato.models.task import CustomEvalConfig
 from pydantic import Field
 from plato.models import PlatoTask, EvaluationResult
@@ -154,7 +155,7 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_cdp_url(self.id)
 
-    async def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None) -> None:
+    async def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None) -> str:
         """Reset the environment with an optional new task.
 
         Args:
@@ -172,6 +173,10 @@ class PlatoEnvironment:
 
         # Store the run session ID from the response
         self._run_session_id = response["data"]["run_session_id"]
+        if not self._run_session_id:
+            raise PlatoClientError("Failed to reset environment. Please try again.")
+
+        return self._run_session_id
 
 
 
@@ -377,6 +382,15 @@ class PlatoEnvironment:
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_live_view_url(self.id)
+
+
+    async def get_session_url(self) -> str:
+        """Get the URL for accessing the session of the environment.
+        """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
+        root_url = self._client.base_url.split("/api")[0]
+        return os.path.join(root_url, "sessions", f"{self._run_session_id}/")
 
     async def close(self) -> None:
         """Clean up and close the environment.
