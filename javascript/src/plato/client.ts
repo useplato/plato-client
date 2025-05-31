@@ -27,6 +27,7 @@ export class PlatoEnvironment {
   public id: string;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private heartbeatIntervalMs: number = 30000; // 30 seconds
+  private runSessionId: string | null = null;
 
   constructor(client: Plato, id: string) {
     this.client = client;
@@ -44,7 +45,15 @@ export class PlatoEnvironment {
 
   async close() {
     this.stopHeartbeat();
+    this.runSessionId = null;
     return this.client.closeEnvironment(this.id);
+  }
+
+  async evaluate() {
+    if (!this.runSessionId) {
+      throw new PlatoClientError('No run session ID found');
+    }
+    return this.client.evaluate(this.runSessionId);
   }
 
   /**
@@ -56,6 +65,7 @@ export class PlatoEnvironment {
     const result = await this.client.resetEnvironment(this.id, task, test_case_public_id);
     // Ensure heartbeat is running after reset
     this.startHeartbeat();
+    this.runSessionId = result.data.run_session_id;
     return result;
   }
 
@@ -231,6 +241,18 @@ export class Plato {
   async closeEnvironment(jobId: string) {
     try {
       const response = await this.http.post(`/env/${jobId}/close`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new PlatoClientError(error.message);
+      }
+      throw error;
+    }
+  }
+
+  async evaluate(sessionId: string) {
+    try {
+      const response = await this.http.post(`/env/session/${sessionId}/evaluate`);
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
