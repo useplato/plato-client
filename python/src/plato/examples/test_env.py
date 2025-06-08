@@ -17,7 +17,7 @@ async def test_environment_lifecycle():
     client = Plato(base_url="https://staging.plato.so/api")
     # client = Plato(base_url="http://54.219.32.250:8080/api")
     # Create and initialize the environment
-    env = await client.make_environment("roundcube")
+    env = await client.make_environment("espocrm")
 
     try:
         print(env.id)
@@ -27,12 +27,13 @@ async def test_environment_lifecycle():
 
         print("Environment ready")
         start_time = time.time()
-        session_id = await env.reset()
-        print(f"Environment reset with session ID: {session_id}")
+        tasks = await client.load_tasks("espocrm")
+        task = tasks[0]
+        print(f"Task: {task}")
+        await env.reset(task=task)
+        print("Environment reset")
         end_time = time.time()
-
-        session_url = await env.get_session_url()
-        print(f"Session URL: {session_url}")
+        print(f"Time taken to reset environment: {end_time - start_time} seconds")
 
         # Get the CDP URL for browser connection
         print("Getting CDP URL")
@@ -50,6 +51,7 @@ async def test_environment_lifecycle():
             print("Connected to browser")
             context = await browser.new_context()
             page = await context.new_page()
+            breakpoint()
             await asyncio.sleep(10000)
             await page.goto("https://www.doordash.com/")
             print("Navigating to Doordash")
@@ -88,15 +90,12 @@ async def test_multiple_contexts():
         print("Waiting for environment to be ready")
         await env.wait_for_ready(timeout=30.0)
         print("Environment ready")
-        session_id = await env.reset()
-        print(f"Environment reset with session ID: {session_id}")
+        await env.reset()
+        print("Environment reset")
 
         print("Getting CDP URL")
         cdp_url = await env.get_cdp_url()
-        # print(f"Environment ready with CDP URL: {cdp_url}")
-
-        session_url = await env.get_session_url()
-        print(f"Session URL: {session_url}")
+        print(f"Environment ready with CDP URL: {cdp_url}")
 
         async with async_playwright() as p:
             browser = await p.chromium.connect_over_cdp(cdp_url)

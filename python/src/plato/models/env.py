@@ -403,3 +403,14 @@ class PlatoEnvironment:
 
         # Close the environment through the API
         await self._client.close_environment(self.id)
+
+    async def backup(self) -> Dict[str, Any]:
+        """Create a backup of the environment.
+
+        Returns:
+            Dict[str, Any]: The backup response from the server.
+
+        Raises:
+            PlatoClientError: If the backup operation fails.
+        """
+        return await self._client.backup_environment(self.id)

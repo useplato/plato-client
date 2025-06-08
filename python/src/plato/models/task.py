@@ -99,6 +99,7 @@ class PlatoTask(BaseModel):
     prompt: str
     env_id: str
     start_url: str
+    dataset_name: Optional[str] = None
     eval_config: Optional[BasePlatoEvalConfig] = None
 
     @field_serializer('eval_config')

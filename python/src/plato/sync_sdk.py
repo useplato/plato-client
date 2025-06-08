@@ -147,6 +147,22 @@ class SyncPlato:
         response.raise_for_status()
         return response.json()
 
+    def backup_environment(self, job_id: str) -> Dict[str, Any]:
+        """Create a backup of an environment.
+
+        Args:
+            job_id (str): The ID of the job to backup.
+
+        Returns:
+            Dict[str, Any]: The response from the server.
+
+        Raises:
+            requests.RequestException: If the API request fails.
+        """
+        response = self.http_session.post(f"{self.base_url}/env/{job_id}/backup")
+        response.raise_for_status()
+        return response.json()
+
     def reset_environment(
         self,
         job_id: str,
