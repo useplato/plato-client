@@ -20,6 +20,15 @@
   ],
   "author": "Plato AI",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/plato-ai/plato-client.git",
+    "directory": "javascript"
+  },
+  "homepage": "https://github.com/plato-ai/plato-client#readme",
+  "bugs": {
+    "url": "https://github.com/plato-ai/plato-client/issues"
+  },
   "dependencies": {
     "axios": "^1.6.7",
     "zod": "^3.22.4",

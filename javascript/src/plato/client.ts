@@ -81,6 +81,10 @@ export class PlatoEnvironment {
     return this.client.getLiveViewUrl(this.id);
   }
 
+  async backup() {
+    return this.client.backupEnvironment(this.id);
+  }
+
   /**
    * Starts the heartbeat interval to keep the environment alive
    * @private
@@ -329,6 +333,18 @@ export class Plato {
   async sendHeartbeat(jobId: string) {
     try {
       const response = await this.http.post(`/env/${jobId}/heartbeat`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new PlatoClientError(error.message);
+      }
+      throw error;
+    }
+  }
+
+  async backupEnvironment(jobId: string) {
+    try {
+      const response = await this.http.post(`/env/${jobId}/backup`);
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
