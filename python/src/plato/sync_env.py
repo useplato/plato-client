@@ -400,3 +400,14 @@ class SyncPlatoEnvironment:
 
         # Close the environment through the API
         self._client.close_environment(self.id)
+
+    def backup(self) -> Dict[str, Any]:
+        """Create a backup of the environment.
+
+        Returns:
+            Dict[str, Any]: The backup response from the server.
+
+        Raises:
+            PlatoClientError: If the backup operation fails.
+        """
+        return self._client.backup_environment(self.id)

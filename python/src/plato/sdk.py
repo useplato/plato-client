@@ -166,6 +166,25 @@ class Plato:
             response.raise_for_status()
             return await response.json()
 
+    async def backup_environment(self, job_id: str) -> Dict[str, Any]:
+        """Create a backup of an environment.
+
+        Args:
+            job_id (str): The ID of the job to backup.
+
+        Returns:
+            Dict[str, Any]: The response from the server.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/env/{job_id}/backup", headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
     async def reset_environment(
         self,
         job_id: str,
