@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
 from plato.exceptions import PlatoClientError
@@ -72,7 +72,7 @@ class Plato:
         open_page_on_start: bool = False,
         viewport_width: int = 1920,
         viewport_height: int = 1080,
-        interface_type: str = "browser",
+        interface_type: Optional[Literal["browser"]] = "browser",
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -93,7 +93,7 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/env/make2",
             json={
-                "interface_type": interface_type,
+                "interface_type": interface_type or "noop",
                 "interface_width": viewport_width,
                 "interface_height": viewport_height,
                 "source": "SDK",
@@ -282,6 +282,26 @@ class Plato:
                 raise PlatoClientError("Worker is not ready yet")
             root_url = self.base_url.split("/api")[0]
             return os.path.join(root_url, "live", f"{job_id}/")
+        except aiohttp.ClientError as e:
+            raise PlatoClientError(str(e))
+
+    async def get_proxy_url(self, job_id: str) -> str:
+        """Get the proxy URL for a job.
+        """
+        try:
+            worker_status = await self.get_worker_ready(job_id)
+            if not worker_status.get("ready"):
+                raise PlatoClientError("Worker is not ready yet")
+            
+            # Extract the base domain from the base_url
+            if "localhost:8080" in self.base_url:
+                return "http://localhost:8888"
+            elif "staging.plato.so" in self.base_url:
+                return "https://staging.proxy.plato.so"
+            elif "plato.so" in self.base_url and "staging" not in self.base_url:
+                return "https://proxy.plato.so"
+            else:
+                raise PlatoClientError("Unknown base URL")
         except aiohttp.ClientError as e:
             raise PlatoClientError(str(e))
 
