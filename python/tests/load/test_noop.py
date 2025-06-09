@@ -97,7 +97,7 @@ async def run_single_noop_test(test_id: int) -> TestMetrics:
             print(f"Test {test_id}: Testing proxy access to espocrm.com with browser...")
             
             # Get the PLATO_BASE_URL from environment variables
-            proxy_url = f"http://localhost:8888"
+            proxy_url = f"https://staging.proxy.plato.so"
             print(f"Test {test_id}: Proxy URL: {proxy_url}")
             
             # Configure proxy settings for Playwright
