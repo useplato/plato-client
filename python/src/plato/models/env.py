@@ -383,6 +383,44 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_live_view_url(self.id)
 
+    async def get_proxy_config(self) -> Dict[str, str]:
+        """Get the proxy configuration for this environment.
+
+        Returns:
+            Dict[str, str]: A dictionary containing proxy configuration with keys:
+                - server: The proxy server URL
+                - username: The environment ID (used as proxy username)
+                - password: The run session ID (used as proxy password)
+
+        Raises:
+            PlatoClientError: If no active run session exists or if the worker is not ready.
+            aiohttp.ClientError: If the API request fails.
+        """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
+            
+        try:
+            worker_status = await self._client.get_worker_ready(self.id)
+            if not worker_status.get("ready"):
+                raise PlatoClientError("Worker is not ready yet")
+            
+            # Extract the base domain from the base_url
+            if "localhost:8080" in self._client.base_url:
+                proxy_server = "http://localhost:8888"
+            elif "staging.plato.so" in self._client.base_url:
+                proxy_server = "https://staging.proxy.plato.so"
+            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url:
+                proxy_server = "https://proxy.plato.so"
+            else:
+                raise PlatoClientError("Unknown base URL")
+            
+            return {
+                "server": proxy_server,
+                "username": self.id,
+                "password": self._run_session_id
+            }
+        except Exception as e:
+            raise PlatoClientError(str(e))
 
     async def get_session_url(self) -> str:
         """Get the URL for accessing the session of the environment.
