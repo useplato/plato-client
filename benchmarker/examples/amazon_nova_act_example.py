@@ -4,11 +4,9 @@ import time
 import os
 import logging
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
-from browserbase import Browserbase
 from dotenv import load_dotenv
 import requests
 
-bb = Browserbase(api_key=os.getenv("BROWSERBASE_API_KEY"))
 
 load_dotenv()
 
