@@ -72,6 +72,7 @@ class Plato:
         open_page_on_start: bool = False,
         viewport_width: int = 1920,
         viewport_height: int = 1080,
+        interface_type: str = "browser",
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -80,6 +81,7 @@ class Plato:
             open_page_on_start (bool): Whether to open the page on start.
             viewport_width (int): The width of the viewport.
             viewport_height (int): The height of the viewport.
+            interface_type (Optional[str]): The type of interface to create. Defaults to None.
 
         Returns:
             PlatoEnvironment: The created environment instance.
@@ -91,7 +93,7 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/env/make2",
             json={
-                "interface_type": "browser",
+                "interface_type": interface_type,
                 "interface_width": viewport_width,
                 "interface_height": viewport_height,
                 "source": "SDK",
