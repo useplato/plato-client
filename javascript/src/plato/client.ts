@@ -66,7 +66,7 @@ export class PlatoEnvironment {
       const result = await this.client.resetEnvironment(this.id, task, test_case_public_id);
       // Ensure heartbeat is running after reset
       this.startHeartbeat();
-      this.runSessionId = result?.run_session_id;
+      this.runSessionId = result?.data?.run_session_id || result?.run_session_id;
       return this.runSessionId;
     } catch (error) {
       throw new PlatoClientError('Failed to reset environment: ' + error);
