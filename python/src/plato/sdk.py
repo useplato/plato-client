@@ -285,26 +285,6 @@ class Plato:
         except aiohttp.ClientError as e:
             raise PlatoClientError(str(e))
 
-    async def get_proxy_url(self, job_id: str) -> str:
-        """Get the proxy URL for a job.
-        """
-        try:
-            worker_status = await self.get_worker_ready(job_id)
-            if not worker_status.get("ready"):
-                raise PlatoClientError("Worker is not ready yet")
-            
-            # Extract the base domain from the base_url
-            if "localhost:8080" in self.base_url:
-                return "http://localhost:8888"
-            elif "staging.plato.so" in self.base_url:
-                return "https://staging.proxy.plato.so"
-            elif "plato.so" in self.base_url and "staging" not in self.base_url:
-                return "https://proxy.plato.so"
-            else:
-                raise PlatoClientError("Unknown base URL")
-        except aiohttp.ClientError as e:
-            raise PlatoClientError(str(e))
-
     async def send_heartbeat(self, job_id: str) -> Dict[str, Any]:
         """Send a heartbeat to keep the environment active.
 

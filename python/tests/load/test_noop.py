@@ -66,7 +66,7 @@ async def run_single_noop_test(test_id: int) -> TestMetrics:
         client = Plato()
         
         # Create and initialize the noop environment
-        env = await client.make_environment("espocrm", interface_type="none")
+        env = await client.make_environment("espocrm", interface_type=None)
         metrics.add_step_timing("environment_creation", time.time() - step_start)
         metrics.set_environment_id(env.id)
         print(f"Test {test_id}: Environment ID: {env.id}")
@@ -96,16 +96,9 @@ async def run_single_noop_test(test_id: int) -> TestMetrics:
             step_start = time.time()
             print(f"Test {test_id}: Testing proxy access to espocrm.com with browser...")
             
-            # Get the PLATO_BASE_URL from environment variables
-            proxy_url = await client.get_proxy_url(env.id)
-            print(f"Test {test_id}: Proxy URL: {proxy_url}")
-            
-            # Configure proxy settings for Playwright
-            proxy_config = {
-                "server": proxy_url,
-                "username": env.id,
-                "password": env._run_session_id
-            }
+            # Get the proxy configuration from the environment
+            proxy_config = await env.get_proxy_config()
+            print(f"Test {test_id}: Proxy config: {proxy_config}")
             
             async with async_playwright() as p:
                 try:
@@ -135,7 +128,7 @@ async def run_single_noop_test(test_id: int) -> TestMetrics:
                         "page_title": page_title,
                         "page_url": page_url,
                         "screenshot_path": screenshot_path,
-                        "proxy_url": proxy_url
+                        "proxy_url": proxy_config
                     }, "info")
                     
                     print(f"Test {test_id}: Page loaded - Title: {page_title}, URL: {page_url}")
@@ -147,7 +140,7 @@ async def run_single_noop_test(test_id: int) -> TestMetrics:
                     await env.log({
                         "message": f"Proxy browser test to espocrm.com failed",
                         "error": str(proxy_error),
-                        "proxy_url": proxy_url
+                        "proxy_url": proxy_config
                     }, "error")
             
             metrics.add_step_timing("proxy_browser_test", time.time() - step_start)
