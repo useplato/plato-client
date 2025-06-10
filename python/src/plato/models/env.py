@@ -422,6 +422,31 @@ class PlatoEnvironment:
         except Exception as e:
             raise PlatoClientError(str(e))
 
+    async def get_public_url(self) -> str:
+        """Get the public URL for accessing this environment.
+
+        Returns:
+            str: The public URL for this environment based on the deployment environment.
+                 - Staging: {env.id}.staging.sims.plato.so
+                 - Production: {env.id}.sims.plato.so
+                 - Local: localhost:8081/{env.id}
+
+        Raises:
+            PlatoClientError: If unable to determine the environment type.
+        """
+        try:
+            # Determine environment based on base_url
+            if "localhost:8080" in self._client.base_url:
+                return f"localhost:8081/{self.id}"
+            elif "staging.plato.so" in self._client.base_url:
+                return f"{self.id}.staging.sims.plato.so"
+            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url:
+                return f"{self.id}.sims.plato.so"
+            else:
+                raise PlatoClientError("Unknown base URL")
+        except Exception as e:
+            raise PlatoClientError(str(e))
+
     async def get_session_url(self) -> str:
         """Get the URL for accessing the session of the environment.
         """
