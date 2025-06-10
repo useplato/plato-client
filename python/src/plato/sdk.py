@@ -73,6 +73,8 @@ class Plato:
         viewport_width: int = 1920,
         viewport_height: int = 1080,
         interface_type: Optional[Literal["browser"]] = "browser",
+        record_network_requests: bool = False,
+        env_config: Optional[Dict[str, Any]] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -99,16 +101,16 @@ class Plato:
                 "source": "SDK",
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
-                "env_config": {
-                    "passthrough_all_ood_requests": passthrough
-                },
+                "env_config": env_config,
                 "record_network_requests": record_network_requests,
             },
             headers=headers,
         ) as response:
             response.raise_for_status()
             data = await response.json()
-            return PlatoEnvironment(client=self, id=data["job_id"], sim_job_id=data.get("sim_job_id"))
+            return PlatoEnvironment(
+                client=self, id=data["job_id"], sim_job_id=data.get("sim_job_id")
+            )
 
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
