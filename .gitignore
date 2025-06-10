@@ -60,3 +60,6 @@ python/build
 python/screenshot.png
 python/screenshot_context_1.png
 python/screenshot_context_2.png
+
+*.csv
+*.out
