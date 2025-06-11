@@ -195,10 +195,17 @@ export class Plato {
    *
    * @param envId The environment ID to create
    * @param openPageOnStart Whether to open the page on start
+   * @param keepalive If true, jobs will not be killed due to heartbeat failures
+   * @param alias Optional alias for the job group
    * @returns The created environment instance
    * @throws PlatoClientError If the API request fails
    */
-  async makeEnvironment(envId: string, openPageOnStart: boolean = false): Promise<PlatoEnvironment> {
+  async makeEnvironment(
+    envId: string, 
+    openPageOnStart: boolean = false,
+    keepalive: boolean = false,
+    alias?: string
+  ): Promise<PlatoEnvironment> {
     try {
       const response = await this.http.post('/env/make2', {
         interface_type: "browser",
@@ -208,6 +215,8 @@ export class Plato {
         open_page_on_start: openPageOnStart,
         env_id: envId,
         env_config: {},
+        keepalive: keepalive,
+        alias: alias,
       });
 
       return new PlatoEnvironment(this, response.data.job_id);

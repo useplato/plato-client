@@ -64,6 +64,8 @@ class SyncPlato:
         viewport_width: int = 1920,
         viewport_height: int = 1080,
         interface_type: Optional[Literal["browser"]] = "browser",
+        keepalive: bool = False,
+        alias: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -73,6 +75,8 @@ class SyncPlato:
             viewport_width (int): The width of the viewport.
             viewport_height (int): The height of the viewport.
             interface_type (Optional[str]): The type of interface to create. Defaults to "browser".
+            keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
+            alias (Optional[str]): Optional alias for the job group.
 
         Returns:
             SyncPlatoEnvironment: The created environment instance.
@@ -90,6 +94,8 @@ class SyncPlato:
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
                 "env_config": {},
+                "keepalive": keepalive,
+                "alias": alias,
             },
         )
         response.raise_for_status()

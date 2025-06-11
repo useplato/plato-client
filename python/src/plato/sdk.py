@@ -75,6 +75,8 @@ class Plato:
         interface_type: Optional[Literal["browser"]] = "browser",
         record_network_requests: bool = False,
         env_config: Optional[Dict[str, Any]] = None,
+        keepalive: bool = False,
+        alias: Optional[str] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -84,6 +86,10 @@ class Plato:
             viewport_width (int): The width of the viewport.
             viewport_height (int): The height of the viewport.
             interface_type (Optional[str]): The type of interface to create. Defaults to None.
+            record_network_requests (bool): Whether to record network requests.
+            env_config (Optional[Dict[str, Any]]): Environment configuration.
+            keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
+            alias (Optional[str]): Optional alias for the job group.
 
         Returns:
             PlatoEnvironment: The created environment instance.
@@ -101,8 +107,10 @@ class Plato:
                 "source": "SDK",
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
-                "env_config": env_config,
+                "env_config": env_config or {},
                 "record_network_requests": record_network_requests,
+                "keepalive": keepalive,
+                "alias": alias,
             },
             headers=headers,
         ) as response:
