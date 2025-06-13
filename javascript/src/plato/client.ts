@@ -25,13 +25,15 @@ export interface WorkerReadyResponse {
 export class PlatoEnvironment {
   private client: Plato;
   public id: string;
+  public alias: string | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private heartbeatIntervalMs: number = 30000; // 30 seconds
   private runSessionId: string | null = null;
 
-  constructor(client: Plato, id: string) {
+  constructor(client: Plato, id: string, alias?: string) {
     this.client = client;
     this.id = id;
+    this.alias = alias || null;
     this.startHeartbeat();
   }
 
@@ -59,11 +61,13 @@ export class PlatoEnvironment {
   /**
    * Resets the environment with a new task
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
+   * @param testCasePublicId The public ID of the test case
+   * @param loadAuthenticated Whether to load authenticated browser state
    * @returns The response from the server
    */
-  async reset(task?: PlatoTask | { name: string; prompt: string; start_url: string }, test_case_public_id?: string) {
+  async reset(task?: PlatoTask | { name: string; prompt: string; start_url: string }, testCasePublicId?: string, loadAuthenticated: boolean = false) {
     try {
-      const result = await this.client.resetEnvironment(this.id, task, test_case_public_id);
+      const result = await this.client.resetEnvironment(this.id, task, testCasePublicId, loadAuthenticated);
       // Ensure heartbeat is running after reset
       this.startHeartbeat();
       this.runSessionId = result?.data?.run_session_id || result?.run_session_id;
@@ -166,11 +170,41 @@ export class PlatoEnvironment {
       currentDelay = Math.min(currentDelay * 2, maxDelay);
     }
   }
+
+  /**
+   * Get the public URL for accessing this environment.
+   * 
+   * @returns The public URL for this environment based on the deployment environment.
+   *          Uses alias if available, otherwise uses environment ID.
+   *          - Staging: https://{alias|env.id}.staging.sims.plato.so
+   *          - Production: https://{alias|env.id}.sims.plato.so  
+   *          - Local: http://localhost:8081/{alias|env.id}
+   * @throws PlatoClientError If unable to determine the environment type.
+   */
+  getPublicUrl(): string {
+    try {
+      // Use alias if available, otherwise use environment ID
+      const identifier = this.alias || this.id;
+      
+      // Determine environment based on base_url
+      if (this.client.baseUrl.includes('localhost:8080')) {
+        return `http://localhost:8081/${identifier}`;
+      } else if (this.client.baseUrl.includes('staging.plato.so')) {
+        return `https://${identifier}.staging.sims.plato.so`;
+      } else if (this.client.baseUrl.includes('plato.so') && !this.client.baseUrl.includes('staging')) {
+        return `https://${identifier}.sims.plato.so`;
+      } else {
+        throw new PlatoClientError('Unknown base URL');
+      }
+    } catch (error) {
+      throw new PlatoClientError(String(error));
+    }
+  }
 }
 
 export class Plato {
   private apiKey: string;
-  private baseUrl: string;
+  public baseUrl: string;
   private http: AxiosInstance;
 
   constructor(apiKey: string, baseUrl?: string) {
@@ -219,7 +253,7 @@ export class Plato {
         alias: alias,
       });
 
-      return new PlatoEnvironment(this, response.data.job_id);
+      return new PlatoEnvironment(this, response.data.job_id, response.data.alias);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         throw new PlatoClientError(error.message);
@@ -283,13 +317,16 @@ export class Plato {
    * Resets an environment with a new task
    * @param jobId The ID of the job to reset
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
+   * @param testCasePublicId The public ID of the test case
+   * @param loadAuthenticated Whether to load authenticated browser state
    * @returns The response from the server
    */
-  async resetEnvironment(jobId: string, task?: PlatoTask | { name: string; prompt: string; start_url: string }, test_case_public_id?: string) {
+  async resetEnvironment(jobId: string, task?: PlatoTask | { name: string; prompt: string; start_url: string }, testCasePublicId?: string, loadAuthenticated: boolean = false) {
     try {
       const response = await this.http.post(`/env/${jobId}/reset`, {
         task: task || null,
-        test_case_public_id: test_case_public_id || null,
+        test_case_public_id: testCasePublicId || null,
+        load_browser_state: loadAuthenticated,
       });
       return response.data;
     } catch (error) {

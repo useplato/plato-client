@@ -100,7 +100,12 @@ class SyncPlato:
         )
         response.raise_for_status()
         data = response.json()
-        return SyncPlatoEnvironment(client=self, id=data["job_id"], sim_job_id=data.get("sim_job_id"))
+        return SyncPlatoEnvironment(
+            client=self, 
+            id=data["job_id"], 
+            alias=data.get("alias"),
+            sim_job_id=data.get("sim_job_id")
+        )
 
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
@@ -176,6 +181,7 @@ class SyncPlato:
         job_id: str,
         task: Optional[PlatoTask] = None,
         agent_version: Optional[str] = None,
+        load_authenticated: bool = False,
     ) -> Dict[str, Any]:
         """Reset an environment with an optional new task.
 
@@ -183,6 +189,7 @@ class SyncPlato:
             job_id (str): The ID of the job to reset.
             task (Optional[PlatoTask]): Optional new task for the environment.
             agent_version (Optional[str]): Optional agent version.
+            load_authenticated (bool): Whether to load authenticated browser state.
 
         Returns:
             Dict[str, Any]: The response from the server.
@@ -193,6 +200,7 @@ class SyncPlato:
         body = {
             "test_case_public_id": task.public_id if task else None,
             "agent_version": agent_version,
+            "load_browser_state": load_authenticated,
         }
         start_time = time.time()
         response = self.http_session.post(

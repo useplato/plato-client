@@ -8,17 +8,22 @@ from dotenv import load_dotenv
 load_dotenv('.env')
 
 async def test_public_url():
-    """Test the get_public_url functionality."""
-    print("Starting public URL test...")
+    """Test the get_public_url functionality with keepalive and alias."""
+    print("Starting public URL test with keepalive and alias...")
     
     try:
         # Initialize the client
         print("Initializing Plato client...")
         client = Plato()
         
-        # Create and initialize the environment
-        print("Creating environment...")
-        env = await client.make_environment("espocrm", interface_type=None)
+        # Create and initialize the environment with keepalive and alias
+        print("Creating environment with keepalive=True and alias='public-url-test'...")
+        env = await client.make_environment(
+            "espocrm", 
+            interface_type=None,
+            keepalive=True,
+            alias="public-url-test"
+        )
         print(f"Environment ID: {env.id}")
         
         try:
@@ -41,13 +46,17 @@ async def test_public_url():
             print("="*60)
             print(f"Environment ID: {env.id}")
             print(f"Public URL: {public_url}")
+            print(f"Keepalive: True")
+            print(f"Alias: public-url-test")
             print("="*60)
             
             # Log the result
             await env.log({
-                "message": "Public URL test completed",
+                "message": "Public URL test completed with keepalive and alias",
                 "environment_id": env.id,
-                "public_url": public_url
+                "public_url": public_url,
+                "keepalive": True,
+                "alias": "public-url-test"
             }, "info")
             
             # Wait for user input before closing
