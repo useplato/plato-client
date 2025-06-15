@@ -30,8 +30,6 @@ def main():
         logger.info("Creating new environment...")
         env = client.make_environment(
             env_id="espocrm",  # Example environment ID
-            viewport_width=1920,
-            viewport_height=1080,
             interface_type=None,
         )
         env.wait_for_ready()
