@@ -27,6 +27,7 @@ class SyncPlatoEnvironment:
         _client (SyncPlato): The client instance for interacting with the environment
         _current_task (Optional[PlatoTask]): The task currently being executed
         id (str): Unique identifier for this environment instance (job ID)
+        alias (Optional[str]): The alias for this environment (job group alias)
         _run_session_id (Optional[str]): The ID of the active run session, set after reset
         _heartbeat_thread (Optional[threading.Thread]): Thread for sending periodic heartbeats
     """
@@ -36,6 +37,7 @@ class SyncPlatoEnvironment:
     )
     _client: "SyncPlato" = Field(description="The client for the environment")
     id: str = Field(description="The ID for the environment (job ID)")
+    alias: Optional[str] = Field(description="The alias for the environment (job group alias)", default=None)
     _run_session_id: Optional[str] = Field(
         description="The ID of the active run session", default=None
     )
@@ -46,9 +48,10 @@ class SyncPlatoEnvironment:
     )
     _stop_heartbeat: bool = False
 
-    def __init__(self, client: "SyncPlato", id: str, sim_job_id: Optional[str] = None):
+    def __init__(self, client: "SyncPlato", id: str, alias: Optional[str] = None, sim_job_id: Optional[str] = None):
         self._client = client
         self.id = id
+        self.alias = alias
         self._run_session_id = None
         self._heartbeat_thread = None
         self._sim_job_id = sim_job_id
@@ -156,17 +159,18 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return self._client.get_cdp_url(self.id)
 
-    def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None) -> str:
+    def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None, load_authenticated: bool = False) -> str:
         """Reset the environment with an optional new task.
 
         Args:
             task (Optional[PlatoTask]): The new task to set up the environment for.
             agent_version (Optional[str]): Optional agent version.
+            load_authenticated (bool): Whether to load authenticated browser state.
 
         Returns:
             str: The environment is reset and a new run session is created.
         """
-        response = self._client.reset_environment(self.id, task, agent_version)
+        response = self._client.reset_environment(self.id, task, agent_version, load_authenticated)
         if task:
             self._current_task = task
 
@@ -425,6 +429,35 @@ class SyncPlatoEnvironment:
                 "username": self.id,
                 "password": self._run_session_id
             }
+        except Exception as e:
+            raise PlatoClientError(str(e))
+
+    def get_public_url(self) -> str:
+        """Get the public URL for accessing this environment.
+
+        Returns:
+            str: The public URL for this environment based on the deployment environment.
+                 Uses alias if available, otherwise uses environment ID.
+                 - Staging: https://{alias|env.id}.staging.sims.plato.so
+                 - Production: https://{alias|env.id}.sims.plato.so
+                 - Local: http://localhost:8081/{alias|env.id}
+
+        Raises:
+            PlatoClientError: If unable to determine the environment type.
+        """
+        try:
+            # Use alias if available, otherwise use environment ID
+            identifier = self.alias if self.alias else self.id
+            
+            # Determine environment based on base_url
+            if "localhost:8080" in self._client.base_url:
+                return f"http://localhost:8081/{identifier}"
+            elif "staging.plato.so" in self._client.base_url:
+                return f"https://{identifier}.staging.sims.plato.so"
+            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url:
+                return f"https://{identifier}.sims.plato.so"
+            else:
+                raise PlatoClientError("Unknown base URL")
         except Exception as e:
             raise PlatoClientError(str(e))
 

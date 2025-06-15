@@ -64,6 +64,8 @@ class SyncPlato:
         viewport_width: int = 1920,
         viewport_height: int = 1080,
         interface_type: Optional[Literal["browser"]] = "browser",
+        keepalive: bool = False,
+        alias: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -73,6 +75,8 @@ class SyncPlato:
             viewport_width (int): The width of the viewport.
             viewport_height (int): The height of the viewport.
             interface_type (Optional[str]): The type of interface to create. Defaults to "browser".
+            keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
+            alias (Optional[str]): Optional alias for the job group.
 
         Returns:
             SyncPlatoEnvironment: The created environment instance.
@@ -90,11 +94,18 @@ class SyncPlato:
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
                 "env_config": {},
+                "keepalive": keepalive,
+                "alias": alias,
             },
         )
         response.raise_for_status()
         data = response.json()
-        return SyncPlatoEnvironment(client=self, id=data["job_id"], sim_job_id=data.get("sim_job_id"))
+        return SyncPlatoEnvironment(
+            client=self, 
+            id=data["job_id"], 
+            alias=data.get("alias"),
+            sim_job_id=data.get("sim_job_id")
+        )
 
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
@@ -170,6 +181,7 @@ class SyncPlato:
         job_id: str,
         task: Optional[PlatoTask] = None,
         agent_version: Optional[str] = None,
+        load_authenticated: bool = False,
     ) -> Dict[str, Any]:
         """Reset an environment with an optional new task.
 
@@ -177,6 +189,7 @@ class SyncPlato:
             job_id (str): The ID of the job to reset.
             task (Optional[PlatoTask]): Optional new task for the environment.
             agent_version (Optional[str]): Optional agent version.
+            load_authenticated (bool): Whether to load authenticated browser state.
 
         Returns:
             Dict[str, Any]: The response from the server.
@@ -187,6 +200,7 @@ class SyncPlato:
         body = {
             "test_case_public_id": task.public_id if task else None,
             "agent_version": agent_version,
+            "load_browser_state": load_authenticated,
         }
         start_time = time.time()
         response = self.http_session.post(

@@ -61,10 +61,11 @@ async def run_single_espocrm_test(test_id: int) -> TestMetrics:
     try:
         # Initialize the client
         step_start = time.time()
-        client = Plato(base_url="https://plato.so/api")
+        client = Plato()
+        tasks = await client.load_tasks("espocrm")
         
         # Create and initialize the EspoCRM environment
-        env = await client.make_environment("espocrm")
+        env = await client.make_environment("espocrm", open_page_on_start=True)
         metrics.add_step_timing("environment_creation", time.time() - step_start)
         metrics.set_environment_id(env.id)
         print(f"Test {test_id}: Environment ID: {env.id}")
@@ -77,69 +78,85 @@ async def run_single_espocrm_test(test_id: int) -> TestMetrics:
             metrics.add_step_timing("environment_ready", time.time() - step_start)
             print(f"Test {test_id}: Environment ready")
             
-            # Reset the environment
-            step_start = time.time()
-            await env.reset()
-            metrics.add_step_timing("environment_reset", time.time() - step_start)
-            print(f"Test {test_id}: Environment reset")
+            # Perform the complete workflow 3 times (reset + browser operations)
+            workflow_times = []
+            for iteration in range(3):
+                iteration_start = time.time()
+                print(f"\nTest {test_id}: Starting iteration #{iteration + 1}")
+                
+                # Reset the environment
+                reset_start = time.time()
+                await env.reset(task=tasks[0])
+                reset_duration = time.time() - reset_start
+                print(f"Test {test_id}: Environment reset #{iteration + 1} completed in {reset_duration:.2f}s")
+                
+                # Get the CDP URL for browser connection
+                cdp_start = time.time()
+                print(f"Test {test_id}: Getting CDP URL...")
+                cdp_url = await env.get_cdp_url()
+                cdp_duration = time.time() - cdp_start
+                
+                # Get live view URL
+                live_url = await client.get_live_view_url(env.id)
+                print(f"Test {test_id}: Live view URL: {live_url}")
+                
+                # Connect to browser and perform login
+                browser_start = time.time()
+                async with async_playwright() as p:
+                    browser = await p.chromium.connect_over_cdp(cdp_url)
+                    context = browser.contexts[0]
+                    page = context.pages[0]
+                    print(f"Test {test_id}: Connected to browser for iteration #{iteration + 1}")
+                    
+                    # Take screenshot after navigation
+                    await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_homepage.png"))
+                    print(f"Test {test_id}: Homepage screenshot taken for iteration #{iteration + 1}")
+                    
+                    # Fill in username and password
+                    print(f"Test {test_id}: Filling in credentials...")
+                    await page.fill('input#field-userName', 'admin')
+                    await page.fill('input#field-password', 'password')
+                    
+                    # Take screenshot before submitting
+                    await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_before_submit.png"))
+                    
+                    # Click the login button
+                    print(f"Test {test_id}: Clicking submit button...")
+                    await page.click('[data-name="submit"] button, [data-name="submit"] input[type="submit"]')
+                    
+                    # Wait for login to process
+                    await page.wait_for_timeout(3000)
+                    print(f"Test {test_id}: Login submitted for iteration #{iteration + 1}")
+                    
+                    # Take screenshot after login attempt
+                    await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_after_login.png"))
+                    print(f"Test {test_id}: Login attempt completed for iteration #{iteration + 1}")
+                    
+                    # Get final state
+                    state = await env.get_state()
+                    print(f"Test {test_id}: Final state for iteration #{iteration + 1}: {state}")
+                    
+                    # Wait a bit to observe the result
+                    await page.wait_for_timeout(2000)
+                    await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_final.png"))
+                    print(f"Test {test_id}: Final screenshot taken for iteration #{iteration + 1}")
+                
+                browser_duration = time.time() - browser_start
+                iteration_duration = time.time() - iteration_start
+                workflow_times.append(iteration_duration)
+                
+                print(f"Test {test_id}: Iteration #{iteration + 1} completed in {iteration_duration:.2f}s")
+                
+                # Brief pause between iterations
+                if iteration < 2:  # Don't wait after the last iteration
+                    await asyncio.sleep(1)
             
-            # Get the CDP URL for browser connection
-            step_start = time.time()
-            print(f"Test {test_id}: Getting CDP URL...")
-            cdp_url = await env.get_cdp_url()
-            metrics.add_step_timing("get_cdp_url", time.time() - step_start)
+            # Record aggregate timing metrics
+            total_workflow_time = sum(workflow_times)
+            metrics.add_step_timing("total_workflow_iterations", total_workflow_time)
+            metrics.add_step_timing("average_iteration_time", total_workflow_time / 3)
+            print(f"Test {test_id}: All 3 iterations completed in {total_workflow_time:.2f}s (avg: {total_workflow_time / 3:.2f}s)")
             
-            # Get live view URL
-            live_url = await client.get_live_view_url(env.id)
-            print(f"Test {test_id}: Live view URL: {live_url}")
-            
-            # Connect to browser and perform login
-            step_start = time.time()
-            async with async_playwright() as p:
-                browser = await p.chromium.connect_over_cdp(cdp_url)
-                context = browser.contexts[0]
-                page = context.pages[0]
-                print(f"Test {test_id}: Connected to browser")
-                
-                # Navigate to EspoCRM.com
-                print(f"Test {test_id}: Navigating to espocrm.com...")
-                await page.goto("http://espocrm.com/")
-                await page.wait_for_timeout(3000)
-                
-                # Take screenshot after navigation
-                await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_homepage.png"))
-                print(f"Test {test_id}: Homepage screenshot taken")
-                
-                # Fill in username and password
-                print(f"Test {test_id}: Filling in credentials...")
-                await page.fill('input#field-userName', 'admin')
-                await page.fill('input#field-password', 'password')
-                
-                # Take screenshot before submitting
-                await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_before_submit.png"))
-                
-                # Click the login button (assuming it's within the div with data-name="submit")
-                print(f"Test {test_id}: Clicking submit button...")
-                await page.click('[data-name="submit"] button, [data-name="submit"] input[type="submit"]')
-                
-                # Wait for login to process
-                await page.wait_for_timeout(3000)
-                print(f"Test {test_id}: Login submitted")
-                
-                # Take screenshot after login attempt
-                await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_after_login_attempt.png"))
-                print(f"Test {test_id}: Login attempt completed")
-                
-                # Get final state
-                state = await env.get_state()
-                print(f"Test {test_id}: Final state: {state}")
-                
-                # Wait a bit to observe the result
-                await page.wait_for_timeout(2000)
-                await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_final_state.png"))
-                print(f"Test {test_id}: Final screenshot taken")
-            
-            metrics.add_step_timing("browser_operations", time.time() - step_start)
             metrics.complete(success=True)
             
         finally:
@@ -198,8 +215,8 @@ async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
     
     # Calculate step-specific metrics
     step_averages = {}
-    for step_name in ["environment_creation", "environment_ready", "environment_reset", 
-                      "get_cdp_url", "browser_operations", "environment_closure"]:
+    for step_name in ["environment_creation", "environment_ready", "total_workflow_iterations", 
+                      "average_iteration_time", "environment_closure"]:
         step_times = [m["steps_timing"].get(step_name, 0) for m in all_metrics if m["steps_timing"].get(step_name)]
         if step_times:
             step_averages[step_name] = {
@@ -256,8 +273,8 @@ async def test_espocrm_login():
 
 if __name__ == "__main__":
     # Configure these parameters as needed
-    NUM_CONCURRENT_TESTS = 10   # Number of tests to run concurrently
-    TOTAL_TESTS = 10           # Total number of tests to run
+    NUM_CONCURRENT_TESTS = 25   # Number of tests to run concurrently
+    TOTAL_TESTS = 50           # Total number of tests to run
     RUN_LOAD_TEST = True        # Set to False to run single test instead
     
     if RUN_LOAD_TEST:
