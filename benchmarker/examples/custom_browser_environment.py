@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Amazon Nova Act Example")
-    parser.add_argument("--headless", action="store_true", help="Run browser in headless mode", default=False)
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run browser in headless mode",
+        default=False,
+    )
     args = parser.parse_args()
 
     logger.info(f"Headless mode: {args.headless}")
@@ -29,8 +34,8 @@ def main():
         # Create a new environment
         logger.info("Creating new environment...")
         env = client.make_environment(
-            env_id="espocrm",  # Example environment ID
-            interface_type=None,
+            env_id="doordash",  # Example environment ID
+            interface_type=None,  # Set interface type to None so you can run on your own browser
         )
         env.wait_for_ready()
 
@@ -47,18 +52,21 @@ def main():
 
         # Create a new playwright browser
         logger.info("Creating Playwright browser...")
-        
+
         with sync_playwright() as p:
             # Launch browser with proxy configuration
             browser = p.chromium.launch(
                 headless=args.headless,
                 proxy=proxy_config,
+                args=[
+                    "--ignore-certificate-errors",
+                    "--ignore-ssl-errors",
+                    "--disable-http2",
+                ],
             )
-            
+
             page = browser.new_page()
-            page.goto("http://espocrm.com")
-            time.sleep(2)
-            page.screenshot(path="screenshot.png")
+            breakpoint()
             # Close the browser
             browser.close()
 
@@ -72,4 +80,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
