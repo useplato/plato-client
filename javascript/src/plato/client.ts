@@ -229,6 +229,7 @@ export class Plato {
    *
    * @param envId The environment ID to create
    * @param openPageOnStart Whether to open the page on start
+   * @param recordActions Whether to record actions
    * @param keepalive If true, jobs will not be killed due to heartbeat failures
    * @param alias Optional alias for the job group
    * @returns The created environment instance
@@ -237,6 +238,7 @@ export class Plato {
   async makeEnvironment(
     envId: string, 
     openPageOnStart: boolean = false,
+    recordActions: boolean = false,
     keepalive: boolean = false,
     alias?: string
   ): Promise<PlatoEnvironment> {
@@ -249,6 +251,7 @@ export class Plato {
         open_page_on_start: openPageOnStart,
         env_id: envId,
         env_config: {},
+        record_actions: recordActions,
         keepalive: keepalive,
         alias: alias,
       });

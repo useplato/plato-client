@@ -74,6 +74,7 @@ class Plato:
         viewport_height: int = 1080,
         interface_type: Optional[Literal["browser"]] = "browser",
         record_network_requests: bool = False,
+        record_actions: bool = False,
         env_config: Optional[Dict[str, Any]] = None,
         keepalive: bool = False,
         alias: Optional[str] = None,
@@ -87,6 +88,7 @@ class Plato:
             viewport_height (int): The height of the viewport.
             interface_type (Optional[str]): The type of interface to create. Defaults to None.
             record_network_requests (bool): Whether to record network requests.
+            record_actions (bool): Whether to record actions.
             env_config (Optional[Dict[str, Any]]): Environment configuration.
             keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
             alias (Optional[str]): Optional alias for the job group.
@@ -109,6 +111,7 @@ class Plato:
                 "env_id": env_id,
                 "env_config": env_config or {},
                 "record_network_requests": record_network_requests,
+                "record_actions": record_actions,
                 "keepalive": keepalive,
                 "alias": alias,
             },

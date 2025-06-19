@@ -1,6 +1,6 @@
 {
   "name": "plato-sdk",
-  "version": "0.1.0a27",
+  "version": "0.1.0a28",
   "description": "JavaScript client for interacting with the Plato API",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

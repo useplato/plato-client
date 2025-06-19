@@ -64,6 +64,7 @@ class SyncPlato:
         viewport_width: int = 1920,
         viewport_height: int = 1080,
         interface_type: Optional[Literal["browser"]] = "browser",
+        record_actions: bool = False,
         keepalive: bool = False,
         alias: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
@@ -75,6 +76,7 @@ class SyncPlato:
             viewport_width (int): The width of the viewport.
             viewport_height (int): The height of the viewport.
             interface_type (Optional[str]): The type of interface to create. Defaults to "browser".
+            record_actions (bool): Whether to record actions.
             keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
             alias (Optional[str]): Optional alias for the job group.
 
@@ -94,6 +96,7 @@ class SyncPlato:
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
                 "env_config": {},
+                "record_actions": record_actions,
                 "keepalive": keepalive,
                 "alias": alias,
             },
