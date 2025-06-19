@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from playwright.async_api import async_playwright
 from plato.sdk import Plato
@@ -13,14 +14,14 @@ async def test_google_passthrough():
 
     try:
         # Initialize the client
-        client = Plato()
+        client = Plato(base_url=os.getenv("PLATO_API_URL", "https://plato.so/api"))
 
         # Create and initialize the EspoCRM environment
         env = await client.make_environment(
-            "doordash",
+            "opentable",
             env_config={
-                "passthrough_all_ood_requests": False,
-                "replay_session_ids": ["ceaaf23f-1735-4b9d-8859-67ae196153ad"],
+                "passthrough_all_ood_requests": True,
+                "replay_session_ids": [],
             },
             record_network_requests=True,
         )
@@ -51,7 +52,7 @@ async def test_google_passthrough():
                 page = context.pages[0]
                 print("Connected to browser")
 
-                await page.goto("https://www.google.com")
+                await page.goto("https://www.opentable.com/")
                 breakpoint()
 
         finally:

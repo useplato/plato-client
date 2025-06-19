@@ -112,6 +112,18 @@ username: admin
 password: admin
 """,
     },
+    "suitecrm": {
+        "base_prompt": """
+You are a helpful assistant that can help me use SuiteCRM.
+start by going to {start_url}. Do not navigate to other websites.
+Here is the task:
+{prompt}
+
+The login credentials are:
+username: user
+password: bitnami
+""",
+    },
 }
 
 

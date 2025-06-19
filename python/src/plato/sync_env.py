@@ -359,7 +359,7 @@ class SyncPlatoEnvironment:
             response = self._client.evaluate(self._run_session_id, agent_version)
             result = response['result']
             return EvaluationResult(
-                success=result.get('success', False),
+                success=result.get('correct', False),
                 reason=result.get('reason', None),
                 diffs=result.get('diffs', None),
                 expected_mutations=result.get('expected_mutations', None),
@@ -408,12 +408,12 @@ class SyncPlatoEnvironment:
         """
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
-            
+
         try:
             worker_status = self._client.get_worker_ready(self.id)
             if not worker_status.get("ready"):
                 raise PlatoClientError("Worker is not ready yet")
-            
+
             # Extract the base domain from the base_url
             if "localhost:8080" in self._client.base_url:
                 proxy_server = "http://localhost:8888"
@@ -423,7 +423,7 @@ class SyncPlatoEnvironment:
                 proxy_server = "https://proxy.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
-            
+
             return {
                 "server": proxy_server,
                 "username": self.id,

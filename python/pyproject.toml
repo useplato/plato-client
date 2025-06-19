@@ -1,6 +1,6 @@
 [project]
 name = "plato-sdk"
-version = "1.0.43"
+version = "1.0.44"
 description = "Plato SDK"
 readme = "README.md"
 authors = [
@@ -33,4 +33,5 @@ members = ["example"]
 [dependency-groups]
 dev = [
     "playwright>=1.50.0",
+    "ipdb>=0.13.13",
 ]

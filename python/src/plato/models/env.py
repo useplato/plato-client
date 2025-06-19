@@ -403,12 +403,12 @@ class PlatoEnvironment:
         """
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
-            
+
         try:
             worker_status = await self._client.get_worker_ready(self.id)
             if not worker_status.get("ready"):
                 raise PlatoClientError("Worker is not ready yet")
-            
+
             # Extract the base domain from the base_url
             if "localhost:8080" in self._client.base_url:
                 proxy_server = "http://localhost:8888"
@@ -418,7 +418,7 @@ class PlatoEnvironment:
                 proxy_server = "https://proxy.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
-            
+
             return {
                 "server": proxy_server,
                 "username": self.id,
