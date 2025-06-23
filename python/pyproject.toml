@@ -1,6 +1,6 @@
 [project]
 name = "plato-sdk"
-version = "1.0.45"
+version = "1.0.46"
 description = "Plato SDK"
 readme = "README.md"
 authors = [

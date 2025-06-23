@@ -179,7 +179,7 @@ async def run_task(
     task_set: str = "espocrm",
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
-    env = await client.make_environment(task.env_id, open_page_on_start=False)
+    env = await client.make_environment(task.env_id, open_page_on_start=False, record_actions=True)
 
     logger.info(f"[{task.name}] Waiting for environment to be ready ({task.env_id})")
     await env.wait_for_ready()

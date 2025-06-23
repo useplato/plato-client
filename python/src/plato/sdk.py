@@ -120,8 +120,8 @@ class Plato:
             response.raise_for_status()
             data = await response.json()
             return PlatoEnvironment(
-                client=self, 
-                id=data["job_id"], 
+                client=self,
+                id=data["job_id"],
                 alias=data.get("alias"),
                 sim_job_id=data.get("sim_job_id")
             )
@@ -454,6 +454,8 @@ class Plato:
                     prompt=t["prompt"],
                     start_url=t["startUrl"],
                     env_id=t["simulator"]["name"],
+                    average_time=t.get("averageTimeTaken"),
+                    average_steps=t.get("averageStepsTaken"),
                 )
                 for t in test_cases
             ]

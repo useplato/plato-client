@@ -101,6 +101,8 @@ class PlatoTask(BaseModel):
     start_url: str
     dataset_name: Optional[str] = None
     eval_config: Optional[BasePlatoEvalConfig] = None
+    average_time: Optional[float] = None
+    average_steps: Optional[int] = None
 
     @field_serializer('eval_config')
     def serialize_eval_config(self, eval_config: Optional[BasePlatoEvalConfig], _info):
