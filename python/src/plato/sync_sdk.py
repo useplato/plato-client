@@ -10,6 +10,8 @@ import os
 import logging
 import time
 import requests
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
 
 logger = logging.getLogger(__name__)
 
@@ -426,3 +428,61 @@ class SyncPlato:
             )
             for t in test_cases
         ]
+
+    def get_playdoh_environment_config(self, env_name: str = "playdoh") -> Dict[str, Any]:
+        """Get the configuration for a PlayDoh environment by finding it in the list of simulators.
+
+        Args:
+            env_name (str): The name of the environment to get config for. Defaults to "playdoh".
+
+        Returns:
+            Dict[str, Any]: The configuration for the PlayDoh environment.
+
+        Raises:
+            PlatoClientError: If the environment is not found.
+            requests.RequestException: If the API request fails.
+        """
+        simulators = self.list_simulators()
+        
+        for simulator in simulators:
+            if simulator.get("name") == env_name:
+                return simulator.get("config", {})
+        
+        raise PlatoClientError(f"Environment '{env_name}' not found in simulators")
+
+    def download_from_s3(self, s3_path: str, local_path: str) -> None:
+        """Download a file from S3 using the S3 path.
+
+        Args:
+            s3_path (str): The S3 path (e.g., 's3://bucket-name/path/to/file.zip').
+            local_path (str): The local path to save the file.
+
+        Raises:
+            PlatoClientError: If there's an error downloading from S3.
+        """
+        try:
+            # Parse S3 path
+            if not s3_path.startswith('s3://'):
+                raise PlatoClientError(f"Invalid S3 path format: {s3_path}")
+            
+            # Remove s3:// prefix and split bucket and key
+            s3_path_clean = s3_path[5:]  # Remove 's3://'
+            parts = s3_path_clean.split('/', 1)
+            if len(parts) != 2:
+                raise PlatoClientError(f"Invalid S3 path format: {s3_path}")
+            
+            bucket_name, key = parts
+            
+            # Create S3 client
+            s3_client = boto3.client('s3')
+            
+            # Download file
+            s3_client.download_file(bucket_name, key, local_path)
+            logger.info(f"Downloaded {s3_path} to {local_path}")
+            
+        except NoCredentialsError:
+            raise PlatoClientError("AWS credentials not found. Make sure AWS credentials are configured.")
+        except ClientError as e:
+            raise PlatoClientError(f"Error downloading from S3: {e}")
+        except Exception as e:
+            raise PlatoClientError(f"Unexpected error downloading from S3: {e}")
