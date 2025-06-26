@@ -1,13 +1,20 @@
 import os
+from pydantic import Field, BaseModel, PydanticCustomError, model_validator, ValidationError, instantiate
+from abc import ABC
 from plato.models.task import CustomEvalConfig
-from pydantic import Field
 from plato.models import PlatoTask, EvaluationResult
-from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
+from plato.models.flow import Simulator
+from flow_executor import FlowExecutor
+from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING, Literal
 import time
 import asyncio
 import random
 import logging
 from plato.exceptions import PlatoClientError
+from playwright.async_api import Page
+import boto3
+import yaml
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +22,126 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from plato.sdk import Plato
 
+
+class AdaptiveObject(BaseModel, ABC):
+    """An abstract object that may be one of several concrete types."""
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _resolve_adaptive_object(cls, data: Any, handler) -> Any:
+        try:
+            data = dict(data)
+        except Exception as e:
+            raise PydanticCustomError(
+                "adaptive-object", "Data is not a dictionary"
+            ) from e
+
+        # if cls is not abstract, there's nothing to do
+        if ABC not in cls.__bases__:
+            return handler(data)
+
+        # try to validate the data for each possible type
+        possible_types = sorted(
+            list(cls._find_all_possible_types()),
+            key=lambda x: len(x.__annotations__),
+            reverse=True
+        )
+        for subcls in possible_types:
+            try:
+                # return the first successful validation
+                return subcls.model_validate(data)
+            except ValidationError:
+                continue
+
+        message = "Could not resolve input to a valid type. Possible types: "
+        message += ", ".join([subcls.__name__ for subcls in possible_types])
+        raise PydanticCustomError(
+            "adaptive-object",
+            message,
+        )
+
+    @classmethod
+    def _find_all_possible_types(cls):
+        """Recursively generate all possible types for this object."""
+
+        # any concrete class is a possible type
+        if ABC not in cls.__bases__:
+            yield cls
+
+        # continue looking for possible types in subclasses
+        for subclass in cls.__subclasses__():
+            yield from subclass._find_all_possible_types()
+
+    def instantiate(self):
+        # check if _target_ is set
+        if not hasattr(self, "_target_"):
+            raise ValueError("Model does not have a _target_ attribute. Cannot instantiate.")
+        # instantiate the target
+        cfg = self.model_dump(mode="json")
+        cfg['_target_'] = self._target_
+        return instantiate(cfg)
+
+    def model_dump(self, mode: Literal["json", "python"] = "json", **kwargs):
+        if mode == "json":
+            data = {}
+            for key in self.model_fields.keys():
+                value = getattr(self, key)
+                # Handle nested BaseModel instances
+                if isinstance(value, BaseModel):
+                    data[key] = value.model_dump(mode="json")
+                # Handle lists of BaseModel instances (like the `diffs` field)
+                elif isinstance(value, list):
+                    data[key] = [
+                        item.model_dump(mode="json")
+                        if isinstance(item, BaseModel)
+                        else item
+                        for item in value
+                    ]
+                # Handle other non-model values
+                else:
+                    data[key] = value
+            return data
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
+
+
+
+class SimulatorType(Enum):
+    PROXY = "proxy"
+    DOCKER_APP = "docker_app"
+
+class ReplaySession(BaseModel):
+    session_id: str
+
+class ChromeCookie(BaseModel):
+    name: str
+    value: str
+    domain: str
+    path: str
+    expires: int
+    httpOnly: bool
+    secure: bool
+
+class Authentication(BaseModel):
+    user: str
+    password: str
+class SimulatorConfig(AdaptiveObject, ABC):
+    type: Literal["proxy", "docker_app"]
+    cookies: Optional[list[ChromeCookie]] = None
+    authentication: Optional[Authentication] = None
+
+class ProxySimulatorConfig(SimulatorConfig):
+    type: Literal["proxy"] = "proxy"
+    host: str
+    port: int
+    replay_sessions: list[ReplaySession]
+
+class DockerAppSimulatorConfig(SimulatorConfig):
+    type: Literal["docker_app"] = "docker_app"
+    ignore_tables: list[str]
+    ignore_columns: dict[str, list[str]]
+    ignore_tables_with_column_values: Optional[dict[str, dict[str, list[str]]]] = None
+    scripts_s3_url: Optional[str] = None
 
 
 class PlatoEnvironment:
@@ -182,8 +309,6 @@ class PlatoEnvironment:
             raise PlatoClientError("Failed to reset environment. Please try again.")
 
         return self._run_session_id
-
-
 
     async def _heartbeat_loop(self) -> None:
         """Background task that periodically sends heartbeats to keep the environment active."""
@@ -361,6 +486,42 @@ class PlatoEnvironment:
                 actual_mutations=result.get('actual_mutations', None),
             )
 
+    async def _get_config(self) -> SimulatorConfig:
+        """Get the config for the environment."""
+        simulators = await self._client.list_simulators()
+        simulators = [SimulatorConfig.model_validate(simulator) for simulator in simulators]
+        for simulator in simulators:
+            if simulator.name == self.id:
+                return simulator
+        raise PlatoClientError("Simulator not found")
+
+    async def login(self, page: Page) -> None:
+        """Login to the environment using authentication config.
+        
+        Args:
+            page (Page): The Playwright page to authenticate
+        """
+        config = await self._get_config()
+
+        if not config.scripts_s3_url:
+            raise PlatoClientError("No scripts S3 URL found for environment")
+        s3_client = boto3.client("s3")
+        s3_client.download_file(config.scripts_s3_url, self.id + "/scripts.yaml")
+        with open(self.id + "/scripts.yaml", "r") as f:
+            scripts = yaml.safe_load(f)
+            simulator = Simulator.model_validate(scripts)
+
+        # Get base dataset and login flow
+        base_dataset = next((dataset for dataset in simulator.datasets if dataset.name == "base"), None)
+        if not base_dataset:
+            raise PlatoClientError("No base dataset found")
+
+        login_flow = next((flow for flow in simulator.flows if flow.name == "login"), None)
+        if not login_flow:
+            raise PlatoClientError("No login flow found")
+
+        flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger)
+        await flow_executor.execute_flow()
 
     async def log(self, log: dict, type: str = "info") -> None:
         """Log a message to the environment.
