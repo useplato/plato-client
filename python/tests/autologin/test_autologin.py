@@ -9,6 +9,7 @@ import argparse
 from playwright.async_api import async_playwright
 from plato.models import PlatoTask
 from plato.sdk import Plato
+from plato.models.env import PlatoEnvironment
 
 from dotenv import load_dotenv
 
@@ -16,8 +17,10 @@ load_dotenv('.env')
 
 # Create necessary directories at startup
 SCREENSHOTS_DIR = Path("screenshots/autologin")
+FINAL_SCREENSHOTS_DIR = Path("screenshots/autologin/final")
 METRICS_DIR = Path("metrics")
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+FINAL_SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 METRICS_DIR.mkdir(exist_ok=True)
 
 class SimulatorTestMetrics:
@@ -158,27 +161,26 @@ async def run_single_simulator_test(simulator: Dict[str, Any]) -> SimulatorTestM
             reset_duration = time.time() - reset_start
             metrics.add_step_timing("environment_reset", reset_duration)
             
-            # Get the CDP URL for browser connection
-            cdp_start = time.time()
-            print(f"Getting CDP URL...")
-            cdp_url = await env.get_cdp_url()
-            cdp_duration = time.time() - cdp_start
-            metrics.add_step_timing("cdp_connection", cdp_duration)
+            # Get the public URL for browser navigation
+            public_url_start = time.time()
+            print(f"Getting Public URL...")
+            public_url = await env.get_public_url()
+            public_url_duration = time.time() - public_url_start
+            metrics.add_step_timing("public_url_retrieval", public_url_duration)
+            print(f"Public URL: {public_url}")
             
-            # Get live view URL
-            try:
-                live_url = await client.get_live_view_url(env.id)
-                print(f"Live view URL: {live_url}")
-            except Exception as e:
-                print(f"Could not get live view URL: {e}")
-            
-            # Connect to browser and perform operations
+            # Create new headless browser and navigate to public URL
             browser_start = time.time()
             async with async_playwright() as p:
-                browser = await p.chromium.connect_over_cdp(cdp_url)
-                context = browser.contexts[0]
-                page = context.pages[0]
-                print(f"Connected to browser")
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context()
+                page = await context.new_page()
+                print(f"Created new headless browser")
+                
+                # Navigate to the public URL
+                print(f"Navigating to: {public_url}")
+                await page.goto(public_url)
+                print(f"Successfully navigated to public URL")
                 
                 # Wait for page to load
                 await page.wait_for_timeout(2000)
@@ -198,9 +200,14 @@ async def run_single_simulator_test(simulator: Dict[str, Any]) -> SimulatorTestM
                 except Exception as e:
                     print(f"Could not get final state: {e}")
                 
-                # Take final screenshot
-                await page.screenshot(path=str(SCREENSHOTS_DIR / f"{simulator_name}_{env.id}_final.png"))
-                print(f"Final screenshot taken")
+                # Take final screenshot in special directory
+                final_screenshot_path = str(FINAL_SCREENSHOTS_DIR / f"{simulator_name}_{env.id}_final.png")
+                await page.screenshot(path=final_screenshot_path)
+                print(f"Final screenshot taken: {final_screenshot_path}")
+                
+                # Close the browser
+                await browser.close()
+                print(f"Browser closed")
             
             browser_duration = time.time() - browser_start
             metrics.add_step_timing("browser_operations", browser_duration)
@@ -211,8 +218,10 @@ async def run_single_simulator_test(simulator: Dict[str, Any]) -> SimulatorTestM
         finally:
             # Always ensure we close the environment
             step_start = time.time()
-            await env.close()
             metrics.add_step_timing("environment_closure", time.time() - step_start)
+
+            # Close the environment
+            await env.close()
             print(f"Environment closed")
             
             # Close the client to cleanup aiohttp session
@@ -254,22 +263,34 @@ async def test_all_simulators(simulator_name: Optional[str] = None):
             for sim in simulators:
                 print(f"  - {sim['name']}: {sim.get('description', 'No description')}")
         
-        # Run tests for each simulator
-        all_metrics: List[Dict] = []
+        # Run tests for all simulators in parallel
         start_time = time.time()
         
-        for i, simulator in enumerate(simulators):
-            if len(simulators) > 1:
-                print(f"\n\nTesting simulator {i+1}/{len(simulators)}: {simulator['name']}")
+        if len(simulators) > 1:
+            print(f"\n\nStarting parallel tests for {len(simulators)} simulators...")
+            for sim in simulators:
+                print(f"  - {sim['name']}")
+        else:
+            print(f"\n\nStarting test for simulator: {simulators[0]['name']}")
+        
+        # Create tasks for parallel execution
+        tasks = [run_single_simulator_test(simulator) for simulator in simulators]
+        
+        # Run all simulator tests in parallel
+        print(f"\nRunning all {len(simulators)} simulator tests in parallel...")
+        metrics_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results and handle any exceptions
+        all_metrics: List[Dict] = []
+        for i, result in enumerate(metrics_results):
+            if isinstance(result, Exception):
+                print(f"❌ Test failed for {simulators[i]['name']} with exception: {result}")
+                # Create a failed metrics object for this simulator
+                failed_metrics = SimulatorTestMetrics(simulators[i]['name'])
+                failed_metrics.complete(success=False, error=result)
+                all_metrics.append(failed_metrics.to_dict())
             else:
-                print(f"\n\nTesting simulator: {simulator['name']}")
-            metrics = await run_single_simulator_test(simulator)
-            all_metrics.append(metrics.to_dict())
-            
-            # Brief pause between tests (only if testing multiple)
-            if i < len(simulators) - 1:
-                print("Pausing between simulator tests...")
-                await asyncio.sleep(3)
+                all_metrics.append(result.to_dict())
         
         # Calculate and save aggregate metrics
         end_time = time.time()
@@ -310,14 +331,14 @@ async def test_all_simulators(simulator_name: Optional[str] = None):
         print(f"Successful Tests: {successful_tests}")
         print(f"Failed Tests: {len(simulators) - successful_tests}")
         print(f"Overall Success Rate: {(successful_tests / len(simulators)) * 100:.2f}%")
-        print(f"Total Duration: {total_duration:.2f} seconds")
+        print(f"Total Duration: {total_duration:.2f} seconds (parallel execution)")
         print(f"\nLogin Testing Results:")
         print(f"Login Attempts: {login_attempts}")
         print(f"Successful Logins: {successful_logins}")
         if login_attempts > 0:
             print(f"Login Success Rate: {(successful_logins / login_attempts) * 100:.2f}%")
         
-        print(f"\nPer-Simulator Results:")
+        print(f"\nPer-Simulator Results (executed in parallel):")
         for metric in all_metrics:
             status = "✓" if metric["success"] else "✗"
             login_status = ""
@@ -327,6 +348,7 @@ async def test_all_simulators(simulator_name: Optional[str] = None):
         
         print(f"\nDetailed metrics saved to: {metrics_file}")
         print(f"Screenshots saved to: {SCREENSHOTS_DIR}")
+        print(f"Final screenshots saved to: {FINAL_SCREENSHOTS_DIR}")
         print("="*80)
         
     except Exception as e:

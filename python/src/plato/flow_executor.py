@@ -87,33 +87,33 @@ class FlowExecutor:
             return False
     
     async def _execute_step(self, step: FlowStep) -> bool:
-        """Execute a single step in a flow using typed step classes."""
-        if isinstance(step, WaitForSelectorStep):
+        """Execute a single step in a flow using action attribute."""
+        if step.action == "wait_for_selector":
             return await self._wait_for_selector(step)
-        elif isinstance(step, ClickStep):
+        elif step.action == "click":
             return await self._click(step)
-        elif isinstance(step, FillStep):
+        elif step.action == "fill":
             return await self._fill(step)
-        elif isinstance(step, WaitStep):
+        elif step.action == "wait":
             return await self._wait(step)
-        elif isinstance(step, NavigateStep):
+        elif step.action == "navigate":
             return await self._navigate(step)
-        elif isinstance(step, WaitForUrlStep):
+        elif step.action == "wait_for_url":
             return await self._wait_for_url(step)
-        elif isinstance(step, CheckElementStep):
+        elif step.action == "check_element":
             return await self._check_element(step)
-        elif isinstance(step, VerifyStep):
+        elif step.action == "verify":
             return await self._verify(step)
-        elif isinstance(step, ScreenshotStep):
+        elif step.action == "screenshot":
             return await self._screenshot(step)
-        elif isinstance(step, VerifyTextStep):
+        elif step.action == "verify_text":
             return await self._verify_text(step)
-        elif isinstance(step, VerifyUrlStep):
+        elif step.action == "verify_url":
             return await self._verify_url(step)
-        elif isinstance(step, VerifyNoErrorsStep):
+        elif step.action == "verify_no_errors":
             return await self._verify_no_errors(step)
         else:
-            self.logger.error(f"❌ Unknown step type: {type(step)}")
+            self.logger.error(f"❌ Unknown step action: {step.action}")
             return False
     
     async def _wait_for_selector(self, step: WaitForSelectorStep) -> bool:

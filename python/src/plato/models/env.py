@@ -5,9 +5,12 @@ from plato.models import PlatoTask, EvaluationResult
 from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
+import aioboto3
 import random
 import logging
 from plato.exceptions import PlatoClientError
+from playwright.async_api import Page
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,7 @@ class PlatoEnvironment:
     )
     _client: "Plato" = Field(description="The client for the environment")
     id: str = Field(description="The ID for the environment (job ID)")
+    env_id: str = Field(description="The ID for the environment (env ID)")
     alias: Optional[str] = Field(description="The alias for the environment (job group alias)", default=None)
     _run_session_id: Optional[str] = Field(
         description="The ID of the active run session", default=None
@@ -48,13 +52,54 @@ class PlatoEnvironment:
         description="The ID of the simulation job", default=None
     )
 
-    def __init__(self, client: "Plato", id: str, alias: Optional[str] = None, sim_job_id: Optional[str] = None):
+    def __init__(self, client: "Plato", id: str, env_id: Optional[str] = None, alias: Optional[str] = None, sim_job_id: Optional[str] = None):
         self._client = client
         self.id = id
+        self.env_id = env_id
         self.alias = alias
         self._run_session_id = None
         self._heartbeat_task = None
         self._sim_job_id = sim_job_id
+
+    async def login(self, page: Page) -> None:
+        """Login to the environment using authentication config.
+        
+        Args:
+            page (Page): The Playwright page to authenticate
+        """
+        from plato.models.flow import Simulator
+        from plato.flow_executor import FlowExecutor
+
+        # Create S3 session and client
+        session = aioboto3.Session()
+        
+        temp_dir = os.path.join('/tmp', self.env_id)
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Download the scripts file from S3
+        async with session.client('s3') as s3_client:
+            await s3_client.download_file(
+                'plato-sim-scripts', 
+                os.path.join(self.env_id, "scripts.yaml"),
+                os.path.join(temp_dir, "scripts.yaml")
+            )
+        
+        # Load and parse the scripts file
+        with open(os.path.join(temp_dir, "scripts.yaml"), "r") as f:
+            scripts = yaml.safe_load(f)
+            simulator = Simulator.model_validate(scripts)
+
+        # Get base dataset and login flow
+        base_dataset = next((dataset for dataset in simulator.datasets if dataset.name == "base"), None)
+        if not base_dataset:
+            raise PlatoClientError("No base dataset found")
+
+        login_flow = next((flow for flow in simulator.flows if flow.name == "login"), None)
+        if not login_flow:
+            raise PlatoClientError("No login flow found")
+
+        flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger)
+        await flow_executor.execute_flow()
 
     async def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.

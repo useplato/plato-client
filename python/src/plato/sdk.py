@@ -121,6 +121,7 @@ class Plato:
             data = await response.json()
             return PlatoEnvironment(
                 client=self,
+                env_id=env_id,
                 id=data["job_id"],
                 alias=data.get("alias"),
                 sim_job_id=data.get("sim_job_id")
