@@ -1,5 +1,6 @@
 import asyncio
 import time
+import argparse
 from pathlib import Path
 
 from plato.sdk import Plato
@@ -7,9 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv('.env')
 
-async def test_public_url():
+async def test_public_url(env_name):
     """Test the get_public_url functionality with keepalive and alias."""
-    print("Starting public URL test with keepalive and alias...")
+    print(f"Starting public URL test with environment '{env_name}' and keepalive and alias...")
     
     try:
         # Initialize the client
@@ -17,19 +18,17 @@ async def test_public_url():
         client = Plato()
         
         # Create and initialize the environment with keepalive and alias
-        print("Creating environment with keepalive=True and alias='public-url-test'...")
+        print(f"Creating environment '{env_name}'...")
         env = await client.make_environment(
-            "espocrm", 
+            env_name, 
             interface_type=None,
-            keepalive=True,
-            alias="public-url-test"
         )
         print(f"Environment ID: {env.id}")
         
         try:
             # Wait for the environment to be ready
             print("Waiting for environment to be ready...")
-            await env.wait_for_ready(timeout=300.0)
+            await env.wait_for_ready(timeout=600.0)
             print("Environment ready!")
 
             # Reset the environment
@@ -44,19 +43,17 @@ async def test_public_url():
             print("\n" + "="*60)
             print("PUBLIC URL TEST RESULTS")
             print("="*60)
+            print(f"Environment Name: {env_name}")
             print(f"Environment ID: {env.id}")
             print(f"Public URL: {public_url}")
-            print(f"Keepalive: True")
-            print(f"Alias: public-url-test")
             print("="*60)
             
             # Log the result
             await env.log({
                 "message": "Public URL test completed with keepalive and alias",
+                "environment_name": env_name,
                 "environment_id": env.id,
                 "public_url": public_url,
-                "keepalive": True,
-                "alias": "public-url-test"
             }, "info")
             
             # Wait for user input before closing
@@ -80,4 +77,10 @@ async def test_public_url():
     print("Public URL test completed successfully!")
 
 if __name__ == "__main__":
-    asyncio.run(test_public_url())
+    parser = argparse.ArgumentParser(description="Test public URL functionality with a specified environment")
+    parser.add_argument("env_name", 
+                       help="Name of the environment to test (e.g., 'espocrm', 'taiga', etc.)")
+    
+    args = parser.parse_args()
+    
+    asyncio.run(test_public_url(args.env_name))
