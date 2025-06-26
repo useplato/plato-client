@@ -8,6 +8,9 @@ import threading
 import random
 import logging
 from plato.exceptions import PlatoClientError
+from playwright.sync_api import Page
+import boto3
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ class SyncPlatoEnvironment:
     )
     _client: "SyncPlato" = Field(description="The client for the environment")
     id: str = Field(description="The ID for the environment (job ID)")
+    env_id: str = Field(description="The ID for the environment (env ID)")
     alias: Optional[str] = Field(description="The alias for the environment (job group alias)", default=None)
     _run_session_id: Optional[str] = Field(
         description="The ID of the active run session", default=None
@@ -48,14 +52,55 @@ class SyncPlatoEnvironment:
     )
     _stop_heartbeat: bool = False
 
-    def __init__(self, client: "SyncPlato", id: str, alias: Optional[str] = None, sim_job_id: Optional[str] = None):
+    def __init__(self, client: "SyncPlato", id: str, env_id: Optional[str] = None, alias: Optional[str] = None, sim_job_id: Optional[str] = None):
         self._client = client
         self.id = id
+        self.env_id = env_id
         self.alias = alias
         self._run_session_id = None
         self._heartbeat_thread = None
         self._sim_job_id = sim_job_id
         self._stop_heartbeat = False
+
+    def login(self, page: Page) -> None:
+        """Login to the environment using authentication config.
+        
+        Args:
+            page (Page): The Playwright page to authenticate
+        """
+        from plato.models.flow import Simulator
+        from plato.sync_flow_executor import SyncFlowExecutor
+
+        # Create S3 client
+        s3_client = boto3.client('s3')
+        
+        # Ensure the temp directory exists
+        temp_dir = os.path.join('/tmp', self.env_id)
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Download the scripts file from S3
+        s3_client.download_file(
+            'plato-sim-scripts', 
+            os.path.join(self.env_id, "scripts.yaml"),
+            os.path.join(temp_dir, "scripts.yaml")
+        )
+        
+        # Load and parse the scripts file
+        with open(os.path.join(temp_dir, "scripts.yaml"), "r") as f:
+            scripts = yaml.safe_load(f)
+            simulator = Simulator.model_validate(scripts)
+
+        # Get base dataset and login flow
+        base_dataset = next((dataset for dataset in simulator.datasets if dataset.name == "base"), None)
+        if not base_dataset:
+            raise PlatoClientError("No base dataset found")
+
+        login_flow = next((flow for flow in simulator.flows if flow.name == "login"), None)
+        if not login_flow:
+            raise PlatoClientError("No login flow found")
+
+        flow_executor = SyncFlowExecutor(page, login_flow, base_dataset, logger=logger)
+        flow_executor.execute_flow()
 
     def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.

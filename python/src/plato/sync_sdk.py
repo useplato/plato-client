@@ -64,7 +64,9 @@ class SyncPlato:
         viewport_width: int = 1920,
         viewport_height: int = 1080,
         interface_type: Optional[Literal["browser"]] = "browser",
+        record_network_requests: bool = False,
         record_actions: bool = False,
+        env_config: Optional[Dict[str, Any]] = None,
         keepalive: bool = False,
         alias: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
@@ -76,7 +78,9 @@ class SyncPlato:
             viewport_width (int): The width of the viewport.
             viewport_height (int): The height of the viewport.
             interface_type (Optional[str]): The type of interface to create. Defaults to "browser".
+            record_network_requests (bool): Whether to record network requests.
             record_actions (bool): Whether to record actions.
+            env_config (Optional[Dict[str, Any]]): Environment configuration.
             keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
             alias (Optional[str]): Optional alias for the job group.
 
@@ -95,7 +99,8 @@ class SyncPlato:
                 "source": "SDK",
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
-                "env_config": {},
+                "env_config": env_config or {},
+                "record_network_requests": record_network_requests,
                 "record_actions": record_actions,
                 "keepalive": keepalive,
                 "alias": alias,
@@ -105,6 +110,7 @@ class SyncPlato:
         data = response.json()
         return SyncPlatoEnvironment(
             client=self,
+            env_id=env_id,
             id=data["job_id"],
             alias=data.get("alias"),
             sim_job_id=data.get("sim_job_id")
