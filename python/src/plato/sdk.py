@@ -124,7 +124,6 @@ class Plato:
                 env_id=env_id,
                 id=data["job_id"],
                 alias=data.get("alias"),
-                sim_job_id=data.get("sim_job_id")
             )
 
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
@@ -483,3 +482,26 @@ class Plato:
             response.raise_for_status()
             res = await response.json()
             return res["testcases"]
+
+    async def get_active_session(self, job_id: str) -> Dict[str, Any]:
+        """Get the active session for a job group.
+
+        Args:
+            job_id (str): The ID of the job group to get the active session for.
+
+        Returns:
+            Dict[str, Any]: The active session information.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If no active session is found.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/env/{job_id}/active_session", headers=headers
+        ) as response:
+            response.raise_for_status()
+            data = await response.json()
+            if "error" in data:
+                raise PlatoClientError(data["error"])
+            return data

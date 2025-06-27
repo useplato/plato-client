@@ -35,31 +35,30 @@ class SyncPlatoEnvironment:
         _heartbeat_thread (Optional[threading.Thread]): Thread for sending periodic heartbeats
     """
 
-    _current_task: Optional[PlatoTask] = Field(
-        description="The current task for the environment", default=None
-    )
-    _client: "SyncPlato" = Field(description="The client for the environment")
-    id: str = Field(description="The ID for the environment (job ID)")
-    env_id: str = Field(description="The ID for the environment (env ID)")
-    alias: Optional[str] = Field(description="The alias for the environment (job group alias)", default=None)
-    _run_session_id: Optional[str] = Field(
-        description="The ID of the active run session", default=None
-    )
+    _current_task: Optional[PlatoTask] = None
+    _client: "SyncPlato" = None
+    id: str = None
+    env_id: str = None
+    alias: Optional[str] = None
+    _run_session_id: Optional[str] = None
     _heartbeat_thread: Optional[threading.Thread] = None
     _heartbeat_interval: int = 30  # seconds
-    _sim_job_id: Optional[str] = Field(
-        description="The ID of the simulation job", default=None
-    )
     _stop_heartbeat: bool = False
 
-    def __init__(self, client: "SyncPlato", id: str, env_id: Optional[str] = None, alias: Optional[str] = None, sim_job_id: Optional[str] = None):
+    def __init__(
+        self,
+        client: "SyncPlato",
+        id: str,
+        env_id: Optional[str] = None,
+        alias: Optional[str] = None,
+        active_session: Optional[str] = None,
+    ):
         self._client = client
         self.id = id
         self.env_id = env_id
         self.alias = alias
-        self._run_session_id = None
+        self._run_session_id = active_session
         self._heartbeat_thread = None
-        self._sim_job_id = sim_job_id
         self._stop_heartbeat = False
 
     def login(self, page: Page) -> None:
@@ -390,8 +389,9 @@ class SyncPlatoEnvironment:
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
 
-        eval_config = self._current_task.eval_config
-        if isinstance(eval_config, CustomEvalConfig):
+        if self._current_task and isinstance(
+            self._current_task.eval_config, CustomEvalConfig
+        ):
             evaluation_result = self.get_evaluation_result()
             state = self.get_state()
             state = state.get('state', {})
@@ -402,6 +402,8 @@ class SyncPlatoEnvironment:
         else:
             # call /evaluate endpoint
             response = self._client.evaluate(self._run_session_id, agent_version)
+            if not response:
+                raise PlatoClientError("No evaluation result found")
             result = response['result']
             return EvaluationResult(
                 success=result.get('correct', False),
@@ -528,3 +530,21 @@ class SyncPlatoEnvironment:
             PlatoClientError: If the backup operation fails.
         """
         return self._client.backup_environment(self.id)
+
+    @staticmethod
+    def from_id(client: "SyncPlato", id: str) -> "SyncPlatoEnvironment":
+        """Create a new environment from an ID.
+
+        Returns:
+            SyncPlatoEnvironment: The new environment instance.
+        """
+        # get the active session
+        active_session = None
+        try:
+            active_session = client.get_active_session(id)
+        except PlatoClientError as e:
+            logger.warning(
+                f"No active session found for job {id}, you must reset the environment to use / evaluate."
+            )
+
+        return SyncPlatoEnvironment(client, id, active_session=active_session)

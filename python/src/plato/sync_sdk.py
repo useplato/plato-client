@@ -113,7 +113,6 @@ class SyncPlato:
             env_id=env_id,
             id=data["job_id"],
             alias=data.get("alias"),
-            sim_job_id=data.get("sim_job_id")
         )
 
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
@@ -432,3 +431,23 @@ class SyncPlato:
             )
             for t in test_cases
         ]
+
+    def get_active_session(self, job_id: str) -> Dict[str, Any]:
+        """Get the active session for a job group.
+
+        Args:
+            job_id (str): The ID of the job group to get the active session for.
+
+        Returns:
+            Dict[str, Any]: The active session information.
+
+        Raises:
+            requests.RequestException: If the API request fails.
+            PlatoClientError: If no active session is found.
+        """
+        response = self.http_session.get(f"{self.base_url}/env/{job_id}/active_session")
+        response.raise_for_status()
+        data = response.json()
+        if "error" in data:
+            raise PlatoClientError(data["error"])
+        return data

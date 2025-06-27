@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from plato.sdk import Plato
 
 
-
 class PlatoEnvironment:
     """A base environment class for Plato that handles task execution and state management.
 
@@ -36,34 +35,34 @@ class PlatoEnvironment:
         _heartbeat_task (Optional[asyncio.Task]): Task for sending periodic heartbeats
     """
 
-    _current_task: Optional[PlatoTask] = Field(
-        description="The current task for the environment", default=None
-    )
-    _client: "Plato" = Field(description="The client for the environment")
-    id: str = Field(description="The ID for the environment (job ID)")
-    env_id: str = Field(description="The ID for the environment (env ID)")
-    alias: Optional[str] = Field(description="The alias for the environment (job group alias)", default=None)
-    _run_session_id: Optional[str] = Field(
-        description="The ID of the active run session", default=None
-    )
+    _current_task: Optional[PlatoTask] = None
+    _client: "Plato" = None
+    id: str = None
+    env_id: str = None
+    alias: Optional[str] = None
+    _run_session_id: Optional[str] = None
     _heartbeat_task: Optional[asyncio.Task] = None
     _heartbeat_interval: int = 30  # seconds
-    _sim_job_id: Optional[str] = Field(
-        description="The ID of the simulation job", default=None
-    )
 
-    def __init__(self, client: "Plato", id: str, env_id: Optional[str] = None, alias: Optional[str] = None, sim_job_id: Optional[str] = None):
+    def __init__(
+        self,
+        client: "Plato",
+        id: str,
+        env_id: Optional[str] = None,
+        alias: Optional[str] = None,
+        active_session: Optional[str] = None,
+    ):
         self._client = client
         self.id = id
         self.env_id = env_id
         self.alias = alias
         self._run_session_id = None
         self._heartbeat_task = None
-        self._sim_job_id = sim_job_id
+        self._run_session_id = active_session
 
     async def login(self, page: Page) -> None:
         """Login to the environment using authentication config.
-        
+
         Args:
             page (Page): The Playwright page to authenticate
         """
@@ -72,29 +71,33 @@ class PlatoEnvironment:
 
         # Create S3 session and client
         session = aioboto3.Session()
-        
-        temp_dir = os.path.join('/tmp', self.env_id)
+
+        temp_dir = os.path.join("/tmp", self.env_id)
         os.makedirs(temp_dir, exist_ok=True)
-        
+
         # Download the scripts file from S3
-        async with session.client('s3') as s3_client:
+        async with session.client("s3") as s3_client:
             await s3_client.download_file(
-                'plato-sim-scripts', 
+                "plato-sim-scripts",
                 os.path.join(self.env_id, "scripts.yaml"),
-                os.path.join(temp_dir, "scripts.yaml")
+                os.path.join(temp_dir, "scripts.yaml"),
             )
-        
+
         # Load and parse the scripts file
         with open(os.path.join(temp_dir, "scripts.yaml"), "r") as f:
             scripts = yaml.safe_load(f)
             simulator = Simulator.model_validate(scripts)
 
         # Get base dataset and login flow
-        base_dataset = next((dataset for dataset in simulator.datasets if dataset.name == "base"), None)
+        base_dataset = next(
+            (dataset for dataset in simulator.datasets if dataset.name == "base"), None
+        )
         if not base_dataset:
             raise PlatoClientError("No base dataset found")
 
-        login_flow = next((flow for flow in simulator.flows if flow.name == "login"), None)
+        login_flow = next(
+            (flow for flow in simulator.flows if flow.name == "login"), None
+        )
         if not login_flow:
             raise PlatoClientError("No login flow found")
 
@@ -136,7 +139,9 @@ class PlatoEnvironment:
 
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
-            logger.debug(f"Waiting for job {self.id} to be running: {current_delay} seconds")
+            logger.debug(
+                f"Waiting for job {self.id} to be running: {current_delay} seconds"
+            )
 
         # wait for the worker to be ready and healthy
         current_delay = base_delay  # Reset delay for worker health check
@@ -157,9 +162,11 @@ class PlatoEnvironment:
 
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
-            logger.debug(f"Waiting for worker {self.id} to be ready: {current_delay} seconds")
+            logger.debug(
+                f"Waiting for worker {self.id} to be ready: {current_delay} seconds"
+            )
 
-         # Start the heartbeat task if not already running
+        # Start the heartbeat task if not already running
         await self._start_heartbeat()
 
     async def __aenter__(self):
@@ -203,7 +210,12 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_cdp_url(self.id)
 
-    async def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None, load_authenticated: bool = False) -> str:
+    async def reset(
+        self,
+        task: Optional[PlatoTask] = None,
+        agent_version: Optional[str] = None,
+        load_authenticated: bool = False,
+    ) -> str:
         """Reset the environment with an optional new task.
 
         Args:
@@ -214,7 +226,9 @@ class PlatoEnvironment:
         Returns:
             str: The environment is reset and a new run session is created.
         """
-        response = await self._client.reset_environment(self.id, task, agent_version, load_authenticated)
+        response = await self._client.reset_environment(
+            self.id, task, agent_version, load_authenticated
+        )
         if task:
             self._current_task = task
 
@@ -227,8 +241,6 @@ class PlatoEnvironment:
             raise PlatoClientError("Failed to reset environment. Please try again.")
 
         return self._run_session_id
-
-
 
     async def _heartbeat_loop(self) -> None:
         """Background task that periodically sends heartbeats to keep the environment active."""
@@ -312,11 +324,11 @@ class PlatoEnvironment:
             _get_nested_value(data, "a.b[1].c") -> 2
         """
         current = data
-        for part in key_path.split('.'):
-            if '[' in part:
+        for part in key_path.split("."):
+            if "[" in part:
                 # Handle list index access
-                key, idx_str = part.split('[')
-                idx = int(idx_str.rstrip(']'))
+                key, idx_str = part.split("[")
+                idx = int(idx_str.rstrip("]"))
                 current = current[key][idx]
             else:
                 current = current[part]
@@ -362,50 +374,54 @@ class PlatoEnvironment:
                     result = await result
                 if isinstance(result, tuple):
                     success, reason = result
-                    return EvaluationResult(success=success, reason=None if success else reason)
+                    return EvaluationResult(
+                        success=success, reason=None if success else reason
+                    )
                 else:
                     # Handle legacy score functions that return just a boolean
                     return EvaluationResult(
                         success=bool(result),
-                        reason=None if result else "Custom evaluation failed"
+                        reason=None if result else "Custom evaluation failed",
                     )
             except Exception as e:
                 return EvaluationResult(
-                    success=False,
-                    reason=f"Custom evaluation error: {str(e)}"
+                    success=False, reason=f"Custom evaluation error: {str(e)}"
                 )
 
         else:
             return EvaluationResult(
-                success=False,
-                reason=f"Unknown evaluation type: {eval_config.type}"
+                success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
     async def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
 
-        eval_config = self._current_task.eval_config
-        if isinstance(eval_config, CustomEvalConfig):
+        if self._current_task and isinstance(
+            self._current_task.eval_config, CustomEvalConfig
+        ):
             evaluation_result = await self.get_evaluation_result()
             state = await self.get_state()
-            state = state.get('state', {})
-            mutations = state.get('mutations', [])
+            state = state.get("state", {})
+            mutations = state.get("mutations", [])
             if self._run_session_id:
-                await self._client.post_evaluation_result(self._run_session_id, evaluation_result, agent_version, mutations)
+                await self._client.post_evaluation_result(
+                    self._run_session_id, evaluation_result, agent_version, mutations
+                )
             return evaluation_result
         else:
             # call /evaluate endpoint
             response = await self._client.evaluate(self._run_session_id, agent_version)
-            result = response['result']
+            if not response:
+                raise PlatoClientError("No evaluation result found")
+            result = response["result"]
             return EvaluationResult(
-                success=result.get('correct', False),
-                reason=result.get('reason', None),
-                diffs=result.get('diffs', None),
-                expected_mutations=result.get('expected_mutations', None),
-                actual_mutations=result.get('actual_mutations', None),
+                success=result.get("correct", False),
+                reason=result.get("reason", None),
+                diffs=result.get("diffs", None),
+                expected_mutations=result.get("expected_mutations", None),
+                actual_mutations=result.get("actual_mutations", None),
             )
-
 
     async def log(self, log: dict, type: str = "info") -> None:
         """Log a message to the environment.
@@ -459,7 +475,10 @@ class PlatoEnvironment:
                 proxy_server = "http://localhost:8888"
             elif "staging.plato.so" in self._client.base_url:
                 proxy_server = "https://staging.proxy.plato.so"
-            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url:
+            elif (
+                "plato.so" in self._client.base_url
+                and "staging" not in self._client.base_url
+            ):
                 proxy_server = "https://proxy.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
@@ -467,7 +486,7 @@ class PlatoEnvironment:
             return {
                 "server": proxy_server,
                 "username": self.id,
-                "password": self._run_session_id
+                "password": self._run_session_id,
             }
         except Exception as e:
             raise PlatoClientError(str(e))
@@ -488,13 +507,16 @@ class PlatoEnvironment:
         try:
             # Use alias if available, otherwise use environment ID
             identifier = self.alias if self.alias else self.id
-            
+
             # Determine environment based on base_url
             if "localhost:8080" in self._client.base_url:
                 return f"http://localhost:8081/{identifier}"
             elif "staging.plato.so" in self._client.base_url:
                 return f"https://{identifier}.staging.sims.plato.so"
-            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url:
+            elif (
+                "plato.so" in self._client.base_url
+                and "staging" not in self._client.base_url
+            ):
                 return f"https://{identifier}.sims.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
@@ -502,8 +524,7 @@ class PlatoEnvironment:
             raise PlatoClientError(str(e))
 
     async def get_session_url(self) -> str:
-        """Get the URL for accessing the session of the environment.
-        """
+        """Get the URL for accessing the session of the environment."""
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
         root_url = self._client.base_url.split("/api")[0]
@@ -531,3 +552,21 @@ class PlatoEnvironment:
             PlatoClientError: If the backup operation fails.
         """
         return await self._client.backup_environment(self.id)
+
+    @staticmethod
+    async def from_id(client: "Plato", id: str) -> "PlatoEnvironment":
+        """Create a new environment from an ID.
+
+        Returns:
+            PlatoEnvironment: The new environment instance.
+        """
+        # get the active session
+        active_session = None
+        try:
+            active_session = await client.get_active_session(id)
+        except PlatoClientError as e:
+            logger.warning(
+                f"No active session found for job {id}, you must reset the environment to use / evaluate."
+            )
+
+        return PlatoEnvironment(client, id, active_session=active_session)
