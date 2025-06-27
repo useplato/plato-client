@@ -1,4 +1,5 @@
-from plato import SyncPlato, SyncPlatoEnvironment
+from plato.sync_sdk import SyncPlato
+from plato.sync_env import SyncPlatoEnvironment
 
 client = SyncPlato()
 
