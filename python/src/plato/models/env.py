@@ -568,4 +568,6 @@ class PlatoEnvironment:
                 f"No active session found for job {id}, remember to reset the environment to use / evaluate."
             )
 
-        return PlatoEnvironment(client, id, active_session=active_session)
+        env = PlatoEnvironment(client, id, active_session=active_session)
+        await env._start_heartbeat()
+        return env
