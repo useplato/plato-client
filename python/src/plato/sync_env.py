@@ -547,4 +547,6 @@ class SyncPlatoEnvironment:
                 f"No active session found for job {id}, you must reset the environment to use / evaluate."
             )
 
-        return SyncPlatoEnvironment(client, id, active_session=active_session)
+        env = SyncPlatoEnvironment(client, id, active_session=active_session)
+        env._start_heartbeat()
+        return env
