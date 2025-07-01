@@ -542,9 +542,9 @@ class SyncPlatoEnvironment:
         active_session = None
         try:
             active_session = client.get_active_session(id)
-        except PlatoClientError as e:
+        except Exception as e:
             logger.warning(
-                f"No active session found for job {id}, you must reset the environment to use / evaluate."
+                f"No active session found for job {id}, remember to reset the environment to use / evaluate."
             )
 
         return SyncPlatoEnvironment(client, id, active_session=active_session)
