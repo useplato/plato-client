@@ -34,7 +34,6 @@ if not PLATO_API_KEY:
         "PLATO_API_KEY environment variable is not set. Please set it in your .env file."
     )
 
-PLATO_API_URL = os.environ.get("PLATO_API_URL", "https://plato.so/api")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please set it in your .env file."
 
@@ -274,7 +273,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    client = Plato(base_url=PLATO_API_URL, api_key=PLATO_API_KEY)
+    client = Plato(api_key=PLATO_API_KEY)
 
     # Get available simulators
     simulators = await client.list_simulators()
