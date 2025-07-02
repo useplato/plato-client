@@ -410,7 +410,7 @@ class SyncPlatoEnvironment:
                 reason=result.get('reason', None),
                 diffs=result.get('diffs', None),
                 expected_mutations=result.get('expected_mutations', None),
-                actual_mutations=result.get('actual_mutations', None),
+                actual_mutations=result.get('mutations', None),
             )
 
     def log(self, log: dict, type: str = "info") -> None:
@@ -495,7 +495,7 @@ class SyncPlatoEnvironment:
         try:
             # Use alias if available, otherwise use environment ID
             identifier = self.alias if self.alias else self.id
-            
+
             # Determine environment based on base_url
             if "localhost:8080" in self._client.base_url:
                 return f"http://localhost:8081/{identifier}"

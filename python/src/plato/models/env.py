@@ -1,6 +1,5 @@
 import os
 from plato.models.task import CustomEvalConfig
-from pydantic import Field
 from plato.models import PlatoTask, EvaluationResult
 from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
@@ -420,7 +419,7 @@ class PlatoEnvironment:
                 reason=result.get("reason", None),
                 diffs=result.get("diffs", None),
                 expected_mutations=result.get("expected_mutations", None),
-                actual_mutations=result.get("actual_mutations", None),
+                actual_mutations=result.get("mutations", None),
             )
 
     async def log(self, log: dict, type: str = "info") -> None:
@@ -564,7 +563,7 @@ class PlatoEnvironment:
         active_session = None
         try:
             active_session = await client.get_active_session(id)
-        except Exception as e:
+        except Exception:
             logger.warning(
                 f"No active session found for job {id}, remember to reset the environment to use / evaluate."
             )

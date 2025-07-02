@@ -123,6 +123,14 @@ username: user
 password: bitnami
 """,
     },
+    "getcalfresh": {
+        "base_prompt": """
+You are a helpful assistant that can help me use GetCalFresh.
+start by going to {start_url}. Do not navigate to other websites.
+Here is the task:
+{prompt}
+""",
+    },
 }
 
 
