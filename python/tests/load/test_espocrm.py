@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 from playwright.async_api import async_playwright
-from plato.models import PlatoTask
 from plato.sdk import Plato
 
 from dotenv import load_dotenv
@@ -54,22 +53,18 @@ class TestMetrics:
             "error": self.error
         }
 
-async def run_single_espocrm_test(test_id: int) -> TestMetrics:
+async def run_single_espocrm_test(test_id: int, client: Plato, tasks: List) -> TestMetrics:
     """Run a single EspoCRM login test with metrics tracking."""
     metrics = TestMetrics()
-    
+
     try:
-        # Initialize the client
-        step_start = time.time()
-        client = Plato()
-        tasks = await client.load_tasks("espocrm")
-        
         # Create and initialize the EspoCRM environment
+        step_start = time.time()
         env = await client.make_environment("espocrm", open_page_on_start=True)
         metrics.add_step_timing("environment_creation", time.time() - step_start)
         metrics.set_environment_id(env.id)
         print(f"Test {test_id}: Environment ID: {env.id}")
-        
+
         try:
             # Wait for the environment to be ready
             step_start = time.time()
@@ -77,29 +72,29 @@ async def run_single_espocrm_test(test_id: int) -> TestMetrics:
             await env.wait_for_ready(timeout=300.0)
             metrics.add_step_timing("environment_ready", time.time() - step_start)
             print(f"Test {test_id}: Environment ready")
-            
+
             # Perform the complete workflow 3 times (reset + browser operations)
             workflow_times = []
             for iteration in range(3):
                 iteration_start = time.time()
                 print(f"\nTest {test_id}: Starting iteration #{iteration + 1}")
-                
+
                 # Reset the environment
                 reset_start = time.time()
                 await env.reset(task=tasks[0])
                 reset_duration = time.time() - reset_start
                 print(f"Test {test_id}: Environment reset #{iteration + 1} completed in {reset_duration:.2f}s")
-                
+
                 # Get the CDP URL for browser connection
                 cdp_start = time.time()
                 print(f"Test {test_id}: Getting CDP URL...")
                 cdp_url = await env.get_cdp_url()
                 cdp_duration = time.time() - cdp_start
-                
+
                 # Get live view URL
                 live_url = await client.get_live_view_url(env.id)
                 print(f"Test {test_id}: Live view URL: {live_url}")
-                
+
                 # Connect to browser and perform login
                 browser_start = time.time()
                 async with async_playwright() as p:
@@ -107,69 +102,65 @@ async def run_single_espocrm_test(test_id: int) -> TestMetrics:
                     context = browser.contexts[0]
                     page = context.pages[0]
                     print(f"Test {test_id}: Connected to browser for iteration #{iteration + 1}")
-                    
+
                     # Take screenshot after navigation
                     await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_homepage.png"))
                     print(f"Test {test_id}: Homepage screenshot taken for iteration #{iteration + 1}")
-                    
+
                     # Fill in username and password
                     print(f"Test {test_id}: Filling in credentials...")
                     await page.fill('input#field-userName', 'admin')
                     await page.fill('input#field-password', 'password')
-                    
+
                     # Take screenshot before submitting
                     await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_before_submit.png"))
-                    
+
                     # Click the login button
                     print(f"Test {test_id}: Clicking submit button...")
                     await page.click('[data-name="submit"] button, [data-name="submit"] input[type="submit"]')
-                    
+
                     # Wait for login to process
                     await page.wait_for_timeout(3000)
                     print(f"Test {test_id}: Login submitted for iteration #{iteration + 1}")
-                    
+
                     # Take screenshot after login attempt
                     await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_after_login.png"))
                     print(f"Test {test_id}: Login attempt completed for iteration #{iteration + 1}")
-                    
+
                     # Get final state
                     state = await env.get_state()
                     print(f"Test {test_id}: Final state for iteration #{iteration + 1}: {state}")
-                    
+
                     # Wait a bit to observe the result
                     await page.wait_for_timeout(2000)
                     await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_final.png"))
                     print(f"Test {test_id}: Final screenshot taken for iteration #{iteration + 1}")
-                
+
                 browser_duration = time.time() - browser_start
                 iteration_duration = time.time() - iteration_start
                 workflow_times.append(iteration_duration)
-                
+
                 print(f"Test {test_id}: Iteration #{iteration + 1} completed in {iteration_duration:.2f}s")
-                
+
                 # Brief pause between iterations
                 if iteration < 2:  # Don't wait after the last iteration
                     await asyncio.sleep(1)
-            
+
             # Record aggregate timing metrics
             total_workflow_time = sum(workflow_times)
             metrics.add_step_timing("total_workflow_iterations", total_workflow_time)
             metrics.add_step_timing("average_iteration_time", total_workflow_time / 3)
             print(f"Test {test_id}: All 3 iterations completed in {total_workflow_time:.2f}s (avg: {total_workflow_time / 3:.2f}s)")
-            
+
             metrics.complete(success=True)
-            
+
         finally:
             # Always ensure we close the environment
             step_start = time.time()
             await env.close()
             metrics.add_step_timing("environment_closure", time.time() - step_start)
             print(f"Test {test_id}: Environment closed")
-            
-            # Close the client to cleanup aiohttp session
-            await client.close()
-            print(f"Test {test_id}: Client closed")
-            
+
     except Exception as e:
         metrics.complete(success=False, error=e)
         print(f"Test {test_id} failed with error: {e}")
@@ -181,7 +172,7 @@ async def run_single_espocrm_test(test_id: int) -> TestMetrics:
 async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
     """
     Run EspoCRM load test with specified number of concurrent tests and total test count.
-    
+
     Args:
         num_concurrent (int): Number of tests to run concurrently
         total_tests (int): Total number of tests to run
@@ -190,32 +181,44 @@ async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
     start_time = time.time()
 
     print(f"Starting EspoCRM load test: {total_tests} total tests, {num_concurrent} concurrent")
-    
-    # Run tests in batches
-    for batch_start in range(0, total_tests, num_concurrent):
-        batch_size = min(num_concurrent, total_tests - batch_start)
-        batch_tasks = [
-            run_single_espocrm_test(test_id)
-            for test_id in range(batch_start, batch_start + batch_size)
-        ]
-        
-        print(f"Starting batch of {batch_size} tests (tests {batch_start} to {batch_start + batch_size - 1})...")
-        batch_results = await asyncio.gather(*batch_tasks)
-        all_metrics.extend([m.to_dict() for m in batch_results])
-        
-        # Brief pause between batches to avoid overwhelming the system
-        if batch_start + batch_size < total_tests:
-            print("Pausing between batches...")
-            await asyncio.sleep(2)
+
+    # Initialize the client and load tasks once
+    print("Initializing client and loading tasks...")
+    client = Plato(base_url="https://staging.plato.so/api")
+    tasks = await client.load_tasks("espocrm")
+    print(f"Loaded {len(tasks)} tasks")
+
+    try:
+        # Run tests in batches
+        for batch_start in range(0, total_tests, num_concurrent):
+            batch_size = min(num_concurrent, total_tests - batch_start)
+            batch_tasks = [
+                run_single_espocrm_test(test_id, client, tasks)
+                for test_id in range(batch_start, batch_start + batch_size)
+            ]
+
+            print(f"Starting batch of {batch_size} tests (tests {batch_start} to {batch_start + batch_size - 1})...")
+            batch_results = await asyncio.gather(*batch_tasks)
+            all_metrics.extend([m.to_dict() for m in batch_results])
+
+            # Brief pause between batches to avoid overwhelming the system
+            if batch_start + batch_size < total_tests:
+                print("Pausing between batches...")
+                await asyncio.sleep(2)
+
+    finally:
+        # Always ensure we close the client to cleanup aiohttp session
+        await client.close()
+        print("Client closed")
 
     # Calculate and save aggregate metrics
     end_time = time.time()
     total_duration = end_time - start_time
     successful_tests = sum(1 for m in all_metrics if m["success"])
-    
+
     # Calculate step-specific metrics
     step_averages = {}
-    for step_name in ["environment_creation", "environment_ready", "total_workflow_iterations", 
+    for step_name in ["environment_creation", "environment_ready", "total_workflow_iterations",
                       "average_iteration_time", "environment_closure"]:
         step_times = [m["steps_timing"].get(step_name, 0) for m in all_metrics if m["steps_timing"].get(step_name)]
         if step_times:
@@ -224,7 +227,7 @@ async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
                 "min": min(step_times),
                 "max": max(step_times)
             }
-    
+
     aggregate_metrics = {
         "test_type": "espocrm_login",
         "total_tests": total_tests,
@@ -254,30 +257,37 @@ async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
     print(f"Total Duration: {total_duration:.2f} seconds")
     print(f"Tests per Second: {total_tests / total_duration:.2f}")
     print(f"Success Rate: {(successful_tests / total_tests) * 100:.2f}%")
-    
+
     if step_averages:
-        print(f"\nStep Performance (Average Duration):")
+        print("\nStep Performance (Average Duration):")
         for step, times in step_averages.items():
             print(f"  {step}: {times['average']:.2f}s (min: {times['min']:.2f}s, max: {times['max']:.2f}s)")
-    
+
     print(f"\nDetailed metrics saved to: {metrics_file}")
     print(f"Screenshots saved to: {SCREENSHOTS_DIR}")
     print("="*60)
 
 async def test_espocrm_login():
     """Test connecting to EspoCRM environment and logging in to espocrm.com - single test version."""
-    metrics = await run_single_espocrm_test(0)
-    print(f"\nSingle test completed - Success: {metrics.success}, Duration: {metrics.total_duration:.2f}s")
-    if not metrics.success:
-        print(f"Error: {metrics.error}")
+    # Initialize the client and load tasks once
+    client = Plato(base_url="https://staging.plato.so/api")
+    tasks = await client.load_tasks("espocrm")
+
+    try:
+        metrics = await run_single_espocrm_test(0, client, tasks)
+        print(f"\nSingle test completed - Success: {metrics.success}, Duration: {metrics.total_duration:.2f}s")
+        if not metrics.success:
+            print(f"Error: {metrics.error}")
+    finally:
+        await client.close()
 
 if __name__ == "__main__":
     # Configure these parameters as needed
-    NUM_CONCURRENT_TESTS = 25   # Number of tests to run concurrently
-    TOTAL_TESTS = 50           # Total number of tests to run
+    NUM_CONCURRENT_TESTS = 250   # Number of tests to run concurrently
+    TOTAL_TESTS = 250           # Total number of tests to run
     RUN_LOAD_TEST = True        # Set to False to run single test instead
-    
+
     if RUN_LOAD_TEST:
         asyncio.run(run_espocrm_load_test(NUM_CONCURRENT_TESTS, TOTAL_TESTS))
     else:
-        asyncio.run(test_espocrm_login()) 
+        asyncio.run(test_espocrm_login())
