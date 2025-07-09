@@ -206,6 +206,8 @@ class BaseComputerBrowserTool:
       "arrowdown": "ArrowDown",
       "down": "ArrowDown",
       "super": "Meta",
+      "space": "Space",
+      "backspace": "Backspace",
     }
     return key_mapping.get(key, key)
 
