@@ -13,7 +13,7 @@ dependencies = [
     "lmnr>=0.5.1",
     "nova-act>=1.0.2734.0",
     "openai>=1.66.3",
-    "plato-sdk==1.0.51",
+    "plato-sdk==1.0.52",
     "playwright>=1.48.0",
     "uvicorn>=0.34.2",
 ]
