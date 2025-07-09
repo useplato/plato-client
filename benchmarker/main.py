@@ -325,9 +325,9 @@ async def main():
         agent_versions = ["browser_use", "anthropic", "openai_cua"]
         agent_version = agent_versions[agent_choice-1]
 
-        tag = input("Enter optional tag for agent version (press enter to skip): ")
-        if tag:
-            agent_version = f"{agent_version}_v{tag}"
+    tag = args.tag or input("Enter optional tag for agent version (press enter to skip): ")
+    if tag:
+        agent_version = f"{agent_version}_v{tag}"
 
     # Get runs and concurrency
     num_runs = args.runs or int(input("Enter number of runs per task: ") or "1")
