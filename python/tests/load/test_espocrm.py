@@ -60,7 +60,7 @@ async def run_single_espocrm_test(test_id: int, client: Plato, tasks: List) -> T
     try:
         # Create and initialize the EspoCRM environment
         step_start = time.time()
-        env = await client.make_environment("espocrm", open_page_on_start=True)
+        env = await client.make_environment("espocrm", open_page_on_start=True, interface_type=None)
         metrics.add_step_timing("environment_creation", time.time() - step_start)
         metrics.set_environment_id(env.id)
         print(f"Test {test_id}: Environment ID: {env.id}")
@@ -69,7 +69,7 @@ async def run_single_espocrm_test(test_id: int, client: Plato, tasks: List) -> T
             # Wait for the environment to be ready
             step_start = time.time()
             print(f"Test {test_id}: Waiting for environment to be ready...")
-            await env.wait_for_ready(timeout=300.0)
+            await env.wait_for_ready()
             metrics.add_step_timing("environment_ready", time.time() - step_start)
             print(f"Test {test_id}: Environment ready")
 
@@ -85,23 +85,25 @@ async def run_single_espocrm_test(test_id: int, client: Plato, tasks: List) -> T
                 reset_duration = time.time() - reset_start
                 print(f"Test {test_id}: Environment reset #{iteration + 1} completed in {reset_duration:.2f}s")
 
-                # Get the CDP URL for browser connection
-                cdp_start = time.time()
-                print(f"Test {test_id}: Getting CDP URL...")
-                cdp_url = await env.get_cdp_url()
-                cdp_duration = time.time() - cdp_start
-
-                # Get live view URL
-                live_url = await client.get_live_view_url(env.id)
-                print(f"Test {test_id}: Live view URL: {live_url}")
+                # Get the public URL for browser navigation
+                public_url_start = time.time()
+                print(f"Test {test_id}: Getting public URL...")
+                public_url = await env.get_public_url()
+                public_url_duration = time.time() - public_url_start
+                metrics.add_step_timing("public_url_retrieval", public_url_duration)
 
                 # Connect to browser and perform login
                 browser_start = time.time()
                 async with async_playwright() as p:
-                    browser = await p.chromium.connect_over_cdp(cdp_url)
-                    context = browser.contexts[0]
-                    page = context.pages[0]
-                    print(f"Test {test_id}: Connected to browser for iteration #{iteration + 1}")
+                    browser = await p.chromium.launch(headless=True)
+                    context = await browser.new_context()
+                    page = await context.new_page()
+                    print(f"Test {test_id}: Created new headless browser for iteration #{iteration + 1}")
+
+                    # Navigate to the public URL
+                    print(f"Test {test_id}: Navigating to public URL: {public_url}")
+                    await page.goto(public_url)
+                    print(f"Test {test_id}: Successfully navigated to public URL")
 
                     # Take screenshot after navigation
                     await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_homepage.png"))
@@ -135,6 +137,10 @@ async def run_single_espocrm_test(test_id: int, client: Plato, tasks: List) -> T
                     await page.wait_for_timeout(2000)
                     await page.screenshot(path=str(SCREENSHOTS_DIR / f"test_{test_id}_iteration_{iteration + 1}_final.png"))
                     print(f"Test {test_id}: Final screenshot taken for iteration #{iteration + 1}")
+
+                    # Close the browser
+                    await browser.close()
+                    print(f"Test {test_id}: Browser closed for iteration #{iteration + 1}")
 
                 browser_duration = time.time() - browser_start
                 iteration_duration = time.time() - iteration_start
@@ -219,7 +225,7 @@ async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
     # Calculate step-specific metrics
     step_averages = {}
     for step_name in ["environment_creation", "environment_ready", "total_workflow_iterations",
-                      "average_iteration_time", "environment_closure"]:
+                      "average_iteration_time", "environment_closure", "public_url_retrieval"]:
         step_times = [m["steps_timing"].get(step_name, 0) for m in all_metrics if m["steps_timing"].get(step_name)]
         if step_times:
             step_averages[step_name] = {
@@ -283,8 +289,8 @@ async def test_espocrm_login():
 
 if __name__ == "__main__":
     # Configure these parameters as needed
-    NUM_CONCURRENT_TESTS = 250   # Number of tests to run concurrently
-    TOTAL_TESTS = 250           # Total number of tests to run
+    NUM_CONCURRENT_TESTS = 25   # Number of tests to run concurrently
+    TOTAL_TESTS = 25          # Total number of tests to run
     RUN_LOAD_TEST = True        # Set to False to run single test instead
 
     if RUN_LOAD_TEST:

@@ -428,6 +428,7 @@ class SyncPlato:
                 env_id=t["simulator"]["name"],
                 average_time=t.get("averageTimeTaken"),
                 average_steps=t.get("averageStepsTaken"),
+                num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
             )
             for t in test_cases
         ]
