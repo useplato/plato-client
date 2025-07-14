@@ -78,6 +78,7 @@ class Plato:
         env_config: Optional[Dict[str, Any]] = None,
         keepalive: bool = False,
         alias: Optional[str] = None,
+        fast: bool = False,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -92,6 +93,7 @@ class Plato:
             env_config (Optional[Dict[str, Any]]): Environment configuration.
             keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
             alias (Optional[str]): Optional alias for the job group.
+            fast (bool): Fast mode flag.
 
         Returns:
             PlatoEnvironment: The created environment instance.
@@ -114,6 +116,7 @@ class Plato:
                 "record_actions": record_actions,
                 "keepalive": keepalive,
                 "alias": alias,
+                "fast": fast,
             },
             headers=headers,
         ) as response:
@@ -124,6 +127,7 @@ class Plato:
                 env_id=env_id,
                 id=data["job_id"],
                 alias=data.get("alias"),
+                fast=fast,
             )
 
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:

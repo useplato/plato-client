@@ -26,14 +26,16 @@ export class PlatoEnvironment {
   private client: Plato;
   public id: string;
   public alias: string | null = null;
+  public fast: boolean = false;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private heartbeatIntervalMs: number = 30000; // 30 seconds
   private runSessionId: string | null = null;
 
-  constructor(client: Plato, id: string, alias?: string) {
+  constructor(client: Plato, id: string, alias?: string, fast: boolean = false) {
     this.client = client;
     this.id = id;
     this.alias = alias || null;
+    this.fast = fast;
     this.startHeartbeat();
   }
 
@@ -176,6 +178,7 @@ export class PlatoEnvironment {
    * 
    * @returns The public URL for this environment based on the deployment environment.
    *          Uses alias if available, otherwise uses environment ID.
+   *          - Dev: https://{alias|env.id}.dev.sims.plato.so
    *          - Staging: https://{alias|env.id}.staging.sims.plato.so
    *          - Production: https://{alias|env.id}.sims.plato.so  
    *          - Local: http://localhost:8081/{alias|env.id}
@@ -189,9 +192,11 @@ export class PlatoEnvironment {
       // Determine environment based on base_url
       if (this.client.baseUrl.includes('localhost:8080')) {
         return `http://localhost:8081/${identifier}`;
+      } else if (this.client.baseUrl.includes('dev.plato.so')) {
+        return `https://${identifier}.dev.sims.plato.so`;
       } else if (this.client.baseUrl.includes('staging.plato.so')) {
         return `https://${identifier}.staging.sims.plato.so`;
-      } else if (this.client.baseUrl.includes('plato.so') && !this.client.baseUrl.includes('staging')) {
+      } else if (this.client.baseUrl.includes('plato.so') && !this.client.baseUrl.includes('staging') && !this.client.baseUrl.includes('dev')) {
         return `https://${identifier}.sims.plato.so`;
       } else {
         throw new PlatoClientError('Unknown base URL');
@@ -232,6 +237,7 @@ export class Plato {
    * @param recordActions Whether to record actions
    * @param keepalive If true, jobs will not be killed due to heartbeat failures
    * @param alias Optional alias for the job group
+   * @param fast Fast mode flag
    * @returns The created environment instance
    * @throws PlatoClientError If the API request fails
    */
@@ -240,8 +246,12 @@ export class Plato {
     openPageOnStart: boolean = false,
     recordActions: boolean = false,
     keepalive: boolean = false,
-    alias?: string
+    alias?: string,
+    fast: boolean = false
   ): Promise<PlatoEnvironment> {
+    if (fast) {
+      console.log('Running in fast mode');
+    }
     try {
       const response = await this.http.post('/env/make2', {
         interface_type: "browser",
@@ -254,9 +264,10 @@ export class Plato {
         record_actions: recordActions,
         keepalive: keepalive,
         alias: alias,
+        fast: fast,
       });
 
-      return new PlatoEnvironment(this, response.data.job_id, response.data.alias);
+      return new PlatoEnvironment(this, response.data.job_id, response.data.alias, fast);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         throw new PlatoClientError(error.message);

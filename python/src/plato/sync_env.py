@@ -52,6 +52,7 @@ class SyncPlatoEnvironment:
         env_id: Optional[str] = None,
         alias: Optional[str] = None,
         active_session: Optional[str] = None,
+        fast: bool = False,
     ):
         self._client = client
         self.id = id
@@ -60,6 +61,7 @@ class SyncPlatoEnvironment:
         self._run_session_id = active_session
         self._heartbeat_thread = None
         self._stop_heartbeat = False
+        self.fast = fast
 
     def login(self, page: Page) -> None:
         """Login to the environment using authentication config.
@@ -464,9 +466,11 @@ class SyncPlatoEnvironment:
             # Extract the base domain from the base_url
             if "localhost:8080" in self._client.base_url:
                 proxy_server = "http://localhost:8888"
+            elif "dev.plato.so" in self._client.base_url:
+                proxy_server = "https://dev.proxy.plato.so"
             elif "staging.plato.so" in self._client.base_url:
                 proxy_server = "https://staging.proxy.plato.so"
-            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url:
+            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url and "dev" not in self._client.base_url:
                 proxy_server = "https://proxy.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
@@ -485,6 +489,7 @@ class SyncPlatoEnvironment:
         Returns:
             str: The public URL for this environment based on the deployment environment.
                  Uses alias if available, otherwise uses environment ID.
+                 - Dev: https://{alias|env.id}.dev.sims.plato.so
                  - Staging: https://{alias|env.id}.staging.sims.plato.so
                  - Production: https://{alias|env.id}.sims.plato.so
                  - Local: http://localhost:8081/{alias|env.id}
@@ -499,9 +504,11 @@ class SyncPlatoEnvironment:
             # Determine environment based on base_url
             if "localhost:8080" in self._client.base_url:
                 return f"http://localhost:8081/{identifier}"
+            elif "dev.plato.so" in self._client.base_url:
+                return f"https://{identifier}.dev.sims.plato.so"
             elif "staging.plato.so" in self._client.base_url:
                 return f"https://{identifier}.staging.sims.plato.so"
-            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url:
+            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url and "dev" not in self._client.base_url:
                 return f"https://{identifier}.sims.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
@@ -532,7 +539,7 @@ class SyncPlatoEnvironment:
         return self._client.backup_environment(self.id)
 
     @staticmethod
-    def from_id(client: "SyncPlato", id: str) -> "SyncPlatoEnvironment":
+    def from_id(client: "SyncPlato", id: str, fast: bool = False) -> "SyncPlatoEnvironment":
         """Create a new environment from an ID.
 
         Returns:
@@ -547,6 +554,6 @@ class SyncPlatoEnvironment:
                 f"No active session found for job {id}, remember to reset the environment to use / evaluate."
             )
 
-        env = SyncPlatoEnvironment(client, id, active_session=active_session)
+        env = SyncPlatoEnvironment(client, id, active_session=active_session, fast=fast)
         env._start_heartbeat()
         return env

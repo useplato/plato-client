@@ -69,6 +69,7 @@ class SyncPlato:
         env_config: Optional[Dict[str, Any]] = None,
         keepalive: bool = False,
         alias: Optional[str] = None,
+        fast: bool = False,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -83,6 +84,7 @@ class SyncPlato:
             env_config (Optional[Dict[str, Any]]): Environment configuration.
             keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
             alias (Optional[str]): Optional alias for the job group.
+            fast (bool): Fast mode flag.
 
         Returns:
             SyncPlatoEnvironment: The created environment instance.
@@ -104,6 +106,7 @@ class SyncPlato:
                 "record_actions": record_actions,
                 "keepalive": keepalive,
                 "alias": alias,
+                "fast": fast,
             },
         )
         response.raise_for_status()
@@ -113,6 +116,7 @@ class SyncPlato:
             env_id=env_id,
             id=data["job_id"],
             alias=data.get("alias"),
+            fast=fast,
         )
 
     def get_job_status(self, job_id: str) -> Dict[str, Any]:

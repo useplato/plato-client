@@ -50,6 +50,7 @@ class PlatoEnvironment:
         env_id: Optional[str] = None,
         alias: Optional[str] = None,
         active_session: Optional[str] = None,
+        fast: bool = False,
     ):
         self._client = client
         self.id = id
@@ -58,6 +59,7 @@ class PlatoEnvironment:
         self._run_session_id = None
         self._heartbeat_task = None
         self._run_session_id = active_session
+        self.fast = fast
 
     async def login(self, page: Page) -> None:
         """Login to the environment using authentication config.
@@ -118,7 +120,7 @@ class PlatoEnvironment:
         """
         start_time = time.time()
         base_delay = 0.5  # Starting delay in seconds
-        max_delay = 8.0  # Maximum delay between retries
+        max_delay = 2.0  # Maximum delay between retries
 
         # wait for the job to be running
         current_delay = base_delay
@@ -472,11 +474,14 @@ class PlatoEnvironment:
             # Extract the base domain from the base_url
             if "localhost:8080" in self._client.base_url:
                 proxy_server = "http://localhost:8888"
+            elif "dev.plato.so" in self._client.base_url:
+                proxy_server = "https://dev.proxy.plato.so"
             elif "staging.plato.so" in self._client.base_url:
                 proxy_server = "https://staging.proxy.plato.so"
             elif (
                 "plato.so" in self._client.base_url
                 and "staging" not in self._client.base_url
+                and "dev" not in self._client.base_url
             ):
                 proxy_server = "https://proxy.plato.so"
             else:
@@ -496,6 +501,7 @@ class PlatoEnvironment:
         Returns:
             str: The public URL for this environment based on the deployment environment.
                  Uses alias if available, otherwise uses environment ID.
+                 - Dev: https://{alias|env.id}.dev.sims.plato.so
                  - Staging: https://{alias|env.id}.staging.sims.plato.so
                  - Production: https://{alias|env.id}.sims.plato.so
                  - Local: http://localhost:8081/{alias|env.id}
@@ -510,11 +516,14 @@ class PlatoEnvironment:
             # Determine environment based on base_url
             if "localhost:8080" in self._client.base_url:
                 return f"http://localhost:8081/{identifier}"
+            elif "dev.plato.so" in self._client.base_url:
+                return f"https://{identifier}.dev.sims.plato.so"
             elif "staging.plato.so" in self._client.base_url:
                 return f"https://{identifier}.staging.sims.plato.so"
             elif (
                 "plato.so" in self._client.base_url
                 and "staging" not in self._client.base_url
+                and "dev" not in self._client.base_url
             ):
                 return f"https://{identifier}.sims.plato.so"
             else:
@@ -553,7 +562,7 @@ class PlatoEnvironment:
         return await self._client.backup_environment(self.id)
 
     @staticmethod
-    async def from_id(client: "Plato", id: str) -> "PlatoEnvironment":
+    async def from_id(client: "Plato", id: str, fast: bool = False) -> "PlatoEnvironment":
         """Create a new environment from an ID.
 
         Returns:
@@ -568,6 +577,6 @@ class PlatoEnvironment:
                 f"No active session found for job {id}, remember to reset the environment to use / evaluate."
             )
 
-        env = PlatoEnvironment(client, id, active_session=active_session)
+        env = PlatoEnvironment(client, id, active_session=active_session, fast=fast)
         await env._start_heartbeat()
         return env
