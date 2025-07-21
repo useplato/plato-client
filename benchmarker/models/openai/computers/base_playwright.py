@@ -153,7 +153,7 @@ class BasePlaywrightComputer(Computer):
         if not self._page:
              raise RuntimeError("Page is not initialized")
         await self._page.mouse.move(x, y)
-        await self._page.evaluate(f"window.scrollBy({scroll_x}, {scroll_y})")
+        await self._page.mouse.wheel(scroll_x, scroll_y)
 
     async def type(self, text: str) -> None:
         if not self._page:

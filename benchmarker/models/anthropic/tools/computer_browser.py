@@ -386,7 +386,7 @@ class ComputerBrowserTool20250124(BaseComputerBrowserTool, BaseAnthropicTool):
       else:  # right
         scroll_x = amount
 
-      await self._page.evaluate(f"window.scrollBy({scroll_x}, {scroll_y})")
+      await self._page.mouse.wheel(scroll_x, scroll_y)
       return await self.screenshot()
 
     if action in ("hold_key", "wait"):
