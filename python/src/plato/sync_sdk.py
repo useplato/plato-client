@@ -70,6 +70,7 @@ class SyncPlato:
         keepalive: bool = False,
         alias: Optional[str] = None,
         fast: bool = False,
+        version: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -85,6 +86,7 @@ class SyncPlato:
             keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
             alias (Optional[str]): Optional alias for the job group.
             fast (bool): Fast mode flag.
+            version (Optional[str]): Optional version of the environment.
 
         Returns:
             SyncPlatoEnvironment: The created environment instance.
@@ -107,6 +109,7 @@ class SyncPlato:
                 "keepalive": keepalive,
                 "alias": alias,
                 "fast": fast,
+                "version": version,
             },
         )
         response.raise_for_status()

@@ -79,6 +79,7 @@ class Plato:
         keepalive: bool = False,
         alias: Optional[str] = None,
         fast: bool = False,
+        version: Optional[str] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -94,6 +95,7 @@ class Plato:
             keepalive (bool): If true, jobs will not be killed due to heartbeat failures.
             alias (Optional[str]): Optional alias for the job group.
             fast (bool): Fast mode flag.
+            version (Optional[str]): Optional version of the environment.
 
         Returns:
             PlatoEnvironment: The created environment instance.
@@ -117,6 +119,7 @@ class Plato:
                 "keepalive": keepalive,
                 "alias": alias,
                 "fast": fast,
+                "version": version,
             },
             headers=headers,
         ) as response:
