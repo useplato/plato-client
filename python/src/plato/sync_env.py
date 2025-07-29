@@ -71,18 +71,25 @@ class SyncPlatoEnvironment:
         from plato.models.flow import Simulator
         from plato.sync_flow_executor import SyncFlowExecutor
 
-        # Create S3 client
-        s3_client = boto3.client('s3')
+        # Create S3 client configured for unsigned requests (public buckets)
+        try:
+            from botocore.config import Config  # type: ignore
+            from botocore import UNSIGNED  # type: ignore
+
+            s3_client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+        except ImportError:
+            # Fallback if botocore imports fail - this shouldn't happen with boto3 installed
+            raise PlatoClientError("boto3 and botocore are required for S3 access")
 
         # Ensure the temp directory exists
-        temp_dir = os.path.join('/tmp', self.env_id)
+        temp_dir = os.path.join("/tmp", self.env_id)
         os.makedirs(temp_dir, exist_ok=True)
 
         # Download the scripts file from S3
         s3_client.download_file(
-            'plato-sim-scripts',
+            "plato-sim-scripts",
             os.path.join(self.env_id, "scripts.yaml"),
-            os.path.join(temp_dir, "scripts.yaml")
+            os.path.join(temp_dir, "scripts.yaml"),
         )
 
         # Load and parse the scripts file
@@ -91,11 +98,15 @@ class SyncPlatoEnvironment:
             simulator = Simulator.model_validate(scripts)
 
         # Get base dataset and login flow
-        base_dataset = next((dataset for dataset in simulator.datasets if dataset.name == "base"), None)
+        base_dataset = next(
+            (dataset for dataset in simulator.datasets if dataset.name == "base"), None
+        )
         if not base_dataset:
             raise PlatoClientError("No base dataset found")
 
-        login_flow = next((flow for flow in simulator.flows if flow.name == "login"), None)
+        login_flow = next(
+            (flow for flow in simulator.flows if flow.name == "login"), None
+        )
         if not login_flow:
             raise PlatoClientError("No login flow found")
 
