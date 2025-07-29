@@ -1,6 +1,5 @@
 import os
 from plato.models.task import CustomEvalConfig
-from pydantic import Field
 from plato.models import PlatoTask, EvaluationResult
 from typing import List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
@@ -65,7 +64,7 @@ class SyncPlatoEnvironment:
 
     def login(self, page: Page) -> None:
         """Login to the environment using authentication config.
-        
+
         Args:
             page (Page): The Playwright page to authenticate
         """
@@ -74,18 +73,18 @@ class SyncPlatoEnvironment:
 
         # Create S3 client
         s3_client = boto3.client('s3')
-        
+
         # Ensure the temp directory exists
         temp_dir = os.path.join('/tmp', self.env_id)
         os.makedirs(temp_dir, exist_ok=True)
-        
+
         # Download the scripts file from S3
         s3_client.download_file(
-            'plato-sim-scripts', 
+            'plato-sim-scripts',
             os.path.join(self.env_id, "scripts.yaml"),
             os.path.join(temp_dir, "scripts.yaml")
         )
-        
+
         # Load and parse the scripts file
         with open(os.path.join(temp_dir, "scripts.yaml"), "r") as f:
             scripts = yaml.safe_load(f)
@@ -205,7 +204,7 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return self._client.get_cdp_url(self.id)
 
-    def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None, load_authenticated: bool = False) -> str:
+    def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None, load_authenticated: bool = False, **kwargs) -> str:
         """Reset the environment with an optional new task.
 
         Args:
@@ -216,7 +215,7 @@ class SyncPlatoEnvironment:
         Returns:
             str: The environment is reset and a new run session is created.
         """
-        response = self._client.reset_environment(self.id, task, agent_version, load_authenticated)
+        response = self._client.reset_environment(self.id, task, agent_version, load_authenticated, **kwargs)
         if task:
             self._current_task = task
 
@@ -549,7 +548,7 @@ class SyncPlatoEnvironment:
         active_session = None
         try:
             active_session = client.get_active_session(id)
-        except Exception as e:
+        except Exception:
             logger.warning(
                 f"No active session found for job {id}, remember to reset the environment to use / evaluate."
             )

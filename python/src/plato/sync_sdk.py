@@ -197,6 +197,7 @@ class SyncPlato:
         task: Optional[PlatoTask] = None,
         agent_version: Optional[str] = None,
         load_authenticated: bool = False,
+        **kwargs,
     ) -> Dict[str, Any]:
         """Reset an environment with an optional new task.
 
@@ -216,6 +217,7 @@ class SyncPlato:
             "test_case_public_id": task.public_id if task else None,
             "agent_version": agent_version,
             "load_browser_state": load_authenticated,
+            **kwargs,
         }
         start_time = time.time()
         response = self.http_session.post(
