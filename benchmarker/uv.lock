@@ -1809,8 +1809,8 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "1.0.51"
-source = { registry = "https://pypi.org/simple" }
+version = "1.0.57"
+source = { directory = "../python" }
 dependencies = [
     { name = "aioboto3" },
     { name = "aiohttp" },
@@ -1823,9 +1823,25 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6c/a5/e947eecf467a6d02cc9b6480faff611736c240fb24355460ea015ccfe2d3/plato_sdk-1.0.51.tar.gz", hash = "sha256:7dcb4ef23abcec79da8fd525253b205bb5a53be0d063790e6e80688f37035c2c", size = 169463 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/59/ca3a8dbaa208d96a2e2bf31ec1f353f0f8563a117d1643e75041fef70218/plato_sdk-1.0.51-py3-none-any.whl", hash = "sha256:833cfa4a1e582b474acd3ae73ccfbce8ab5047001621ea8f9ad793f5547d3df7", size = 46321 },
+
+[package.metadata]
+requires-dist = [
+    { name = "aioboto3", specifier = ">=15.0.0" },
+    { name = "aiohttp", specifier = ">=3.11.13" },
+    { name = "boto3", specifier = ">=1.38.27" },
+    { name = "click", specifier = ">=8.0.0" },
+    { name = "openai", specifier = ">=1.70.0" },
+    { name = "pydantic", specifier = ">=2.10.6" },
+    { name = "pydantic-settings", specifier = ">=2.8.1" },
+    { name = "python-dotenv", specifier = ">=0.19.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "requests", specifier = ">=2.32.4" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipdb", specifier = ">=0.13.13" },
+    { name = "playwright", specifier = ">=1.50.0" },
 ]
 
 [[package]]
@@ -1856,7 +1872,7 @@ requires-dist = [
     { name = "lmnr", specifier = ">=0.5.1" },
     { name = "nova-act", specifier = ">=1.0.2734.0" },
     { name = "openai", specifier = ">=1.66.3" },
-    { name = "plato-sdk", specifier = "==1.0.51" },
+    { name = "plato-sdk", directory = "../python" },
     { name = "playwright", specifier = ">=1.48.0" },
     { name = "uvicorn", specifier = ">=0.34.2" },
 ]

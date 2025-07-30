@@ -142,7 +142,7 @@ async def run_with_semaphore(sem, *args, **kwargs):
             logger.error(f"Error running task: {e}", traceback.format_exc())
 
 
-async def run_browseruse_task(cdp_url, prompt, start_url):
+async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
     browser = BrowserUseBrowser(
         config=BrowserUseBrowserConfig(
             cdp_url=cdp_url,
@@ -156,7 +156,12 @@ async def run_browseruse_task(cdp_url, prompt, start_url):
         task=prompt,
         llm=ChatOpenAI(model="gpt-4o"),
     )
-    await agent.run(max_steps=40)
+    playwright_browser = await agent.browser.get_playwright_browser()
+    page = await playwright_browser.new_page()
+    await page.goto(start_url)
+    await page.wait_for_load_state("networkidle")
+    await env.login(page)
+    await agent.run(max_steps=500)
 
 
 async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
@@ -165,16 +170,23 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
             computer=computer,
         )
         await computer.goto(start_url)
+        page = computer._page
+        await env.login(page)
         async for item in agent.run_in_loop_generator(prompt, max_steps=100):
             await env.log(item)
 
 
-async def run_anthropic_cua_task(cdp_url, prompt, start_url):
+async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
     async with ComputerBrowserTool20250124(cdp_url) as computer:
         agent = AnthropicAgent(
             api_key=os.getenv("ANTHROPIC_API_KEY") or "",
         )
+        page = computer._page
         await computer.goto(start_url)
+        try:
+          await env.login(page)
+        except Exception as e:
+          logger.warning(f"Error logging in: {e}", traceback.format_exc())
         await agent.run(prompt, browser_tool=computer)
 
 
@@ -193,7 +205,15 @@ async def run_task(
     logger.info(f"[{task.name}] Environment {task.env_id} is ready")
 
     # Get the base prompt template from the task set configuration
-    base_prompt = TASK_SETS[task_set]["base_prompt"]
+    if task_set in TASK_SETS:
+        base_prompt = TASK_SETS[task_set]["base_prompt"]
+    else:
+        base_prompt = f"""
+You are a helpful assistant that can help me use the {task_set}.
+Do not navigate to other websites.
+Here is the task:
+{task.prompt}
+"""
 
     # Format the prompt with task-specific information
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
@@ -208,11 +228,11 @@ async def run_task(
         logger.info(f"[{task.name}] Live view URL: {live_view_url}")
 
         if "browser_use" in agent_version:
-            await run_browseruse_task(cdp_url, prompt, task.start_url)
+            await run_browseruse_task(cdp_url, prompt, task.start_url, env)
         elif "openai" in agent_version:
             await run_openai_cua_task(cdp_url, prompt, task.start_url, env)
         elif "anthropic" in agent_version:
-            await run_anthropic_cua_task(cdp_url, prompt, task.start_url)
+            await run_anthropic_cua_task(cdp_url, prompt, task.start_url, env)
 
         # evaluate the task
         try:

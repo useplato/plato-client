@@ -112,7 +112,8 @@ async def sampling_loop(
 
         if token_efficient_tools_beta:
             betas.append("token-efficient-tools-2025-02-19")
-        image_truncation_threshold = only_n_most_recent_images or 0
+        # Set a reasonable default for image truncation threshold
+        image_truncation_threshold = 10  # Remove images in chunks of 10
         if provider == APIProvider.ANTHROPIC:
             client = AsyncAnthropic(api_key=api_key, max_retries=4)
             enable_prompt_caching = True
@@ -120,22 +121,34 @@ async def sampling_loop(
             client = AsyncAnthropicVertex()
         elif provider == APIProvider.BEDROCK:
             client = AsyncAnthropicBedrock()
+        elif provider == APIProvider.OPENROUTER:
+            # OpenRouter uses OpenAI-compatible API
+            from openai import AsyncOpenAI
+            openrouter_client = AsyncOpenAI(
+                api_key=api_key,
+                base_url="https://openrouter.ai/api/v1",
+                default_headers={
+                    "HTTP-Referer": "https://github.com/your-repo/plato-client",
+                    "X-Title": "Plato Client"
+                }
+            )
+            # OpenRouter doesn't support prompt caching
+            enable_prompt_caching = False
 
         if enable_prompt_caching:
             betas.append(PROMPT_CACHING_BETA_FLAG)
             _inject_prompt_caching(messages)
-            # Because cached reads are 10% of the price, we don't think it's
-            # ever sensible to break the cache by truncating images
-            only_n_most_recent_images = 0
             # Use type ignore to bypass TypedDict check until SDK types are updated
             system["cache_control"] = {"type": "ephemeral"}  # type: ignore
 
-        if only_n_most_recent_images:
-            _maybe_filter_to_n_most_recent_images(
-                messages,
-                only_n_most_recent_images,
-                min_removal_threshold=image_truncation_threshold,
-            )
+        # Always apply image filtering to prevent exceeding API limits
+        # Use only_n_most_recent_images if provided, otherwise use a conservative default
+        images_to_keep = only_n_most_recent_images or 90  # Default to 90 to stay under 100 limit
+        _maybe_filter_to_n_most_recent_images(
+            messages,
+            images_to_keep,
+            min_removal_threshold=image_truncation_threshold,
+        )
         extra_body = {}
         if thinking_budget:
             # Ensure we only send the required fields for thinking
@@ -257,8 +270,21 @@ def _maybe_filter_to_n_most_recent_images(
     )
 
     images_to_remove = total_images - images_to_keep
+    # Ensure we don't exceed the API limit of 100 total media items
+    # Leave some buffer for potential new images in this turn
+    max_images_allowed = 90  # Conservative limit to stay well under 100
+    if images_to_keep > max_images_allowed:
+        images_to_keep = max_images_allowed
+        images_to_remove = total_images - images_to_keep
+
     # for better cache behavior, we want to remove in chunks
-    images_to_remove -= images_to_remove % min_removal_threshold
+    # but ensure we remove at least the minimum needed to stay under limit
+    if images_to_remove > 0:
+        # Remove in chunks of min_removal_threshold, but ensure we remove enough
+        chunked_removal = (images_to_remove // min_removal_threshold) * min_removal_threshold
+        if chunked_removal < images_to_remove:
+            chunked_removal += min_removal_threshold
+        images_to_remove = chunked_removal
 
     for tool_result in tool_result_blocks:
         if isinstance(tool_result.get("content"), list):
@@ -270,6 +296,18 @@ def _maybe_filter_to_n_most_recent_images(
                         continue
                 new_content.append(content)
             tool_result["content"] = new_content
+
+    # Log final image count after filtering
+    final_images = sum(
+        1
+        for message in messages
+        for item in (
+            message["content"] if isinstance(message["content"], list) else []
+        )
+        if isinstance(item, dict) and item.get("type") == "tool_result"
+        for content in item.get("content", [])
+        if isinstance(content, dict) and content.get("type") == "image"
+    )
 
 
 def _response_to_params(
@@ -315,7 +353,8 @@ def _inject_prompt_caching(
                     {"type": "ephemeral"}
                 )
             else:
-                content[-1].pop("cache_control", None)
+                if "cache_control" in content[-1]:
+                    content[-1].pop("cache_control")
                 # we'll only every have one extra turn per loop
                 break
 
