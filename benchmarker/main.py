@@ -198,7 +198,7 @@ async def run_task(
     task_set: str = "espocrm",
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
-    env = await client.make_environment(task.env_id, open_page_on_start=False, record_actions=True)
+    env = await client.make_environment(task.env_id, open_page_on_start=True, record_actions=True)
 
     logger.info(f"[{task.name}] Waiting for environment to be ready ({task.env_id})")
     await env.wait_for_ready()
@@ -222,17 +222,18 @@ Here is the task:
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
     cdp_url = await env.get_cdp_url()
+    public_url = await env.get_public_url()
 
     try:
         live_view_url = await env.get_live_view_url()
         logger.info(f"[{task.name}] Live view URL: {live_view_url}")
 
         if "browser_use" in agent_version:
-            await run_browseruse_task(cdp_url, prompt, task.start_url, env)
+            await run_browseruse_task(cdp_url, prompt, public_url, env)
         elif "openai" in agent_version:
-            await run_openai_cua_task(cdp_url, prompt, task.start_url, env)
+            await run_openai_cua_task(cdp_url, prompt, public_url, env)
         elif "anthropic" in agent_version:
-            await run_anthropic_cua_task(cdp_url, prompt, task.start_url, env)
+            await run_anthropic_cua_task(cdp_url, prompt, public_url, env)
 
         # evaluate the task
         try:
