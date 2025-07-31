@@ -190,7 +190,7 @@ async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
 
     # Initialize the client and load tasks once
     print("Initializing client and loading tasks...")
-    client = Plato(base_url="https://staging.plato.so/api")
+    client = Plato(base_url="https://plato.so/api")
     tasks = await client.load_tasks("espocrm")
     print(f"Loaded {len(tasks)} tasks")
 
@@ -276,7 +276,7 @@ async def run_espocrm_load_test(num_concurrent: int, total_tests: int):
 async def test_espocrm_login():
     """Test connecting to EspoCRM environment and logging in to espocrm.com - single test version."""
     # Initialize the client and load tasks once
-    client = Plato(base_url="https://staging.plato.so/api")
+    client = Plato(base_url="https://plato.so/api")
     tasks = await client.load_tasks("espocrm")
 
     try:
@@ -289,8 +289,8 @@ async def test_espocrm_login():
 
 if __name__ == "__main__":
     # Configure these parameters as needed
-    NUM_CONCURRENT_TESTS = 25   # Number of tests to run concurrently
-    TOTAL_TESTS = 25          # Total number of tests to run
+    NUM_CONCURRENT_TESTS = 300   # Number of tests to run concurrently
+    TOTAL_TESTS = 300          # Total number of tests to run
     RUN_LOAD_TEST = True        # Set to False to run single test instead
 
     if RUN_LOAD_TEST:

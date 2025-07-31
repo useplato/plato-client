@@ -56,6 +56,11 @@ class Agent:
             if self.print_steps:
                 print(item["content"][0]["text"])
 
+        if item["type"] == "reasoning":
+            if self.print_steps:
+                reasoning_content = item.get("reasoning", "")
+                print(f"[Reasoning] {reasoning_content}")
+
         if item["type"] == "function_call":
             name, args = item["name"], json.loads(item["arguments"])
             if self.print_steps:

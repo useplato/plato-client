@@ -1809,7 +1809,7 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "1.0.57"
+version = "1.0.58"
 source = { directory = "../python" }
 dependencies = [
     { name = "aioboto3" },
