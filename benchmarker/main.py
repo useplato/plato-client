@@ -334,7 +334,7 @@ async def main():
         original_count = len(simulator_tasks)
         simulator_tasks = [
             task for task in simulator_tasks
-            if task.num_validator_human_scores is None or task.num_validator_human_scores <= args.max_num_validator_human_scores
+            if task.num_validator_human_scores is not None and task.num_validator_human_scores > 0 and task.num_validator_human_scores <= args.max_num_validator_human_scores
         ]
         filtered_count = len(simulator_tasks)
         print(f"Filtered tasks: {original_count} -> {filtered_count} (max_num_validator_human_scores <= {args.max_num_validator_human_scores})")
