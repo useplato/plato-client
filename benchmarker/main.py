@@ -300,6 +300,11 @@ async def main():
         type=str,
         help="Tag for agent version, ex: '20250423'",
     )
+    parser.add_argument(
+        "--max-num-validator-human-scores",
+        type=int,
+        help="Filter tasks to only include those where num_validator_human_scores <= this value",
+    )
     args = parser.parse_args()
 
     client = Plato(api_key=PLATO_API_KEY)
@@ -323,6 +328,16 @@ async def main():
 
     # Get tasks for the selected simulator
     simulator_tasks = await client.load_tasks(selected_simulator_name)
+
+    # Filter tasks based on max_num_validator_human_scores if specified
+    if args.max_num_validator_human_scores is not None:
+        original_count = len(simulator_tasks)
+        simulator_tasks = [
+            task for task in simulator_tasks
+            if task.num_validator_human_scores is None or task.num_validator_human_scores <= args.max_num_validator_human_scores
+        ]
+        filtered_count = len(simulator_tasks)
+        print(f"Filtered tasks: {original_count} -> {filtered_count} (max_num_validator_human_scores <= {args.max_num_validator_human_scores})")
 
     for task in simulator_tasks:
         print(f"{task.name}")
