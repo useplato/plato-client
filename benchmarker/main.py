@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Load required environment variables
 PLATO_API_KEY = os.environ.get("PLATO_API_KEY")
+PLATO_API_URL = os.environ.get("PLATO_API_URL", "https://plato.so/api")
 if not PLATO_API_KEY:
     raise ValueError(
         "PLATO_API_KEY environment variable is not set. Please set it in your .env file."
@@ -179,7 +180,8 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
 async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
     async with ComputerBrowserTool20250124(cdp_url) as computer:
         agent = AnthropicAgent(
-            api_key=os.getenv("ANTHROPIC_API_KEY") or "",
+            # api_key=os.getenv("ANTHROPIC_API_KEY") or "",
+            api_key=os.getenv("OPENROUTER_API_KEY") or "",
         )
         page = computer._page
         await computer.goto(start_url)
@@ -301,7 +303,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    client = Plato(api_key=PLATO_API_KEY)
+    client = Plato(api_key=PLATO_API_KEY, base_url=PLATO_API_URL)
 
     # Get available simulators
     simulators = await client.list_simulators()

@@ -13,8 +13,6 @@ from anthropic import (
     AsyncAnthropic,
     AsyncAnthropicBedrock,
     AsyncAnthropicVertex,
-    APIError,
-    APIResponseValidationError,
     APIStatusError,
 )
 from anthropic.types.beta import (
@@ -40,10 +38,597 @@ from .tools import (
 PROMPT_CACHING_BETA_FLAG = "prompt-caching-2024-07-31"
 
 
+def _map_model_for_openrouter(model: str) -> str:
+    """Map Anthropic model names to OpenRouter model names."""
+    model_mapping = {
+        "claude-3-7-sonnet-20250219": "anthropic/claude-3.7-sonnet",
+        "claude-3-5-sonnet-20241022": "anthropic/claude-3.5-sonnet",
+        "claude-3-5-sonnet-20240620": "anthropic/claude-3.5-sonnet",
+        "claude-3-haiku-20240307": "anthropic/claude-3-haiku",
+        "claude-3-opus-20240229": "anthropic/claude-3-opus",
+    }
+    return model_mapping.get(model, model)
+
+
+def _convert_anthropic_to_openai_messages(messages: list[BetaMessageParam], system_prompt: str) -> list[dict]:
+    """Convert Anthropic message format to OpenAI format for OpenRouter."""
+    openai_messages = []
+
+    # Add system message first
+    if system_prompt:
+        openai_messages.append({"role": "system", "content": system_prompt})
+
+    for message in messages:
+        role = message["role"]
+        content = message["content"]
+
+        if isinstance(content, str):
+            if content.strip():  # Only add if non-empty
+                openai_messages.append({"role": role, "content": content})
+        elif isinstance(content, list):
+            # Handle complex content blocks
+            text_parts = []
+            images = []
+            tool_results = []
+
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "text":
+                        text = block.get("text", "").strip()
+                        if text:  # Only add non-empty text
+                            text_parts.append(text)
+                    elif block.get("type") == "image":
+                        # OpenAI format for images
+                        source = block.get("source", {})
+                        if "data" in source and "media_type" in source:
+                            images.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{source['media_type']};base64,{source['data']}"
+                                }
+                            })
+                    elif block.get("type") == "tool_result":
+                        # Convert tool results to text and images
+                        tool_content = block.get("content", "")
+                        if isinstance(tool_content, list):
+                            for tc in tool_content:
+                                if isinstance(tc, dict):
+                                    if tc.get("type") == "text":
+                                        text = tc.get("text", "").strip()
+                                        if text:
+                                            tool_results.append(f"Tool result: {text}")
+                                    elif tc.get("type") == "image":
+                                        # Handle tool result images - add to images list
+                                        source = tc.get("source", {})
+                                        if "data" in source and "media_type" in source:
+                                            images.append({
+                                                "type": "image_url",
+                                                "image_url": {
+                                                    "url": f"data:{source['media_type']};base64,{source['data']}"
+                                                }
+                                            })
+                        elif isinstance(tool_content, str) and tool_content.strip():
+                            tool_results.append(f"Tool result: {tool_content.strip()}")
+
+            # Combine all content
+            full_content = []
+            if text_parts:
+                combined_text = " ".join(text_parts).strip()
+                if combined_text:
+                    full_content.append({"type": "text", "text": combined_text})
+            if tool_results:
+                combined_results = "\n".join(tool_results).strip()
+                if combined_results:
+                    full_content.append({"type": "text", "text": combined_results})
+            full_content.extend(images)
+
+            # Only add message if it has content
+            if full_content:
+                if len(full_content) == 1 and full_content[0].get("type") == "text":
+                    openai_messages.append({"role": role, "content": full_content[0]["text"]})
+                else:
+                    openai_messages.append({"role": role, "content": full_content})
+            elif role == "assistant":
+                # Allow empty assistant messages as they're optional
+                openai_messages.append({"role": role, "content": ""})
+
+    return openai_messages
+
+
+def _create_computer_tool_schemas() -> list[dict]:
+    """Create separate OpenAI schemas for each computer tool action using exact Action_20250124 names."""
+    return [
+        # Basic actions from Action_20241022
+        {
+            "type": "function",
+            "function": {
+                "name": "screenshot",
+                "description": "Take a screenshot of the current screen",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "cursor_position",
+                "description": "Get current cursor position",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        },
+
+        # Click actions from Action_20241022
+        {
+            "type": "function",
+            "function": {
+                "name": "left_click",
+                "description": "Left click at a specific coordinate",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate to click"
+                        }
+                    },
+                    "required": ["coordinate"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "right_click",
+                "description": "Right click at a specific coordinate",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate to right click"
+                        }
+                    },
+                    "required": ["coordinate"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "double_click",
+                "description": "Double click at a specific coordinate",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate to double click"
+                        }
+                    },
+                    "required": ["coordinate"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "middle_click",
+                "description": "Middle click at a specific coordinate",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate to middle click"
+                        }
+                    },
+                    "required": ["coordinate"]
+                }
+            }
+        },
+
+        # Mouse actions from Action_20241022
+        {
+            "type": "function",
+            "function": {
+                "name": "mouse_move",
+                "description": "Move mouse to a specific coordinate",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate to move to"
+                        }
+                    },
+                    "required": ["coordinate"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "left_click_drag",
+                "description": "Left click and drag to a specific coordinate",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate to drag to"
+                        }
+                    },
+                    "required": ["coordinate"]
+                }
+            }
+        },
+
+        # Keyboard actions from Action_20241022
+        {
+            "type": "function",
+            "function": {
+                "name": "type",
+                "description": "Type text at the current cursor position",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "Text to type"
+                        }
+                    },
+                    "required": ["text"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "key",
+                "description": "Press a keyboard key or key combination",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "Key to press (e.g., 'Enter', 'Tab', 'Escape', 'ctrl+c')"
+                        }
+                    },
+                    "required": ["text"]
+                }
+            }
+        },
+
+        # New actions from Action_20250124
+        {
+            "type": "function",
+            "function": {
+                "name": "left_mouse_down",
+                "description": "Press and hold left mouse button down",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "left_mouse_up",
+                "description": "Release left mouse button",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "scroll",
+                "description": "Scroll in a specific direction",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate where to scroll (optional)"
+                        },
+                        "scroll_direction": {
+                            "type": "string",
+                            "enum": ["up", "down", "left", "right"],
+                            "description": "Direction to scroll"
+                        },
+                        "scroll_amount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Amount to scroll"
+                        }
+                    },
+                    "required": ["scroll_direction", "scroll_amount"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "hold_key",
+                "description": "Hold a key down for a specified duration",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "Key to hold down"
+                        },
+                        "duration": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "Duration in seconds to hold the key"
+                        }
+                    },
+                    "required": ["text", "duration"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "wait",
+                "description": "Wait for a specified duration",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "duration": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "Duration in seconds to wait"
+                        }
+                    },
+                    "required": ["duration"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "triple_click",
+                "description": "Triple click at a specific coordinate",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "coordinate": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "The [x, y] coordinate to triple click"
+                        }
+                    },
+                    "required": ["coordinate"]
+                }
+            }
+        }
+    ]
+
+
+def _create_bash_tool_schema() -> dict:
+    """Create OpenAI schema for the bash tool."""
+    return {
+        "type": "function",
+        "function": {
+            "name": "bash",
+            "description": "Execute bash commands",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The bash command to execute"
+                    }
+                },
+                "required": ["command"]
+            }
+        }
+    }
+
+
+def _create_generic_tool_schema(tool_name: str) -> dict:
+    """Create OpenAI schema for unknown/generic tools."""
+    return {
+        "type": "function",
+        "function": {
+            "name": tool_name,
+            "description": f"Use {tool_name} tool",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    }
+
+
+def _convert_anthropic_tools_to_openai(tool_collection: 'ToolCollection') -> list[dict]:
+    """Convert Anthropic tools to OpenAI function calling format."""
+    tools = []
+    for tool in tool_collection.tools:
+        # Get the tool schema from to_params()
+        tool_params = tool.to_params()
+
+        # Extract information from the Anthropic tool format
+        if isinstance(tool_params, dict):
+            tool_name = tool_params.get("name", getattr(tool, 'name', 'unknown'))
+
+            # Create OpenAI-compatible tool definition based on tool type
+            if tool_name == "computer":
+                tools.extend(_create_computer_tool_schemas())
+            elif tool_name == "bash":
+                tools.append(_create_bash_tool_schema())
+            else:
+                tools.append(_create_generic_tool_schema(tool_name))
+
+    return tools
+
+
+def _map_openrouter_function_to_anthropic(function_name: str, tool_input: dict) -> tuple[str, dict]:
+    """Map OpenRouter function names back to Anthropic computer tool format using exact Action_20250124 names."""
+    # Map the exact action names back to the unified computer tool
+    function_to_action_mapping = {
+        # Basic actions from Action_20241022
+        "screenshot": ("computer", {"action": "screenshot"}),
+        "cursor_position": ("computer", {"action": "cursor_position"}),
+
+        # Click actions from Action_20241022
+        "left_click": ("computer", {"action": "left_click", "coordinate": tool_input.get("coordinate")}),
+        "right_click": ("computer", {"action": "right_click", "coordinate": tool_input.get("coordinate")}),
+        "double_click": ("computer", {"action": "double_click", "coordinate": tool_input.get("coordinate")}),
+        "middle_click": ("computer", {"action": "middle_click", "coordinate": tool_input.get("coordinate")}),
+
+        # Mouse actions from Action_20241022
+        "mouse_move": ("computer", {"action": "mouse_move", "coordinate": tool_input.get("coordinate")}),
+        "left_click_drag": ("computer", {"action": "left_click_drag", "coordinate": tool_input.get("coordinate")}),
+
+        # Keyboard actions from Action_20241022
+        "type": ("computer", {"action": "type", "text": tool_input.get("text")}),
+        "key": ("computer", {"action": "key", "text": tool_input.get("text")}),
+
+        # New actions from Action_20250124
+        "left_mouse_down": ("computer", {"action": "left_mouse_down"}),
+        "left_mouse_up": ("computer", {"action": "left_mouse_up"}),
+        "scroll": ("computer", {
+            "action": "scroll",
+            "coordinate": tool_input.get("coordinate"),
+            "scroll_direction": tool_input.get("scroll_direction"),
+            "scroll_amount": tool_input.get("scroll_amount", 3)
+        }),
+        "hold_key": ("computer", {
+            "action": "hold_key",
+            "text": tool_input.get("text"),
+            "duration": tool_input.get("duration")
+        }),
+        "wait": ("computer", {"action": "wait", "duration": tool_input.get("duration")}),
+        "triple_click": ("computer", {"action": "triple_click", "coordinate": tool_input.get("coordinate")}),
+    }
+
+    if function_name in function_to_action_mapping:
+        mapped_name, mapped_input = function_to_action_mapping[function_name]
+        # Remove None values
+        filtered_input = {k: v for k, v in mapped_input.items() if v is not None}
+        print(f"[FUNCTION MAPPING] Mapped '{function_name}' to '{mapped_name}' with action '{filtered_input.get('action')}'")
+        return mapped_name, filtered_input
+
+    # For non-computer functions, return as-is
+    return function_name, tool_input
+
+
+def _convert_openai_response_to_anthropic(response) -> BetaMessage:
+    """Convert OpenAI response format back to Anthropic format."""
+    from anthropic.types.beta import BetaMessage, BetaTextBlock, BetaToolUseBlock, BetaUsage
+
+    content = []
+    choice = response.choices[0]
+    message = choice.message
+
+    if message.content:
+        content.append(BetaTextBlock(type="text", text=message.content))
+
+    if message.tool_calls:
+        for tool_call in message.tool_calls:
+            import json
+            try:
+                # Debug: log the raw arguments string
+                print(f"[DEBUG] Tool call arguments: '{tool_call.function.arguments}'")
+
+                if not tool_call.function.arguments or tool_call.function.arguments.strip() == "":
+                    print(f"[DEBUG] Empty arguments for tool {tool_call.function.name}, using empty dict")
+                    tool_input = {}
+                else:
+                    tool_input = json.loads(tool_call.function.arguments)
+            except json.JSONDecodeError as e:
+                print(f"[DEBUG] JSON decode error for tool {tool_call.function.name}: {e}")
+                print(f"[DEBUG] Raw arguments: '{tool_call.function.arguments}'")
+                # Use empty dict as fallback
+                tool_input = {}
+
+            # Apply function mapping to convert separate functions back to unified computer tool
+            mapped_name, mapped_input = _map_openrouter_function_to_anthropic(
+                tool_call.function.name, tool_input
+            )
+
+            content.append(BetaToolUseBlock(
+                type="tool_use",
+                id=tool_call.id,
+                name=mapped_name,
+                input=mapped_input
+            ))
+
+    # Map OpenAI finish_reason to Anthropic stop_reason
+    finish_reason = choice.finish_reason
+    if finish_reason == "stop":
+        stop_reason = "end_turn"
+    elif finish_reason == "tool_calls":
+        stop_reason = "tool_use"
+    elif finish_reason == "length":
+        stop_reason = "max_tokens"
+    else:
+        stop_reason = "end_turn"  # Default fallback
+
+    # Convert OpenAI usage to Anthropic usage format
+    openai_usage = response.usage
+    anthropic_usage = BetaUsage(
+        input_tokens=openai_usage.prompt_tokens,
+        output_tokens=openai_usage.completion_tokens
+    )
+
+    return BetaMessage(
+        id=response.id,
+        content=content,
+        model=response.model,
+        role="assistant",
+        stop_reason=stop_reason,
+        type="message",
+        usage=anthropic_usage
+    )
+
+
 class APIProvider(StrEnum):
     ANTHROPIC = "anthropic"
     BEDROCK = "bedrock"
     VERTEX = "vertex"
+    OPENROUTER = "openrouter"
 
 # This system prompt is optimized for the Docker environment in this repository and
 # specific tool combinations enabled.
@@ -100,7 +685,17 @@ async def sampling_loop(
         text=f"{SYSTEM_PROMPT}{' ' + system_prompt_suffix if system_prompt_suffix else ''}",
     )
 
+    conversation_turn = 0
+    max_turns = 50  # Safety limit to prevent infinite loops
     while True:
+        conversation_turn += 1
+        print(f"[LOOP DEBUG] Starting conversation turn {conversation_turn}")
+        print(f"[LOOP DEBUG] Current message count: {len(messages)}")
+
+        if conversation_turn > max_turns:
+            print(f"[LOOP DEBUG] Hit max turns limit ({max_turns}), ending conversation")
+            return messages
+
         enable_prompt_caching = False
         betas = []
         if pre_initialized_tools:
@@ -114,6 +709,8 @@ async def sampling_loop(
             betas.append("token-efficient-tools-2025-02-19")
         # Set a reasonable default for image truncation threshold
         image_truncation_threshold = 10  # Remove images in chunks of 10
+
+        print(f"[LOOP DEBUG] Setting up client for provider: {provider}")
         if provider == APIProvider.ANTHROPIC:
             client = AsyncAnthropic(api_key=api_key, max_retries=4)
             enable_prompt_caching = True
@@ -124,12 +721,13 @@ async def sampling_loop(
         elif provider == APIProvider.OPENROUTER:
             # OpenRouter uses OpenAI-compatible API
             from openai import AsyncOpenAI
-            openrouter_client = AsyncOpenAI(
+            client = AsyncOpenAI(
                 api_key=api_key,
                 base_url="https://openrouter.ai/api/v1",
                 default_headers={
                     "HTTP-Referer": "https://github.com/your-repo/plato-client",
-                    "X-Title": "Plato Client"
+                    "X-Title": "Plato Client",
+                    "anthropic-beta": "computer-use-2025-01-24"
                 }
             )
             # OpenRouter doesn't support prompt caching
@@ -167,49 +765,99 @@ async def sampling_loop(
         retry_count = 0
         base_delay = 1.0
 
+        print("[LOOP DEBUG] Starting API call attempt")
         while True:
+            print(f"[LOOP DEBUG] API retry attempt {retry_count + 1}/{max_retries}")
             try:
-                raw_response = await client.beta.messages.with_raw_response.create(
-                    max_tokens=max_tokens,
-                    messages=messages,
-                    model=model,
-                    system=[system],
-                    tools=tool_collection.to_params(),
-                    betas=betas,
-                    extra_body=extra_body,
-                )
+                if provider == APIProvider.OPENROUTER:
+                    # Convert messages and tools for OpenRouter/OpenAI format
+                    openai_messages = _convert_anthropic_to_openai_messages(messages, system["text"])
+                    openai_tools = _convert_anthropic_tools_to_openai(tool_collection)
+                    openrouter_model = _map_model_for_openrouter(model)
+
+                    # Use OpenAI format API call
+                    response = await client.chat.completions.create(
+                        model=openrouter_model,
+                        messages=openai_messages,
+                        tools=openai_tools if openai_tools else None,
+                        max_tokens=max_tokens,
+                    )
+
+                    # Convert back to Anthropic format
+                    response = _convert_openai_response_to_anthropic(response)
+
+                    # Create a mock raw_response object for compatibility
+                    class MockRawResponse:
+                        def __init__(self, response):
+                            self._response = response
+                            # Create mock HTTP response
+                            class MockHTTPResponse:
+                                def __init__(self):
+                                    self.request = None
+                            self.http_response = MockHTTPResponse()
+
+                        def parse(self):
+                            return self._response
+
+                    raw_response = MockRawResponse(response)
+                else:
+                    # Use Anthropic format API call
+                    raw_response = await client.beta.messages.with_raw_response.create(
+                        max_tokens=max_tokens,
+                        messages=messages,
+                        model=model,
+                        system=[system],
+                        tools=tool_collection.to_params(),
+                        betas=betas,
+                        extra_body=extra_body,
+                    )
+                print("[LOOP DEBUG] API call successful!")
                 break  # Success, exit the retry loop
-            except APIStatusError as e:
-                api_response_callback(e.request, e.response, e)
+            except (APIStatusError, Exception) as e:
+                # Handle both Anthropic and OpenAI errors
+                try:
+                    if hasattr(e, 'request') and hasattr(e, 'response'):
+                        api_response_callback(e.request, e.response, e)
+                    else:
+                        # Create a mock request for the callback
+                        class MockRequest:
+                            def __init__(self):
+                                self.method = "POST"
+                                self.url = "openrouter_api_call"
+                        api_response_callback(MockRequest(), None, e)
+                except Exception as callback_error:
+                    print(f"[DEBUG] Error in api_response_callback: {callback_error}")
                 retry_count += 1
 
                 if retry_count >= max_retries:
-                    print(f'API STATUS ERROR: Maximum retries ({max_retries}) exceeded: {e}')
+                    print(f'API ERROR: Maximum retries ({max_retries}) exceeded: {e}')
                     raise e
-                    return messages
 
                 # Calculate exponential backoff with jitter
                 delay = base_delay * (2 ** (retry_count - 1)) + random.uniform(0, 0.5)
-                print(f'API STATUS ERROR: {e}. Retrying in {delay:.2f} seconds (attempt {retry_count}/{max_retries})')
+                print(f'API ERROR: {e}. Retrying in {delay:.2f} seconds (attempt {retry_count}/{max_retries})')
                 await asyncio.sleep(delay)
-            except APIResponseValidationError as e:
-                api_response_callback(e.request, e.response, e)
-                print(f'API VALIDATION ERROR: {e}')
-                raise e
-                return messages
-            except APIError as e:
-                api_response_callback(e.request, e.body, e)
-                print(f'API ERROR: {e}')
-                raise e
-                return messages
 
-        api_response_callback(
-            raw_response.http_response.request, raw_response.http_response, None
-        )
+        try:
+            api_response_callback(
+                raw_response.http_response.request, raw_response.http_response, None
+            )
+        except Exception as callback_error:
+            print(f"[DEBUG] Error in api_response_callback: {callback_error}")
 
+        print("[LOOP DEBUG] Parsing API response")
         response = raw_response.parse()
 
         response_params = _response_to_params(response)
+        print(f"[LOOP DEBUG] Response has {len(response_params)} content blocks")
+
+        # Log response content details
+        for i, block in enumerate(response_params):
+            if block["type"] == "text":
+                print(f"[LOOP DEBUG] Block {i}: text ({len(block.get('text', ''))} chars)")
+            elif block["type"] == "tool_use":
+                print(f"[LOOP DEBUG] Block {i}: tool_use - {block['name']} with input: {str(block.get('input', {}))[:100]}...")
+
         messages.append(
             {
                 "role": "assistant",
@@ -218,20 +866,50 @@ async def sampling_loop(
         )
 
         tool_result_content: list[BetaToolResultBlockParam] = []
+        tool_use_count = 0
         for content_block in response_params:
             output_callback(content_block)
             if content_block["type"] == "tool_use":
+                tool_use_count += 1
+                print(f"[LOOP DEBUG] Processing tool use {tool_use_count}: {content_block['name']}")
+                tool_input = cast(dict[str, Any], content_block["input"])
+                if content_block["name"] == "computer":
+                    print(f"[LOOP DEBUG] Computer tool input: {tool_input}")
+                    if "action" in tool_input:
+                        print(f"[LOOP DEBUG] Action requested: '{tool_input['action']}'")
                 result = await tool_collection.run(
                     name=content_block["name"],
-                    tool_input=cast(dict[str, Any], content_block["input"]),
+                    tool_input=tool_input,
                 )
+                print(f"[LOOP DEBUG] Tool {content_block['name']} completed")
+                print(f"[LOOP DEBUG] Tool result - error: {result.error is not None}, output: {len(result.output or '') if result.output else 0} chars, image: {result.base64_image is not None}")
+                if result.output:
+                    print(f"[LOOP DEBUG] Tool output preview: {result.output[:200]}...")
+                if result.error:
+                    print(f"[LOOP DEBUG] Tool error: {result.error[:200]}...")
+
                 tool_result_content.append(
                     _make_api_tool_result(result, content_block["id"])
                 )
                 tool_output_callback(result, content_block["id"])
 
+        print(f"[LOOP DEBUG] Total tool uses: {tool_use_count}, tool results: {len(tool_result_content)}")
+
         if not tool_result_content:
+            print("[LOOP DEBUG] No tools used, ending conversation loop")
             return messages
+
+        print("[LOOP DEBUG] Adding tool results to messages and continuing conversation")
+
+        # Debug: Log what's in the tool result content
+        for i, tool_result in enumerate(tool_result_content):
+            content = tool_result.get("content", [])
+            if isinstance(content, list):
+                text_count = sum(1 for c in content if isinstance(c, dict) and c.get("type") == "text")
+                image_count = sum(1 for c in content if isinstance(c, dict) and c.get("type") == "image")
+                print(f"[LOOP DEBUG] Tool result {i}: {text_count} text blocks, {image_count} image blocks")
+            else:
+                print(f"[LOOP DEBUG] Tool result {i}: single content item")
 
         messages.append({"content": tool_result_content, "role": "user"})
 
@@ -285,6 +963,7 @@ def _maybe_filter_to_n_most_recent_images(
         if chunked_removal < images_to_remove:
             chunked_removal += min_removal_threshold
         images_to_remove = chunked_removal
+        print(f"[IMAGE FILTER] Removing {images_to_remove} images to stay under API limits")
 
     for tool_result in tool_result_blocks:
         if isinstance(tool_result.get("content"), list):
@@ -297,17 +976,7 @@ def _maybe_filter_to_n_most_recent_images(
                 new_content.append(content)
             tool_result["content"] = new_content
 
-    # Log final image count after filtering
-    final_images = sum(
-        1
-        for message in messages
-        for item in (
-            message["content"] if isinstance(message["content"], list) else []
-        )
-        if isinstance(item, dict) and item.get("type") == "tool_result"
-        for content in item.get("content", [])
-        if isinstance(content, dict) and content.get("type") == "image"
-    )
+    # Images have been filtered - no need to track the final count
 
 
 def _response_to_params(

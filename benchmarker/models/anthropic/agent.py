@@ -73,7 +73,7 @@ class AnthropicAgent:
     async with browser_tool:
       messages = await sampling_loop(
         model=self.model,
-        provider=APIProvider.ANTHROPIC,
+        provider=APIProvider.OPENROUTER,
         system_prompt_suffix=system_prompt_suffix,
         messages=messages,
         output_callback=self.output_callback,
