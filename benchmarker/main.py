@@ -134,10 +134,39 @@ Here is the task:
 }
 
 
-async def run_with_semaphore(sem, *args, **kwargs):
+async def create_environment_pool(client: Plato, pool_size: int, tasks: list):
+    """Create a pool of environments for reuse"""
+    env_pool = asyncio.Queue()
+
+    # Use the first task to get env_id for creating environments
+    first_task = tasks[0]
+
+    async def create_single_environment(i: int):
+        logger.info(f"Creating environment {i+1}/{pool_size}")
+        env = await client.make_environment(first_task.env_id, open_page_on_start=True, record_actions=True)
+        await env.wait_for_ready()
+        logger.info(f"Environment {i+1}/{pool_size} ready")
+        return env
+
+    logger.info(f"Creating environment pool of size {pool_size} in parallel")
+
+    # Create all environments in parallel
+    environments = await asyncio.gather(*[
+        create_single_environment(i) for i in range(pool_size)
+    ])
+
+    # Add all environments to the pool
+    for env in environments:
+        await env_pool.put(env)
+
+    logger.info(f"Environment pool of size {pool_size} created successfully")
+    return env_pool, environments
+
+
+async def run_with_semaphore(sem, env_pool, *args, **kwargs):
     async with sem:
         try:
-            await run_task(*args, **kwargs)
+            await run_task(env_pool, *args, **kwargs)
         except Exception as e:
             logger.error(f"Error running task: {e}", traceback.format_exc())
 
@@ -191,18 +220,17 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
 
 
 async def run_task(
-    client: Plato,
+    env_pool: asyncio.Queue,
     task: PlatoTask,
     timeout: float = 400,
     agent_version: str = "browser_use_test",
     task_set: str = "espocrm",
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
-    env = await client.make_environment(task.env_id, open_page_on_start=True, record_actions=True)
 
-    logger.info(f"[{task.name}] Waiting for environment to be ready ({task.env_id})")
-    await env.wait_for_ready()
-    logger.info(f"[{task.name}] Environment {task.env_id} is ready")
+    # Get environment from pool
+    env = await env_pool.get()
+    logger.info(f"[{task.name}] Got environment from pool ({task.env_id})")
 
     # Get the base prompt template from the task set configuration
     if task_set in TASK_SETS:
@@ -249,8 +277,9 @@ Here is the task:
         await env.log({ "error": str(e) }, type="error")
         logger.error(f"[{task.name}] Error running task: {e}", traceback.format_exc())
     finally:
-        logger.info(f"[{task.name}] Closing environment")
-        await env.close()
+        logger.info(f"[{task.name}] Returning environment to pool")
+        # Return environment to pool instead of closing
+        await env_pool.put(env)
 
 async def main():
     """
@@ -372,22 +401,31 @@ async def main():
     # Setup semaphore for concurrency
     sem = asyncio.Semaphore(concurrency)
 
-    # Create tasks
-    async_tasks = []
-    for task in tests_to_run:
-        for _ in range(num_runs):
-            async_tasks.append(
-                run_with_semaphore(
-                    sem, client, task, agent_version=agent_version, task_set=selected_simulator["name"].lower()
+    # Create environment pool
+    env_pool, environments = await create_environment_pool(client, concurrency, tests_to_run)
+
+    try:
+        # Create tasks
+        async_tasks = []
+        for task in tests_to_run:
+            for _ in range(num_runs):
+                async_tasks.append(
+                    run_with_semaphore(
+                        sem, env_pool, task, agent_version=agent_version, task_set=selected_simulator["name"].lower()
+                    )
                 )
-            )
 
-    # Run tasks
-    print(f"\nRunning {len(async_tasks)} tasks with agent: {agent_version}")
-    await asyncio.gather(*async_tasks)
+        # Run tasks
+        print(f"\nRunning {len(async_tasks)} tasks with agent: {agent_version}")
+        await asyncio.gather(*async_tasks)
 
-    print("\nAll tasks completed!")
-    await client.close()
+        print("\nAll tasks completed!")
+    finally:
+        # Close all environments in the pool
+        logger.info("Closing all environments in pool")
+        for env in environments:
+            await env.close()
+        await client.close()
 
 
 if __name__ == "__main__":
