@@ -292,7 +292,7 @@ async def main():
     parser.add_argument(
         "--target-sessions",
         type=int,
-        default=5,
+        default=3,
         help="Target number of sessions per agent type per test case (default: 5)",
     )
     parser.add_argument(
