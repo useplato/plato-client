@@ -185,11 +185,14 @@ async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
         task=prompt,
         llm=ChatOpenAI(model="gpt-4o"),
     )
-    playwright_browser = await agent.browser.get_playwright_browser()
-    page = await playwright_browser.new_page()
+    page = await agent.browser_context.get_current_page()
+    # # page = await playwright_browser.new_page()
     await page.goto(start_url)
     await page.wait_for_load_state("networkidle")
-    await env.login(page)
+    try:
+        await env.login(page)
+    except Exception as e:
+        logger.warning(f"Error logging in: {e}", traceback.format_exc())
     await agent.run(max_steps=500)
 
 
@@ -200,7 +203,10 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
         )
         await computer.goto(start_url)
         page = computer._page
-        await env.login(page)
+        try:
+          await env.login(page)
+        except Exception as e:
+          logger.warning(f"Error logging in: {e}", traceback.format_exc())
         async for item in agent.run_in_loop_generator(prompt, max_steps=100):
             await env.log(item)
 

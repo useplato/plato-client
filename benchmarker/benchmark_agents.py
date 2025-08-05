@@ -145,7 +145,8 @@ def count_sessions_by_agent_and_testcase(sessions: List[Dict[str, Any]], agent_a
 def find_missing_sessions(
     session_counts: Dict[str, Dict[str, int]],
     testcases: List[PlatoTask],
-    target_sessions: int = 5
+    target_sessions: int = 5,
+    selected_agents: List[str] = None
 ) -> Dict[str, List[str]]:
     """Find agent types that need more sessions for specific test cases.
 
@@ -153,16 +154,20 @@ def find_missing_sessions(
         session_counts: Current session counts by agent type and test case
         testcases: List of test cases to check
         target_sessions: Target number of sessions per agent type per test case
+        selected_agents: List of agent types to check (defaults to all)
 
     Returns:
         Dict mapping agent_type -> list of testcase_ids needing more sessions
     """
+    if selected_agents is None:
+        selected_agents = ["browser_use", "anthropic", "openai"]
+    
     missing_sessions = defaultdict(list)
 
     for testcase in testcases:
         testcase_id = testcase.public_id
 
-        for agent_type in ["browser_use", "anthropic", "openai"]:
+        for agent_type in selected_agents:
             current_count = session_counts.get(agent_type, {}).get(testcase_id, 0)
 
             if current_count < target_sessions:
@@ -306,6 +311,13 @@ async def main():
         action="store_true",
         help="Only analyze current coverage without creating new sessions",
     )
+    parser.add_argument(
+        "--agents",
+        nargs="+",
+        choices=["browser_use", "openai", "anthropic"],
+        default=["browser_use", "openai", "anthropic"],
+        help="Agent types to benchmark (default: all agents)",
+    )
     args = parser.parse_args()
 
     client = BenchmarkPlato(api_key=PLATO_API_KEY)
@@ -360,11 +372,11 @@ async def main():
             session_counts = count_sessions_by_agent_and_testcase(sessions, filtered_artifacts)
 
             # Find missing sessions
-            missing_sessions = find_missing_sessions(session_counts, testcases, args.target_sessions)
+            missing_sessions = find_missing_sessions(session_counts, testcases, args.target_sessions, args.agents)
 
             # Report current coverage
             logger.info(f"Coverage report for {simulator_name}:")
-            for agent_type in ["browser_use", "anthropic", "openai"]:
+            for agent_type in args.agents:
                 total_needed = len(testcases) * args.target_sessions
                 total_existing = sum(session_counts.get(agent_type, {}).values())
                 missing_count = len(missing_sessions.get(agent_type, []))
