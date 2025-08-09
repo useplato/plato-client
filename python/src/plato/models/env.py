@@ -61,7 +61,7 @@ class PlatoEnvironment:
         self._run_session_id = active_session
         self.fast = fast
 
-    async def login(self, page: Page) -> None:
+    async def login(self, page: Page) -> bool:
         """Login to the environment using authentication config.
 
         Args:
@@ -103,7 +103,7 @@ class PlatoEnvironment:
             raise PlatoClientError("No login flow found")
 
         flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger)
-        await flow_executor.execute_flow()
+        return await flow_executor.execute_flow()
 
     async def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
