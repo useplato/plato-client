@@ -62,7 +62,7 @@ class SyncPlatoEnvironment:
         self._stop_heartbeat = False
         self.fast = fast
 
-    def login(self, page: Page) -> None:
+    def login(self, page: Page, throw_on_login_error: bool = False) -> None:
         """Login to the environment using authentication config.
 
         Args:
@@ -112,7 +112,10 @@ class SyncPlatoEnvironment:
 
         flow_executor = SyncFlowExecutor(page, login_flow, base_dataset, logger=logger)
         if not flow_executor.execute_flow():
-            raise PlatoClientError("Failed to login")
+            if throw_on_login_error:
+                raise PlatoClientError("Failed to login")
+            else:
+                logger.warning("Failed to login")
 
     def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
