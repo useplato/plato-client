@@ -61,7 +61,7 @@ class PlatoEnvironment:
         self._run_session_id = active_session
         self.fast = fast
 
-    async def login(self, page: Page) -> bool:
+    async def login(self, page: Page) -> None:
         """Login to the environment using authentication config.
 
         Args:
@@ -70,14 +70,22 @@ class PlatoEnvironment:
         from plato.models.flow import Simulator
         from plato.flow_executor import FlowExecutor
 
-        # Create S3 session and client
+        # Create S3 client configured for unsigned requests (public buckets)
+        try:
+            from botocore.config import Config  # type: ignore
+            from botocore import UNSIGNED  # type: ignore
+        except ImportError:
+            raise PlatoClientError("aioboto3 and botocore are required for S3 access")
+
         session = aioboto3.Session()
 
         temp_dir = os.path.join("/tmp", self.env_id)
         os.makedirs(temp_dir, exist_ok=True)
 
         # Download the scripts file from S3
-        async with session.client("s3") as s3_client:
+        async with session.client(
+            "s3", config=Config(signature_version=UNSIGNED)
+        ) as s3_client:
             await s3_client.download_file(
                 "plato-sim-scripts",
                 os.path.join(self.env_id, "scripts.yaml"),
@@ -103,7 +111,9 @@ class PlatoEnvironment:
             raise PlatoClientError("No login flow found")
 
         flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger)
-        return await flow_executor.execute_flow()
+        success = await flow_executor.execute_flow()
+        if not success:
+            raise PlatoClientError("Failed to login")
 
     async def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
@@ -563,7 +573,9 @@ class PlatoEnvironment:
         return await self._client.backup_environment(self.id)
 
     @staticmethod
-    async def from_id(client: "Plato", id: str, fast: bool = False) -> "PlatoEnvironment":
+    async def from_id(
+        client: "Plato", id: str, fast: bool = False
+    ) -> "PlatoEnvironment":
         """Create a new environment from an ID.
 
         Returns:

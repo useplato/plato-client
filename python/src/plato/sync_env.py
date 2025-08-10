@@ -111,7 +111,8 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No login flow found")
 
         flow_executor = SyncFlowExecutor(page, login_flow, base_dataset, logger=logger)
-        flow_executor.execute_flow()
+        if not flow_executor.execute_flow():
+            raise PlatoClientError("Failed to login")
 
     def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
