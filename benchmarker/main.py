@@ -34,6 +34,8 @@ if not PLATO_API_KEY:
         "PLATO_API_KEY environment variable is not set. Please set it in your .env file."
     )
 
+PLATO_BASE_URL = os.environ.get("PLATO_BASE_URL", "https://plato.so/api")
+
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please set it in your .env file."
 
@@ -143,7 +145,7 @@ async def create_environment_pool(client: Plato, pool_size: int, tasks: list):
 
     async def create_single_environment(i: int):
         logger.info(f"Creating environment {i+1}/{pool_size}")
-        env = await client.make_environment(first_task.env_id, open_page_on_start=True, record_actions=True)
+        env = await client.make_environment(first_task.env_id, open_page_on_start=True, record_actions=True, fast=True)
         await env.wait_for_ready()
         logger.info(f"Environment {i+1}/{pool_size} ready")
         return env
@@ -342,7 +344,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    client = Plato(api_key=PLATO_API_KEY)
+    client = Plato(api_key=PLATO_API_KEY, base_url=PLATO_BASE_URL)
 
     # Get available simulators
     simulators = await client.list_simulators()
@@ -363,6 +365,7 @@ async def main():
 
     # Get tasks for the selected simulator
     simulator_tasks = await client.load_tasks(selected_simulator_name)
+    breakpoint()
 
     # Filter tasks based on max_num_validator_human_scores if specified
     if args.max_num_validator_human_scores is not None:

@@ -1810,8 +1810,8 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "1.0.58"
-source = { registry = "https://pypi.org/simple" }
+version = "1.0.62"
+source = { directory = "../python" }
 dependencies = [
     { name = "aioboto3" },
     { name = "aiohttp" },
@@ -1824,9 +1824,25 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/63/b2eadaa4d566795179b1d8f59571eb1fb0ad2845a4acbfadfe95a063a3c6/plato_sdk-1.0.58.tar.gz", hash = "sha256:11695e4d78f5e7ac74827c32e01f439d6616ee25ad99369d62f82d1ef6540526", size = 206450, upload_time = "2025-07-29T21:43:39.544Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/36/b2adabe9f778678ba0acf7a703a52dbf97ab4f430630a30927f6b9d0054d/plato_sdk-1.0.58-py3-none-any.whl", hash = "sha256:90a77c51a2cfa568dd8d3aac9efca2c37b16f73219addbab639b7844c5e08c27", size = 49532, upload_time = "2025-07-29T21:43:38.105Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "aioboto3", specifier = ">=15.0.0" },
+    { name = "aiohttp", specifier = ">=3.11.13" },
+    { name = "boto3", specifier = ">=1.38.27" },
+    { name = "click", specifier = ">=8.0.0" },
+    { name = "openai", specifier = ">=1.70.0" },
+    { name = "pydantic", specifier = ">=2.10.6" },
+    { name = "pydantic-settings", specifier = ">=2.8.1" },
+    { name = "python-dotenv", specifier = ">=0.19.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "requests", specifier = ">=2.32.4" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipdb", specifier = ">=0.13.13" },
+    { name = "playwright", specifier = ">=1.50.0" },
 ]
 
 [[package]]
@@ -1857,7 +1873,7 @@ requires-dist = [
     { name = "lmnr", specifier = ">=0.5.1" },
     { name = "nova-act", specifier = ">=1.0.2734.0" },
     { name = "openai", specifier = ">=1.66.3" },
-    { name = "plato-sdk", specifier = "==1.0.58" },
+    { name = "plato-sdk", directory = "../python" },
     { name = "playwright", specifier = ">=1.48.0" },
     { name = "uvicorn", specifier = ">=0.34.2" },
 ]

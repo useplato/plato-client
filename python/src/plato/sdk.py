@@ -466,6 +466,7 @@ class Plato:
                     average_time=t.get("averageTimeTaken"),
                     average_steps=t.get("averageStepsTaken"),
                     num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
+                    default_scoring_config=t.get("defaultScoringConfig", {}),
                 )
                 for t in test_cases
             ]
