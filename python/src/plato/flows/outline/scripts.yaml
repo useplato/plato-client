@@ -1,0 +1,40 @@
+name: outline
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: admin@example.com
+    password: password
+  flows:
+  - login
+flows:
+- name: login
+  description: Auto-login flow for Outline - wait for environment and verify access
+  steps:
+  - action: screenshot
+    description: Screenshot of initial page
+    filename: 01_initial_page.png
+  - action: wait
+    description: Wait for environment to fully initialize
+    duration: 15000
+  - action: verify_no_errors
+    description: Check for any error messages or failed loads
+  - action: wait_for_selector
+    description: Wait for main application container to load
+    selector: 'body, main, .app, #root, [data-testid], .outline-app'
+    timeout: 30000
+  - action: screenshot
+    description: Screenshot after app container loaded
+    filename: 02_app_container_loaded.png
+  - action: wait
+    description: Wait for content and interface to stabilize
+    duration: 10000
+  - action: verify
+    description: Verify Outline workspace interface is accessible
+    selector: .sidebar, .main-content, .document-list, .collection-list, nav, .app-content, .workspace, .dashboard, [data-testid="sidebar"], [data-testid="document-list"], .outline-sidebar, .outline-content
+    type: element_exists
+  - action: screenshot
+    description: Final screenshot showing accessible workspace
+    filename: 03_workspace_verified.png

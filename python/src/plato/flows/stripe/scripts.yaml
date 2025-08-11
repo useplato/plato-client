@@ -1,0 +1,59 @@
+name: stripe
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: admin
+    password: admin
+    wrong_password: wrongpassword
+  flows:
+  - render
+flows:
+- name: render
+  description: Render flow for Stripe - verify page loads and no 502 errors
+  steps:
+  - action: navigate
+    description: Navigate to Stripe homepage
+    url: https://dashboard.stripe.com/dashboard
+  - action: wait
+    description: Wait for page to fully initialize and load
+    duration: 5000
+  - action: screenshot
+    description: Screenshot of initial Stripe page load
+    filename: 01_initial_page.png
+  - action: verify_no_errors
+    description: Check for any error messages, 502s, or failed loads
+    error_selectors:
+    - .error
+    - .error-message
+    - .alert-danger
+    - .alert-error
+    - '[class*="error"]'
+    - '[class*="502"]'
+    - .server-error
+    - .gateway-error
+    - .service-unavailable
+  - action: wait_for_selector
+    description: Wait for main Stripe application container to load
+    selector: 'body, main, .app, #root, [data-testid], .homepage, .main-content, .layout'
+    timeout: 30000
+  - action: verify
+    description: Verify there is a span element containing the text 'Home' indicating
+      the main page has rendered correctly
+    type: element_exists
+    selector: span:has-text("Home")
+  - action: verify_no_errors
+    description: Final check for any error messages or server errors
+    error_selectors:
+    - .error
+    - .error-message
+    - .alert-danger
+    - .alert-error
+    - '[class*="error"]'
+    - '[class*="502"]'
+    - .server-error
+    - .gateway-error
+    - .service-unavailable
+    - .http-error

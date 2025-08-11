@@ -1,0 +1,125 @@
+name: odoosurveys
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: plato@gmail.com
+    password: password
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Standard login flow for Odoo Surveys
+  steps:
+  - action: navigate
+    description: Navigate to surveys kanban view
+    url: /web#action=390&model=survey.survey&view_type=kanban&cids=1&menu_id=273
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 8000
+  - action: wait_for_selector
+    description: Wait for email/login field
+    selector: 'input[name="login"], input[name="email"], input[type="email"], #login, .o_field_widget input[type="text"]'
+    timeout: 15000
+  - action: fill
+    description: Fill email/login field
+    selector: 'input[name="login"], input[name="email"], input[type="email"], #login, .o_field_widget input[type="text"]'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget input[type="password"]'
+    timeout: 5000
+  - action: fill
+    description: Fill password field
+    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget input[type="password"]'
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, .o_login_btn
+  - action: wait
+    description: Wait for login to process
+    duration: 5000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - action: wait
+    description: Wait longer for login to process
+    duration: 8000
+  - action: verify_no_errors
+    description: Verify no login errors are displayed
+    error_selectors:
+    - .alert-danger
+    - .alert-error
+    - .error-message
+    - .invalid-feedback
+    - .login-error
+    - .auth-error
+    - .error
+    - .alert
+    - .o_error_detail
+  - action: verify
+    description: Verify successful login by checking for main Odoo interface elements and Surveys specific elements
+    selector: .o_main_navbar, .o_action_manager, .o_control_panel, .o_kanban_view, .o_list_view, .o_form_view, .o_menu_sections, .o_survey_form
+    type: element_exists
+  - action: verify_url
+    description: Verify we are on the surveys kanban view
+    url: /web#action=390&model=survey.survey&view_type=kanban
+    contains: true
+  - action: verify
+    description: Verify surveys kanban is present
+    selector: .o_kanban_view [data-model="survey.survey"], .o_kanban_view.o_survey_kanban, .o_kanban_view
+    type: element_exists
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: navigate
+    description: Navigate to surveys kanban view
+    url: /web#action=390&model=survey.survey&view_type=kanban&cids=1&menu_id=273
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: 'input[name="username"], input[name="email"], input[name="login"], input[type="email"], input[type="text"]:first-of-type, #username, #email, #login, #user'
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field with valid username
+    selector: 'input[name="username"], input[name="email"], input[name="login"], input[type="email"], input[type="text"]:first-of-type, #username, #email, #login, #user'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #password'
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: 'input[name="password"], input[type="password"], #password'
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, .login-button, button.btn
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: .alert-danger, .alert-error, .error-message, .text-danger, .invalid-feedback, .login-error, .auth-error, .error, .alert, .form-error, .o_error_detail
+    type: element_exists

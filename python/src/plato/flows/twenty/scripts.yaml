@@ -1,0 +1,118 @@
+name: twenty
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: plato@gmail.com
+    password: password
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Complete login flow for Twenty CRM (Plato UI)
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial screen)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for login modal to appear
+    duration: 5000
+  - action: click
+    description: Click "Continue with Email" button on Plato modal
+    selector: button:has-text("Continue with Email")
+  - action: wait
+    description: Wait for email input to appear
+    duration: 2000
+  - action: screenshot
+    description: Screenshot after Continue screen
+    filename: 02_after_email.png
+  - action: wait_for_selector
+    description: Wait for email input field
+    selector: input[placeholder='Email']
+    timeout: 10000
+  - action: fill
+    description: Fill in email
+    selector: input[placeholder='Email']
+    value: $username
+  - action: click
+    description: Submit email to proceed
+    selector: button:has-text('Continue'), button[type='submit']
+  - action: wait
+    description: Wait for password screen
+    duration: 2000
+  - action: wait_for_selector
+    description: Wait for password input field
+    selector: input[type='password'], input[name='password']
+    timeout: 5000
+  - action: fill
+    description: Fill in password
+    selector: input[type='password'], input[name='password']
+    value: $password
+  - action: screenshot
+    description: Screenshot after entering email and password
+    filename: 02_credentials_entered.png
+  - action: click
+    description: Click login button
+    selector: button:has-text('Log in'), button[type='submit']
+  - action: wait
+    description: Wait for login to process
+    duration: 5000
+  - action: screenshot
+    description: Screenshot after login
+    filename: 03_after_login.png
+  - action: wait
+    description: Final wait for dashboard or redirect
+    duration: 5000
+  - action: wait_for_selector
+    description: Verify that the onboarding modal is displayed
+    selector: text=/Book your onboarding/i
+    timeout: 10000
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for login modal to appear
+    duration: 5000
+  - action: click
+    description: Click "Continue with Email" button
+    selector: button:has-text("Continue with Email")
+  - action: wait
+    description: Wait for email input to appear
+    duration: 2000
+  - action: fill
+    description: Fill in email
+    selector: input[placeholder='Email']
+    value: $username
+  - action: click
+    description: Submit email to proceed
+    selector: button:has-text('Continue'), button[type='submit']
+  - action: wait
+    description: Wait for password screen
+    duration: 2000
+  - action: fill
+    description: Fill in incorrect password
+    selector: input[type='password'], input[name='password']
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login button
+    selector: button:has-text("Log in"), button[type="submit"]
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: '[data-testid="error-message"], .MuiAlert-root, .MuiAlert-standardError, .error-message, [data-testid*="error"], .form-error, .text-danger, [class*="error"], [role="alert"], [class*="alert"], [class*="danger"], .warning, .fail, .invalid'
+    type: element_exists

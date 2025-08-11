@@ -4,7 +4,6 @@ from plato.models import PlatoTask, EvaluationResult
 from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
-import aioboto3
 import random
 import logging
 from plato.exceptions import PlatoClientError
@@ -70,32 +69,19 @@ class PlatoEnvironment:
         from plato.models.flow import Simulator
         from plato.flow_executor import FlowExecutor
 
-        # Create S3 client configured for unsigned requests (public buckets)
-        try:
-            from botocore.config import Config  # type: ignore
-            from botocore import UNSIGNED  # type: ignore
-        except ImportError:
-            raise PlatoClientError("aioboto3 and botocore are required for S3 access")
+        if not self.env_id:
+            raise PlatoClientError("No env_id set on environment; cannot load flows")
 
-        session = aioboto3.Session()
-
-        temp_dir = os.path.join("/tmp", self.env_id)
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Download the scripts file from S3
-        async with session.client(
-            "s3", config=Config(signature_version=UNSIGNED)
-        ) as s3_client:
-            await s3_client.download_file(
-                "plato-sim-scripts",
-                os.path.join(self.env_id, "scripts.yaml"),
-                os.path.join(temp_dir, "scripts.yaml"),
+        # Load from repo path: python/src/plato/flows/{env_id}/scripts.yaml
+        flows_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "flows")
+        scripts_path = os.path.join(flows_dir, self.env_id, "scripts.yaml")
+        if not os.path.exists(scripts_path):
+            raise PlatoClientError(
+                f"Flow scripts not found for env_id '{self.env_id}' at {scripts_path}"
             )
-
-        # Load and parse the scripts file
-        with open(os.path.join(temp_dir, "scripts.yaml"), "r") as f:
+        with open(scripts_path, "r") as f:
             scripts = yaml.safe_load(f)
-            simulator = Simulator.model_validate(scripts)
+        simulator = Simulator.model_validate(scripts)
 
         # Get base dataset and login flow
         base_dataset = next(

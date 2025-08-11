@@ -1,0 +1,109 @@
+name: frappewiki
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: Administrator
+    password: admin
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Complete login flow for Frappe Wiki with verification
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 5000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: 'input[data-fieldname="usr"], input[name="usr"], #login_email, input[type="email"]'
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field
+    selector: 'input[data-fieldname="usr"], input[name="usr"], #login_email, input[type="email"]'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[data-fieldname="pwd"], input[name="pwd"], #login_password, input[type="password"]'
+    timeout: 5000
+  - action: fill
+    description: Fill password field
+    selector: 'input[data-fieldname="pwd"], input[name="pwd"], #login_password, input[type="password"]'
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: '.btn-login, button[type="submit"], .btn-primary, #login_btn'
+  - action: wait
+    description: Wait for login to process
+    duration: 5000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - action: verify_no_errors
+    description: Verify no login errors are displayed
+    error_selectors:
+    - .msgprint
+    - .alert-danger
+    - .alert-error
+    - .error-message
+    - .text-danger
+    - .invalid-feedback
+    - .login-error
+    - .auth-error
+    - .error
+    - .alert
+  - action: verify
+    description: Verify successful login by checking for main Frappe Wiki interface elements
+    selector: '.main-section, .desk, .navbar, .sidebar-menu, #navbar-breadcrumbs, .module-icons'
+    type: element_exists
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: 'input[data-fieldname="usr"], input[name="usr"], #login_email, input[type="email"]'
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field with valid username
+    selector: 'input[data-fieldname="usr"], input[name="usr"], #login_email, input[type="email"]'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[data-fieldname="pwd"], input[name="pwd"], #login_password, input[type="password"]'
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: 'input[data-fieldname="pwd"], input[name="pwd"], #login_password, input[type="password"]'
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: '.btn-login, button[type="submit"], .btn-primary, #login_btn'
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: .msgprint, .alert-danger, .error-message, .invalid-feedback, .text-danger
+    type: element_exists

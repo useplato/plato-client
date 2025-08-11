@@ -1,0 +1,107 @@
+name: openmaint
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: admin
+    password: password
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Complete login flow for OpenMaint with verification
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 5000
+  - action: wait_for_selector
+    description: Wait for username field
+    selector: 'input[name="username"], input[name="user"], #username, input[type="text"]:first'
+    timeout: 15000
+  - action: fill
+    description: Fill username field
+    selector: 'input[name="username"], input[name="user"], #username, input[type="text"]:first'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #password'
+    timeout: 5000
+  - action: fill
+    description: Fill password field
+    selector: 'input[name="password"], input[type="password"], #password'
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, button:contains("Login")
+  - action: wait
+    description: Wait for login to process
+    duration: 5000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - action: verify_no_errors
+    description: Verify no login errors are displayed
+    error_selectors:
+    - .error
+    - .alert-danger
+    - .alert-error
+    - .error-message
+    - .text-danger
+    - .invalid-feedback
+    - .login-error
+    - .auth-error
+  - action: verify
+    description: Verify successful login by checking for main OpenMaint interface elements
+    selector: .main-content, .dashboard, .header, .navigation, .menu
+    type: element_exists
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username field
+    selector: 'input[name="username"], input[name="user"], #username, input[type="text"]:first'
+    timeout: 15000
+  - action: fill
+    description: Fill username field with valid username
+    selector: 'input[name="username"], input[name="user"], #username, input[type="text"]:first'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #password'
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: 'input[name="password"], input[type="password"], #password'
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, button:contains("Login")
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: .error, .alert-danger, .error-message, .invalid-feedback, .text-danger
+    type: element_exists

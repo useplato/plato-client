@@ -1,0 +1,106 @@
+name: grafana
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: admin
+    password: password
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Standard login flow for Grafana
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 5000
+  - action: wait_for_selector
+    description: Wait for username field to be ready
+    selector: input:not([type="password"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), [data-testid="username-input"], [data-testid="email-input"], input[placeholder*="username" i], input[placeholder*="email" i], input[placeholder*="user" i]
+    timeout: 10000
+  - action: fill
+    description: Fill username field
+    selector: input:not([type="password"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), [data-testid="username-input"], [data-testid="email-input"], input[placeholder*="username" i], input[placeholder*="email" i], input[placeholder*="user" i]
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field to be ready
+    selector: input[type="password"], [data-testid="password-input"], input[placeholder*="password" i]
+    timeout: 5000
+  - action: fill
+    description: Fill password field
+    selector: input[type="password"], [data-testid="password-input"], input[placeholder*="password" i]
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - action: wait_for_selector
+    description: Wait for login button to be ready
+    selector: button[type="submit"], button:has-text("Log in"), button:has-text("Sign in"), button:has-text("Login"), [data-testid="login-button"], [aria-label*="login" i], [aria-label*="sign in" i]
+    timeout: 5000
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], button:has-text("Log in"), button:has-text("Sign in"), button:has-text("Login"), [data-testid="login-button"], [aria-label*="login" i], [aria-label*="sign in" i]
+  - action: wait
+    description: Wait for login to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - action: wait
+    description: Wait longer for login to process
+    duration: 8000
+  - action: wait
+    description: Wait for page to fully load after login
+    duration: 5000
+  - action: verify
+    description: Verify successful login by checking for dashboard elements
+    selector: body.page-dashboard, .page-dashboard, .dashboard-container, [aria-label="Dashboard"], .navbar, .sidemenu, nav[aria-label="Main menu"], .dashboard-content, [class*="NavToolbar"], [class*="sidemenu"]
+    type: element_exists
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: input:not([type="password"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), [data-testid="username-input"], [data-testid="email-input"], input[placeholder*="username" i], input[placeholder*="email" i], input[placeholder*="user" i]
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field with valid username
+    selector: input:not([type="password"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), [data-testid="username-input"], [data-testid="email-input"], input[placeholder*="username" i], input[placeholder*="email" i], input[placeholder*="user" i]
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: input[type="password"], [data-testid="password-input"], input[placeholder*="password" i]
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: input[type="password"], [data-testid="password-input"], input[placeholder*="password" i]
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], button:has-text("Log in"), button:has-text("Sign in"), button:has-text("Login"), [data-testid="login-button"], [aria-label*="login" i], [aria-label*="sign in" i]
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: '[aria-label*="Alert" i], [data-testid="alert-error"], .alert-error, [class*="alert"][class*="error"], [class*="Alert"], .page-alert, .alert, div[class*="alert"], div[role="alert"], div[data-testid*="alert"], [data-testid="data-testid Alert error"], [class*="error" i]:not(body), [role="alert"]'
+    type: element_exists

@@ -1,0 +1,103 @@
+name: metabase
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: user@plato.so
+    password: password_123
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Standard login flow for Metabase
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait longer for page to fully load
+    duration: 8000
+  - action: wait_for_selector
+    description: Wait for username/email field to be ready
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #username, #email'
+    timeout: 10000
+  - action: fill
+    description: Fill username/email field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #username, #email'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field to be ready
+    selector: 'input[name="password"], input[type="password"], #password'
+    timeout: 5000
+  - action: fill
+    description: Fill password field
+    selector: 'input[name="password"], input[type="password"], #password'
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - action: wait_for_selector
+    description: Wait for login button to be ready
+    selector: button[type='submit'], input[type='submit'], .Button--primary, button.Button
+    timeout: 5000
+  - action: click
+    description: Click login submit button
+    selector: button[type='submit'], input[type='submit'], .Button--primary, button.Button
+  - action: wait
+    description: Wait for login to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - action: wait
+    description: Wait longer for login to process
+    duration: 8000
+  - action: verify
+    description: Verify main application interface is displayed
+    selector: .Nav, nav, .AppBar, .Header, [class*="header"], [class*="navigation"], .Icon-home, .Icon-dashboard, [class*="Home"], [class*="Dashboard"], .main-navbar
+    type: element_exists
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #username, #email'
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field with valid username
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #username, #email'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #password'
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: 'input[name="password"], input[type="password"], #password'
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type='submit'], input[type='submit'], .Button--primary, button.Button
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: .Form-field-error, .text-error, span.text-error, .emotion-zfa2so, .emotion-piquwr, .elpjvd50, .e18gg6yk1, [class*="error"], [role="alert"]
+    type: element_exists

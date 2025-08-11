@@ -1,0 +1,99 @@
+name: sentry
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: admin@plato.so
+    password: password
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Complete login flow for Sentry with verification
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 5000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #id_username, input[placeholder*="email"], input[placeholder*="Email"]'
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #id_username, input[placeholder*="email"], input[placeholder*="Email"]'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #id_password'
+    timeout: 5000
+  - action: fill
+    description: Fill password field
+    selector: 'input[name="password"], input[type="password"], #id_password'
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, button.btn, .btn
+  - action: wait
+    description: Wait for login to process
+    duration: 5000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - action: wait
+    description: Additional wait for app to load
+    duration: 3000
+  - action: verify
+    description: Verify successful login by checking for main Sentry interface elements
+    selector: .app, .sidebar, .main-content, .organization-home, .dashboard, [class*="organization"], [class*="project"], nav, [role="navigation"]
+    type: element_exists
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #id_username, input[placeholder*="email"], input[placeholder*="Email"]'
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field with valid username
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #id_username, input[placeholder*="email"], input[placeholder*="Email"]'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #id_password'
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: 'input[name="password"], input[type="password"], #id_password'
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, button.btn, .btn
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: .error, .alert-danger, .error-message, .invalid-feedback, .text-danger, [role="alert"], [class*="error"], .alert
+    type: element_exists

@@ -1,0 +1,113 @@
+name: taiga
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: admin
+    password: admin
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Complete login flow for Taiga with verification
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 15000
+  - action: click
+    description: Click login button if present on initial page
+    selector: a.login, button.login, a[href*='login']
+  - action: wait
+    description: Wait after initial login button click
+    duration: 5000
+  - action: wait_for_selector
+    description: Wait for username field
+    selector: 'input[name=''username''], input[name=''email''], input[type=''text''], input[type=''email''], input:first-of-type, #username, #email'
+    timeout: 10000
+  - action: fill
+    description: Fill username field
+    selector: 'input[name=''username''], input[name=''email''], input[type=''text''], input[type=''email''], input:first-of-type, #username, #email'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: input[type='password'], input[name='password'], .password input
+    timeout: 5000
+  - action: fill
+    description: Fill password field
+    selector: input[type='password'], input[name='password'], .password input
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - action: click
+    description: Click submit button
+    selector: button[type='submit'], input[type='submit'], button.submit, button.login
+  - action: wait
+    description: Wait for login to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - action: wait
+    description: Wait for login to process
+    duration: 10000
+  - action: wait
+    description: Wait for page to fully load after login
+    duration: 5000
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    duration: 3000
+  - action: click
+    description: Click login button if present on initial page
+    selector: a.login, button.login, a[href*='login']
+    timeout: 15000
+  - action: wait
+    description: Wait for page to fully load
+    duration: 5000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: 'input[name=''username''], input[name=''email''], input[type=''text''], input[type=''email''], input:first-of-type, #username, #email'
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field with valid username
+    selector: 'input[name=''username''], input[name=''email''], input[type=''text''], input[type=''email''], input:first-of-type, #username, #email'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: input[type='password'], input[name='password'], .password input
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: input[type='password'], input[name='password'], .password input
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: button[type='submit'], input[type='submit'], button.submit, button.login
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: wait
+    description: Wait for error message to appear
+    duration: 2000
+  - action: verify
+    description: Verify error message is displayed
+    selector: .error, .form-errors, .login-form-errors, .checksley-error, [class*="error"][class*="message"], .notification-message-text, .notification-error, .message.error, form .error, .notification, .alert, [role="alert"], .invalid, .warning, .danger, .fail, [class*="notification"], .form-field-error, .input-error, .field-error, .has-error, .is-invalid
+    type: element_exists

@@ -1,0 +1,161 @@
+name: mattermost
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: alex.reynolds
+    password: password
+    wrong_password: wrongpassword
+  flows:
+  - login
+  - incorrect_login
+flows:
+- name: login
+  description: Standard login flow for Mattermost
+  steps:
+  - action: screenshot
+    description: Screenshot before login (initial page)
+    filename: 01_before_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 5000
+  - action: wait_for_selector
+    description: Wait for any interactive element to appear
+    selector: input, button, a, .btn, [role="button"]
+    timeout: 10000
+  - action: screenshot
+    description: Screenshot when interactive elements are found
+    filename: 02_interactive_elements.png
+  - action: wait_for_selector
+    description: Wait for "View in Browser" button to appear
+    selector: button:has-text("View in Browser"), a:has-text("View in Browser")
+    timeout: 10000
+  - action: click
+    description: Click "View in Browser" button
+    selector: button:has-text("View in Browser"), a:has-text("View in Browser")
+    timeout: 5000
+  - action: wait
+    description: Wait after clicking "View in Browser"
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after clicking "View in Browser"
+    filename: 03_after_view_in_browser.png
+  - action: wait_for_selector
+    description: Wait for login link or button to appear
+    selector: a[href*="login"], a:has-text("Sign in"), a:has-text("Log in"), button:has-text("Sign in"), button:has-text("Log in")
+    timeout: 10000
+  - action: click
+    description: Click login link or button
+    selector: a[href*="login"], a:has-text("Sign in"), a:has-text("Log in"), button:has-text("Sign in"), button:has-text("Log in")
+    timeout: 5000
+  - action: wait
+    description: Wait for navigation after clicking login link
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after clicking login link
+    filename: 04_after_login_click.png
+  - action: wait_for_selector
+    description: Wait for username input field to appear
+    selector: input[id="loginId"], input[name="loginId"], input[id="email"], input[name="email"], input[id="username"], input[name="username"], input[type="text"], input[type="email"]
+    timeout: 15000
+  - action: fill
+    description: Fill in username field
+    selector: input[id="loginId"], input[name="loginId"], input[id="email"], input[name="email"], input[id="username"], input[name="username"], input[type="text"], input[type="email"]
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field to appear
+    selector: input[type="password"]
+    timeout: 15000
+  - action: fill
+    description: Fill in password field
+    selector: input[type="password"]
+    value: $password
+  - action: screenshot
+    description: Screenshot after credentials are entered
+    filename: 05_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary, #loginButton'
+    timeout: 10000
+  - action: wait
+    description: Wait for login process to complete
+    duration: 8000
+  - action: screenshot
+    description: Screenshot after login attempt
+    filename: 06_after_login.png
+  - action: verify_no_errors
+    description: Verify no login errors are displayed
+    error_selectors:
+    - .alert-danger
+    - .alert-error
+    - .error-message
+    - .text-danger
+    - .invalid-feedback
+    - .login-error
+    - .auth-error
+    - .error
+    - .alert
+    - .errormsg
+    - .has-error
+    - .form-error
+  - action: verify
+    description: Verify successful login by checking for Mattermost main interface elements
+    selector: .sidebar-left, .channel-header, .post-list, .team-sidebar, .app-content, .channel-view, .sidebar, .main-content, .team-header, .channel-intro, .post-create, .channel-list
+    type: element_exists
+- name: incorrect_login
+  description: Verify login fails with incorrect password
+  steps:
+  - action: screenshot
+    description: Screenshot before incorrect login attempt
+    filename: 01_before_incorrect_login.png
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: click
+    description: Click "View in Browser" button
+    selector: button:has-text("View in Browser"), a:has-text("View in Browser")
+    timeout: 5000
+  - action: wait
+    description: Wait after clicking "View in Browser"
+    duration: 3000
+  - action: click
+    description: Click login link
+    selector: 'a[href*="login"], a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("Log in"), button:has-text("Log in"), .login-button, #loginButton'
+    timeout: 10000
+  - action: wait
+    description: Wait for login page
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username/email field
+    selector: input[id="loginId"], input[name="loginId"], input[id="email"], input[name="email"], input[id="username"], input[name="username"], input[type="text"], input[type="email"]
+    timeout: 15000
+  - action: fill
+    description: Fill username/email field with valid username
+    selector: input[id="loginId"], input[name="loginId"], input[id="email"], input[name="email"], input[id="username"], input[name="username"], input[type="text"], input[type="email"]
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: input[type="password"]
+    timeout: 5000
+  - action: fill
+    description: Fill password field with incorrect password
+    selector: input[type="password"]
+    value: $wrong_password
+  - action: screenshot
+    description: Screenshot after entering incorrect credentials
+    filename: 02_incorrect_credentials_entered.png
+  - action: click
+    description: Click login submit button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary, #loginButton'
+  - action: wait
+    description: Wait for login attempt to process
+    duration: 3000
+  - action: screenshot
+    description: Screenshot after incorrect login attempt
+    filename: 03_after_incorrect_login.png
+  - action: verify
+    description: Verify error message is displayed
+    selector: .form-error, .error-text, .error-bar, .login__error, .error-message, label.has-error, .help-text.error-text, [class*="error"][class*="text"], .alert.alert-danger, .form-group.has-error, [class*="error"], [class*="alert"], [class*="danger"], .warning, .fail, .invalid, [role="alert"], .Input__error
+    type: element_exists

@@ -8,7 +8,6 @@ import random
 import logging
 from plato.exceptions import PlatoClientError
 from playwright.sync_api import Page
-import boto3
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -62,6 +61,8 @@ class SyncPlatoEnvironment:
         self._stop_heartbeat = False
         self.fast = fast
 
+    # No embedded defaults; expect scripts.yaml to exist in repo at plato/flows/{env_id}/scripts.yaml
+
     def login(self, page: Page, throw_on_login_error: bool = False) -> None:
         """Login to the environment using authentication config.
 
@@ -71,31 +72,18 @@ class SyncPlatoEnvironment:
         from plato.models.flow import Simulator
         from plato.sync_flow_executor import SyncFlowExecutor
 
-        # Create S3 client configured for unsigned requests (public buckets)
-        try:
-            from botocore.config import Config  # type: ignore
-            from botocore import UNSIGNED  # type: ignore
+        if not self.env_id:
+            raise PlatoClientError("No env_id set on environment; cannot load flows")
 
-            s3_client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-        except ImportError:
-            # Fallback if botocore imports fail - this shouldn't happen with boto3 installed
-            raise PlatoClientError("boto3 and botocore are required for S3 access")
-
-        # Ensure the temp directory exists
-        temp_dir = os.path.join("/tmp", self.env_id)
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Download the scripts file from S3
-        s3_client.download_file(
-            "plato-sim-scripts",
-            os.path.join(self.env_id, "scripts.yaml"),
-            os.path.join(temp_dir, "scripts.yaml"),
-        )
-
-        # Load and parse the scripts file
-        with open(os.path.join(temp_dir, "scripts.yaml"), "r") as f:
+        flows_dir = os.path.join(os.path.dirname(__file__), "flows")
+        scripts_path = os.path.join(flows_dir, self.env_id, "scripts.yaml")
+        if not os.path.exists(scripts_path):
+            raise PlatoClientError(
+                f"Flow scripts not found for env_id '{self.env_id}' at {scripts_path}"
+            )
+        with open(scripts_path, "r") as f:
             scripts = yaml.safe_load(f)
-            simulator = Simulator.model_validate(scripts)
+        simulator = Simulator.model_validate(scripts)
 
         # Get base dataset and login flow
         base_dataset = next(
@@ -152,7 +140,9 @@ class SyncPlatoEnvironment:
 
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
-            logger.debug(f"Waiting for job {self.id} to be running: {current_delay} seconds")
+            logger.debug(
+                f"Waiting for job {self.id} to be running: {current_delay} seconds"
+            )
 
         # wait for the worker to be ready and healthy
         current_delay = base_delay  # Reset delay for worker health check
@@ -173,7 +163,9 @@ class SyncPlatoEnvironment:
 
             # Exponential backoff
             current_delay = min(current_delay * 2, max_delay)
-            logger.debug(f"Waiting for worker {self.id} to be ready: {current_delay} seconds")
+            logger.debug(
+                f"Waiting for worker {self.id} to be ready: {current_delay} seconds"
+            )
 
         # Start the heartbeat thread if not already running
         self._start_heartbeat()
@@ -219,7 +211,13 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return self._client.get_cdp_url(self.id)
 
-    def reset(self, task: Optional[PlatoTask] = None, agent_version: Optional[str] = None, load_authenticated: bool = False, **kwargs) -> str:
+    def reset(
+        self,
+        task: Optional[PlatoTask] = None,
+        agent_version: Optional[str] = None,
+        load_authenticated: bool = False,
+        **kwargs,
+    ) -> str:
         """Reset the environment with an optional new task.
 
         Args:
@@ -230,7 +228,9 @@ class SyncPlatoEnvironment:
         Returns:
             str: The environment is reset and a new run session is created.
         """
-        response = self._client.reset_environment(self.id, task, agent_version, load_authenticated, **kwargs)
+        response = self._client.reset_environment(
+            self.id, task, agent_version, load_authenticated, **kwargs
+        )
         if task:
             self._current_task = task
 
@@ -244,8 +244,7 @@ class SyncPlatoEnvironment:
         return self._run_session_id
 
     def get_session_url(self) -> str:
-        """Get the URL for accessing the session of the environment.
-        """
+        """Get the URL for accessing the session of the environment."""
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
         root_url = self._client.base_url.split("/api")[0]
@@ -273,14 +272,18 @@ class SyncPlatoEnvironment:
 
         # Reset stop flag and start a new heartbeat thread
         self._stop_heartbeat = False
-        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop, daemon=True
+        )
         self._heartbeat_thread.start()
 
     def _stop_heartbeat_thread(self) -> None:
         """Stop the heartbeat background thread if it's running."""
         if self._heartbeat_thread and self._heartbeat_thread.is_alive():
             self._stop_heartbeat = True
-            self._heartbeat_thread.join(timeout=5.0)  # Wait up to 5 seconds for thread to stop
+            self._heartbeat_thread.join(
+                timeout=5.0
+            )  # Wait up to 5 seconds for thread to stop
             self._heartbeat_thread = None
 
     def get_state(self) -> Dict[str, Any]:
@@ -323,11 +326,11 @@ class SyncPlatoEnvironment:
             _get_nested_value(data, "a.b[1].c") -> 2
         """
         current = data
-        for part in key_path.split('.'):
-            if '[' in part:
+        for part in key_path.split("."):
+            if "[" in part:
                 # Handle list index access
-                key, idx_str = part.split('[')
-                idx = int(idx_str.rstrip(']'))
+                key, idx_str = part.split("[")
+                idx = int(idx_str.rstrip("]"))
                 current = current[key][idx]
             else:
                 current = current[part]
@@ -371,23 +374,23 @@ class SyncPlatoEnvironment:
                 result = eval_config.score_fn(state)
                 if isinstance(result, tuple):
                     success, reason = result
-                    return EvaluationResult(success=success, reason=None if success else reason)
+                    return EvaluationResult(
+                        success=success, reason=None if success else reason
+                    )
                 else:
                     # Handle legacy score functions that return just a boolean
                     return EvaluationResult(
                         success=bool(result),
-                        reason=None if result else "Custom evaluation failed"
+                        reason=None if result else "Custom evaluation failed",
                     )
             except Exception as e:
                 return EvaluationResult(
-                    success=False,
-                    reason=f"Custom evaluation error: {str(e)}"
+                    success=False, reason=f"Custom evaluation error: {str(e)}"
                 )
 
         else:
             return EvaluationResult(
-                success=False,
-                reason=f"Unknown evaluation type: {eval_config.type}"
+                success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
     def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
@@ -410,23 +413,25 @@ class SyncPlatoEnvironment:
         ):
             evaluation_result = self.get_evaluation_result()
             state = self.get_state()
-            state = state.get('state', {})
-            mutations = state.get('mutations', [])
+            state = state.get("state", {})
+            mutations = state.get("mutations", [])
             if self._run_session_id:
-                self._client.post_evaluation_result(self._run_session_id, evaluation_result, agent_version, mutations)
+                self._client.post_evaluation_result(
+                    self._run_session_id, evaluation_result, agent_version, mutations
+                )
             return evaluation_result
         else:
             # call /evaluate endpoint
             response = self._client.evaluate(self._run_session_id, agent_version)
             if not response:
                 raise PlatoClientError("No evaluation result found")
-            result = response['result']
+            result = response["result"]
             return EvaluationResult(
-                success=result.get('correct', False),
-                reason=result.get('reason', None),
-                diffs=result.get('diffs', None),
-                expected_mutations=result.get('expected_mutations', None),
-                actual_mutations=result.get('mutations', None),
+                success=result.get("correct", False),
+                reason=result.get("reason", None),
+                diffs=result.get("diffs", None),
+                expected_mutations=result.get("expected_mutations", None),
+                actual_mutations=result.get("mutations", None),
             )
 
     def log(self, log: dict, type: str = "info") -> None:
@@ -484,7 +489,11 @@ class SyncPlatoEnvironment:
                 proxy_server = "https://dev.proxy.plato.so"
             elif "staging.plato.so" in self._client.base_url:
                 proxy_server = "https://staging.proxy.plato.so"
-            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url and "dev" not in self._client.base_url:
+            elif (
+                "plato.so" in self._client.base_url
+                and "staging" not in self._client.base_url
+                and "dev" not in self._client.base_url
+            ):
                 proxy_server = "https://proxy.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
@@ -492,7 +501,7 @@ class SyncPlatoEnvironment:
             return {
                 "server": proxy_server,
                 "username": self.id,
-                "password": self._run_session_id
+                "password": self._run_session_id,
             }
         except Exception as e:
             raise PlatoClientError(str(e))
@@ -522,7 +531,11 @@ class SyncPlatoEnvironment:
                 return f"https://{identifier}.dev.sims.plato.so"
             elif "staging.plato.so" in self._client.base_url:
                 return f"https://{identifier}.staging.sims.plato.so"
-            elif "plato.so" in self._client.base_url and "staging" not in self._client.base_url and "dev" not in self._client.base_url:
+            elif (
+                "plato.so" in self._client.base_url
+                and "staging" not in self._client.base_url
+                and "dev" not in self._client.base_url
+            ):
                 return f"https://{identifier}.sims.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
@@ -553,7 +566,9 @@ class SyncPlatoEnvironment:
         return self._client.backup_environment(self.id)
 
     @staticmethod
-    def from_id(client: "SyncPlato", id: str, fast: bool = False) -> "SyncPlatoEnvironment":
+    def from_id(
+        client: "SyncPlato", id: str, fast: bool = False
+    ) -> "SyncPlatoEnvironment":
         """Create a new environment from an ID.
 
         Returns:
