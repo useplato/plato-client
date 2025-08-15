@@ -516,3 +516,20 @@ class Plato:
             if "error" in data:
                 raise PlatoClientError(data["error"])
             return data
+
+    async def get_running_sessions_count(self) -> Dict[str, Any]:
+        """Get the current number of running sessions for the user's organization.
+
+        Returns:
+            Dict[str, Any]: Organization data including organization ID and running sessions count.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/user/organization/running-sessions", headers=headers
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
