@@ -258,6 +258,8 @@ Here is the task:
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
     cdp_url = await env.get_cdp_url()
+    if "wss" in cdp_url:
+        cdp_url = cdp_url.replace("wss://", "ws://")
     public_url = await env.get_public_url()
 
     try:
