@@ -57,6 +57,26 @@ class SyncPlato:
             self._http_session.close()
             self._http_session = None
 
+    def _handle_response_error(self, response: requests.Response) -> None:
+        """Handle HTTP error responses by extracting the actual error message.
+
+        Args:
+            response: The requests response object
+
+        Raises:
+            PlatoClientError: With the actual error message from the response
+        """
+        if response.status_code >= 400:
+            try:
+                # Try to get the error message from the response body
+                error_data = response.json()
+                error_message = error_data.get('error') or error_data.get('message') or str(error_data)
+            except (ValueError, requests.exceptions.JSONDecodeError):
+                # Fallback to status text if we can't parse JSON
+                error_message = response.reason or f"HTTP {response.status_code}"
+
+            raise PlatoClientError(f"HTTP {response.status_code}: {error_message}")
+
     def make_environment(
         self,
         env_id: str,
@@ -112,7 +132,7 @@ class SyncPlato:
                 "version": version,
             },
         )
-        response.raise_for_status()
+        self._handle_response_error(response)
         data = response.json()
         return SyncPlatoEnvironment(
             client=self,
@@ -135,7 +155,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.get(f"{self.base_url}/env/{job_id}/status")
-        response.raise_for_status()
+        self._handle_response_error(response)
         data = response.json()
         logger.debug(f"Job status for job {job_id}: {data}")
         return data
@@ -172,7 +192,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.post(f"{self.base_url}/env/{job_id}/close")
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def backup_environment(self, job_id: str) -> Dict[str, Any]:
@@ -188,7 +208,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.post(f"{self.base_url}/env/{job_id}/backup")
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def reset_environment(
@@ -226,7 +246,7 @@ class SyncPlato:
         )
         end_time = time.time()
         print(f"Reset time: {end_time - start_time} seconds")
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def get_environment_state(self, job_id: str) -> Dict[str, Any]:
@@ -242,7 +262,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.get(f"{self.base_url}/env/{job_id}/state")
-        response.raise_for_status()
+        self._handle_response_error(response)
         data = response.json()
         return data["data"]["state"]
 
@@ -259,7 +279,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.get(f"{self.base_url}/env/{job_id}/worker_ready")
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def get_live_view_url(self, job_id: str) -> str:
@@ -297,7 +317,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.post(f"{self.base_url}/env/{job_id}/heartbeat")
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def process_snapshot(self, session_id: str) -> Dict[str, Any]:
@@ -313,7 +333,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.post(f"{self.base_url}/snapshot/process/{session_id}")
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def evaluate(self, session_id: str, agent_version: Optional[str] = None) -> Dict[str, Any]:
@@ -332,7 +352,7 @@ class SyncPlato:
         response = self.http_session.post(
             f"{self.base_url}/env/session/{session_id}/evaluate",
         )
-        response.raise_for_status()
+        self._handle_response_error(response)
         res_data = response.json()
         return res_data["score"]
 
@@ -367,7 +387,7 @@ class SyncPlato:
             f"{self.base_url}/env/session/{session_id}/score",
             json=body,
         )
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def log(self, session_id: str, log: dict, type: str = "info") -> Dict[str, Any]:
@@ -393,7 +413,7 @@ class SyncPlato:
                 "timestamp": datetime.now().isoformat(),
             },
         )
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()
 
     def list_simulators(self) -> List[Dict[str, Any]]:
@@ -406,7 +426,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.get(f"{self.base_url}/env/simulators")
-        response.raise_for_status()
+        self._handle_response_error(response)
         simulators = response.json()
         return [s for s in simulators if s["enabled"]]
 
@@ -425,7 +445,7 @@ class SyncPlato:
         response = self.http_session.get(
             f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000",
         )
-        response.raise_for_status()
+        self._handle_response_error(response)
         res = response.json()
         test_cases = res["testcases"]
         return [
@@ -457,7 +477,7 @@ class SyncPlato:
             PlatoClientError: If no active session is found.
         """
         response = self.http_session.get(f"{self.base_url}/env/{job_id}/active_session")
-        response.raise_for_status()
+        self._handle_response_error(response)
         data = response.json()
         if "error" in data:
             raise PlatoClientError(data["error"])
@@ -473,5 +493,5 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.get(f"{self.base_url}/user/organization/running-sessions")
-        response.raise_for_status()
+        self._handle_response_error(response)
         return response.json()

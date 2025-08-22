@@ -66,6 +66,26 @@ class Plato:
             await self._http_session.close()
             self._http_session = None
 
+    async def _handle_response_error(self, response: aiohttp.ClientResponse) -> None:
+        """Handle HTTP error responses by extracting the actual error message.
+
+        Args:
+            response: The aiohttp response object
+
+        Raises:
+            PlatoClientError: With the actual error message from the response
+        """
+        if response.status >= 400:
+            try:
+                # Try to get the error message from the response body
+                error_data = await response.json()
+                error_message = error_data.get('error') or error_data.get('message') or str(error_data)
+            except (aiohttp.ContentTypeError, ValueError):
+                # Fallback to status text if we can't parse JSON
+                error_message = response.reason or f"HTTP {response.status}"
+
+            raise PlatoClientError(f"HTTP {response.status}: {error_message}")
+
     async def make_environment(
         self,
         env_id: str,
@@ -123,7 +143,7 @@ class Plato:
             },
             headers=headers,
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             data = await response.json()
             return PlatoEnvironment(
                 client=self,
@@ -149,7 +169,7 @@ class Plato:
         async with self.http_session.get(
             f"{self.base_url}/env/{job_id}/status", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             response = await response.json()
             logger.debug(f"Job status for job {job_id}: {response}")
             return response
@@ -191,7 +211,7 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/close", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def backup_environment(self, job_id: str) -> Dict[str, Any]:
@@ -210,7 +230,7 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/backup", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def reset_environment(
@@ -248,7 +268,7 @@ class Plato:
         ) as response:
             end_time = time.time()
             print(f"Reset time: {end_time - start_time} seconds")
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def get_environment_state(self, job_id: str) -> Dict[str, Any]:
@@ -267,7 +287,7 @@ class Plato:
         async with self.http_session.get(
             f"{self.base_url}/env/{job_id}/state", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             data = await response.json()
             return data["data"]["state"]
 
@@ -292,7 +312,7 @@ class Plato:
         async with self.http_session.get(
             f"{self.base_url}/env/{job_id}/worker_ready", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def get_live_view_url(self, job_id: str) -> str:
@@ -336,7 +356,7 @@ class Plato:
         async with self.http_session.post(
             f"{self.base_url}/env/{job_id}/heartbeat", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def process_snapshot(self, session_id: str) -> Dict[str, Any]:
@@ -356,7 +376,7 @@ class Plato:
             f"{self.base_url}/snapshot/process/{session_id}",
             headers=headers,
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def evaluate(
@@ -372,7 +392,7 @@ class Plato:
             f"{self.base_url}/env/session/{session_id}/evaluate",
             headers=headers,
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             res_data = await response.json()
             return res_data["score"]
 
@@ -401,7 +421,7 @@ class Plato:
             headers=headers,
             json=body,
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def log(
@@ -425,7 +445,7 @@ class Plato:
                 "timestamp": datetime.now().isoformat(),
             },
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
     async def list_simulators(self) -> List[Dict[str, Any]]:
@@ -438,7 +458,7 @@ class Plato:
         async with self.http_session.get(
             f"{self.base_url}/env/simulators", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             simulators = await response.json()
             return [s for s in simulators if s["enabled"]]
 
@@ -453,7 +473,7 @@ class Plato:
             f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000",
             headers=headers,
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             res = await response.json()
             test_cases = res["testcases"]
             return [
@@ -490,7 +510,7 @@ class Plato:
             f"{self.base_url}/testcases?simulator_id={simulator_id}&page_size=1000",
             headers=headers,
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             res = await response.json()
             return res["testcases"]
 
@@ -511,7 +531,7 @@ class Plato:
         async with self.http_session.get(
             f"{self.base_url}/env/{job_id}/active_session", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             data = await response.json()
             if "error" in data:
                 raise PlatoClientError(data["error"])
@@ -530,6 +550,6 @@ class Plato:
         async with self.http_session.get(
             f"{self.base_url}/user/organization/running-sessions", headers=headers
         ) as response:
-            response.raise_for_status()
+            await self._handle_response_error(response)
             return await response.json()
 
