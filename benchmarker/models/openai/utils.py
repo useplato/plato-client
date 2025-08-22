@@ -92,7 +92,7 @@ async def create_response(**kwargs):
                                 return {
                                     "output": [
                                         {
-                                            "type": "error",
+                                            "type": "message",
                                             "content": f"Request failed after {retry_count} retries: {response.status} {error_text}"
                                         }
                                     ]
@@ -128,7 +128,7 @@ async def create_response(**kwargs):
                     return {
                         "output": [
                             {
-                                "type": "error",
+                                "type": "message",  # Changed from "error"
                                 "content": f"Request failed after {retry_count} retries: {str(e)}"
                             }
                         ]
