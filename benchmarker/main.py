@@ -3,6 +3,8 @@ import os
 import argparse
 import traceback
 import logging
+import uuid
+import time
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -19,6 +21,26 @@ from models.anthropic.tools.computer_browser import ComputerBrowserTool20250124
 from models.openai.agent.agent import Agent as OpenAIAgent
 
 from models.openai.computers.remote_playwright import RemotePlaywrightComputer
+
+# Import for local browser support
+import sys
+import os
+
+# Set PYTHONPATH environment variable for imports
+plato_root = "/home/ubuntu/plato"
+python_paths = [
+    f"{plato_root}/core/src",
+    f"{plato_root}/services/browser/src"
+]
+os.environ['PYTHONPATH'] = ':'.join(python_paths)
+
+# Also add to sys.path as backup
+sys.path.extend(python_paths)
+
+from browser.browser_env import BrowserEnv
+from core.schemas import ResetMessage
+from core.schemas.browser import BrowserEnvironmentConfig, PlaywrightBrowserConfig, BrowserRecordingConfig
+from core.schemas import CloseMessage
 
 load_dotenv(dotenv_path=".env")
 
@@ -136,26 +158,231 @@ Here is the task:
 }
 
 
-async def create_environment_pool(client: Plato, pool_size: int, tasks: list):
+class LocalBrowserEnvironment:
+    # Use a proper port pool to avoid conflicts
+    _port_pool = set(range(9222, 9322))  # 100 available ports
+    _port_lock = asyncio.Lock()
+    
+    async def _get_available_port(self):
+        """Get an available port from the pool"""
+        async with self._port_lock:
+            if not self._port_pool:
+                raise Exception("No available ports")
+            port = self._port_pool.pop()
+            logger.info(f"Using port {port} for browser")
+            return port
+    
+    async def _release_port(self, port):
+        """Return port to the pool"""
+        async with self._port_lock:
+            self._port_pool.add(port)
+            logger.info(f"Released port {port}")
+    
+    def __init__(self, task: PlatoTask):
+        self.task = task
+        self.browser_env = None
+        self.job_group_id = str(uuid.uuid4())
+        self.session_id = None
+        # Each browser environment gets a unique port
+        self.cdp_port = None
+    
+    async def reset(self, task: PlatoTask, agent_version: str = None):
+        """Reset the local browser environment"""
+        self.task = task
+        self.session_id = str(uuid.uuid4())
+        
+        # Get a unique port for this browser
+        if self.cdp_port is None:
+            self.cdp_port = await self._get_available_port()
+        
+        # Set up environment variables
+        os.environ.setdefault('ENV', 'local')
+        os.environ.setdefault('LOGFIRE_IGNORE_NO_CONFIG', '1')
+        
+        # Create BrowserEnv
+        self.browser_env = BrowserEnv(self.job_group_id)
+        
+        # Configure browser
+        from core.schemas.browser import PlaywrightBrowserConfig, BrowserRecordingConfig
+        
+        browser_config = PlaywrightBrowserConfig(
+            browser_type="playwright",
+            cdp_port=self.cdp_port,
+            headless=True,
+            viewport_size=(1920, 1080),
+            extensions=None,
+        )
+        
+        recording_config = BrowserRecordingConfig(
+            record_rrweb=False,
+            record_network_requests=False,
+        )
+        
+        config = {
+            "type": "browser",
+            "job_group_id": self.job_group_id,
+            "browser_config": browser_config,
+            "recording_config": recording_config,
+            "open_page_on_start": True,
+            "js_random_seed": "local-browser",
+            "start_url": self.task.start_url or "https://demo.us.espocrm.com/?l=en_US#Account",
+        }
+        
+        # Create ResetMessage
+        reset_message = ResetMessage(
+            type="reset",
+            session_id=self.session_id,
+            log_callback_url="",
+            env="local",
+            config=config
+        )
+        
+        # Retry logic for browser reset
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Browser reset attempt {attempt + 1}/{max_retries}")
+                result = await self.browser_env.reset(reset_message)
+                
+                if not result.success:
+                    if attempt < max_retries - 1:
+                        logger.info(f"Retrying in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        raise Exception(f"Failed to reset local browser after {max_retries} attempts: {result.message}")
+                
+                logger.info(f"Browser reset successful on attempt {attempt + 1}")
+                break
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    await asyncio.sleep(retry_delay)
+                    
+                    # Clean up any partial browser state
+                    try:
+                        if hasattr(self, 'browser_env') and self.browser_env:
+                            await self.browser_env.close(CloseMessage())
+                    except Exception:
+                        pass
+                    
+                    continue
+                else:
+                    raise Exception(f"Failed to reset local browser after {max_retries} attempts: {str(e)}")
+        
+        # Wait for browser to be ready
+        max_timeout = 30
+        start_time = time.time()
+        
+        logger.info(f"Waiting for browser to become ready on port {self.cdp_port}...")
+        
+        while time.time() - start_time < max_timeout:
+            try:
+                # Check if the port is open
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex(('127.0.0.1', self.cdp_port))
+                sock.close()
+                
+                if result == 0:
+                    # Try to get the CDP endpoint
+                    try:
+                        await self.browser_env.get_browser_ws_endpoint()
+                        logger.info(f"Browser ready after {time.time() - start_time:.1f}s")
+                        break
+                    except Exception:
+                        await asyncio.sleep(2)
+                        continue
+                else:
+                    await asyncio.sleep(1)
+                    continue
+                    
+            except Exception:
+                await asyncio.sleep(1)
+                continue
+        else:
+            raise Exception(f"Browser failed to become ready within {max_timeout}s timeout")
+        
+        return self.session_id
+    
+    async def get_cdp_url(self) -> str:
+        """Get CDP URL for local browser"""
+        if not self.browser_env:
+            raise Exception("Browser not initialized")
+        
+        # Check if browser is actually ready
+        if not hasattr(self.browser_env, 'browser') or not self.browser_env.browser:
+            raise Exception("Browser not ready - reset() must be called first")
+            
+        # Use the unique port assigned to this browser
+        return f"http://127.0.0.1:{self.cdp_port}"
+    
+    async def get_public_url(self) -> str:
+        """Return the task's start URL since we're local"""
+        return self.task.start_url
+    
+    async def get_live_view_url(self) -> str:
+        """No live view for local browser"""
+        return "Local browser - no live view available"
+    
+    async def login(self, page):
+        """Stub for login - agents will handle this"""
+        pass
+    
+    async def log(self, item, type="message"):
+        """Stub for logging - just log to console"""
+        logger.info(f"Local browser log [{type}]: {item}")
+    
+    async def evaluate(self):
+        """No evaluation for local browser"""
+        return {"result": "Local browser - no evaluation available"}
+    
+    async def close(self):
+        """Close the local browser environment"""
+        if self.browser_env:
+            from core.schemas import CloseMessage
+            await self.browser_env.close(CloseMessage())
+
+
+async def create_environment_pool(client: Plato, pool_size: int, tasks: list, use_local_browser: bool = False):
     """Create a pool of environments for reuse"""
     env_pool = asyncio.Queue()
 
-    # Use the first task to get env_id for creating environments
-    first_task = tasks[0]
+    if use_local_browser:
+        # Create local browser environments with proper cleanup
+        async def create_single_local_environment(i: int):
+            logger.info(f"Creating local browser environment {i+1}/{pool_size}")
+            env = LocalBrowserEnvironment(tasks[0])
+            # Don't initialize browser yet - wait until reset is called
+            logger.info(f"Local browser environment {i+1}/{pool_size} ready")
+            return env
+        
+        logger.info(f"Creating local browser environment pool of size {pool_size}")
+        environments = []
+        for i in range(pool_size):
+            env = await create_single_local_environment(i)
+            environments.append(env)
+    else:
+        # Use the first task to get env_id for creating environments
+        first_task = tasks[0]
 
-    async def create_single_environment(i: int):
-        logger.info(f"Creating environment {i+1}/{pool_size}")
-        env = await client.make_environment(first_task.env_id, open_page_on_start=True, record_actions=True, fast=True)
-        await env.wait_for_ready()
-        logger.info(f"Environment {i+1}/{pool_size} ready")
-        return env
+        async def create_single_environment(i: int):
+            logger.info(f"Creating environment {i+1}/{pool_size}")
+            env = await client.make_environment(first_task.env_id, open_page_on_start=True, record_actions=True, fast=True)
+            await env.wait_for_ready()
+            logger.info(f"Environment {i+1}/{pool_size} ready")
+            return env
 
-    logger.info(f"Creating environment pool of size {pool_size} in parallel")
+        logger.info(f"Creating environment pool of size {pool_size} in parallel")
 
-    # Create all environments in parallel
-    environments = await asyncio.gather(*[
-        create_single_environment(i) for i in range(pool_size)
-    ])
+        # Create all environments in parallel
+        environments = await asyncio.gather(*[
+            create_single_environment(i) for i in range(pool_size)
+        ])
 
     # Add all environments to the pool
     for env in environments:
@@ -165,12 +392,13 @@ async def create_environment_pool(client: Plato, pool_size: int, tasks: list):
     return env_pool, environments
 
 
-async def run_with_semaphore(sem, env_pool, *args, **kwargs):
+async def run_with_semaphore(sem, env_pool, task, **kwargs):
     async with sem:
         try:
-            await run_task(env_pool, *args, **kwargs)
+            await run_task(env_pool, task, **kwargs)
         except Exception as e:
-            logger.error(f"Error running task: {e}", traceback.format_exc())
+            logger.error(f"Error running task: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 
 async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
@@ -194,7 +422,8 @@ async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
     try:
         await env.login(page)
     except Exception as e:
-        logger.warning(f"Error logging in: {e}", traceback.format_exc())
+        logger.warning(f"Error logging in: {e}")
+        logger.warning(f"Traceback: {traceback.format_exc()}")
     await agent.run(max_steps=500)
 
 
@@ -208,7 +437,8 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
         try:
           await env.login(page)
         except Exception as e:
-          logger.warning(f"Error logging in: {e}", traceback.format_exc())
+          logger.warning(f"Error logging in: {e}")
+          logger.warning(f"Traceback: {traceback.format_exc()}")
         async for item in agent.run_in_loop_generator(prompt, max_steps=100):
             await env.log(item)
 
@@ -223,7 +453,8 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
         try:
           await env.login(page)
         except Exception as e:
-          logger.warning(f"Error logging in: {e}", traceback.format_exc())
+          logger.warning(f"Error logging in: {e}")
+          logger.warning(f"Traceback: {traceback.format_exc()}")
         await agent.run(prompt, browser_tool=computer)
 
 
@@ -233,12 +464,13 @@ async def run_task(
     timeout: float = 400,
     agent_version: str = "browser_use_test",
     task_set: str = "espocrm",
+    use_local_browser: bool = False,
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
 
     # Get environment from pool
     env = await env_pool.get()
-    logger.info(f"[{task.name}] Got environment from pool ({task.env_id})")
+    logger.info(f"[{task.name}] Got environment from pool ({task.env_id if hasattr(task, 'env_id') else 'local'})")
 
     # Get the base prompt template from the task set configuration
     if task_set in TASK_SETS:
@@ -252,19 +484,54 @@ Here is the task:
 """
 
     # Format the prompt with task-specific information
-    prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
+    if not task.start_url:
+        logger.warning(f"[{task.name}] Task has no start_url, using default EspoCRM URL")
+        start_url = "https://demo.us.espocrm.com/?l=en_US#Account"
+    else:
+        start_url = task.start_url
+
+    prompt = base_prompt.format(start_url=start_url, prompt=task.prompt)
+    logger.info(f"[{task.name}] Using start_url: {start_url}")
 
     logger.info(f"[{task.name}] Resetting environment")
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
+    
+    # Verify that the browser environment is properly initialized
+    if use_local_browser:
+        if not hasattr(env, 'browser_env') or not env.browser_env:
+            raise Exception(f"[{task.name}] Browser environment not initialized after reset")
+        
+        if not hasattr(env.browser_env, 'browser') or not env.browser_env.browser:
+            raise Exception(f"[{task.name}] Browser not ready after reset")
+        
+        logger.info(f"[{task.name}] Browser environment verified ready")
+    
     cdp_url = await env.get_cdp_url()
-    if "wss" in cdp_url:
-        cdp_url = cdp_url.replace("wss://", "ws://")
     public_url = await env.get_public_url()
 
     try:
         live_view_url = await env.get_live_view_url()
         logger.info(f"[{task.name}] Live view URL: {live_view_url}")
+
+        # Double-check browser readiness before running task
+        if use_local_browser:
+            try:
+                # Simple CDP connection test
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(5)
+                port = int(cdp_url.split(':')[-1])
+                result = sock.connect_ex(('127.0.0.1', port))
+                sock.close()
+                
+                if result != 0:
+                    raise Exception(f"CDP port {port} not accessible")
+                    
+                logger.info(f"[{task.name}] CDP connection verified")
+            except Exception as e:
+                logger.error(f"[{task.name}] Browser not ready for task execution: {e}")
+                raise Exception(f"Browser not ready for task execution: {str(e)}")
 
         if "browser_use" in agent_version:
             await run_browseruse_task(cdp_url, prompt, public_url, env)
@@ -278,18 +545,26 @@ Here is the task:
             eval_result = await env.evaluate()
             logger.info(f"[{task.name}] Evaluation result: {eval_result}")
         except Exception as e:
-            logger.error(f"[{task.name}] Error evaluating task: {e}", traceback.format_exc())
+            logger.error(f"[{task.name}] Error evaluating task: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     except asyncio.CancelledError:
         logger.info(f"[{task.name}] Task cancelled")
         await env.log({ "cancelled": True }, type="info")
     except Exception as e:
         await env.log({ "error": str(e) }, type="error")
-        logger.error(f"[{task.name}] Error running task: {e}", traceback.format_exc())
+        logger.error(f"[{task.name}] Error running task: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
     finally:
-        logger.info(f"[{task.name}] Returning environment to pool")
-        # Return environment to pool instead of closing
-        await env_pool.put(env)
+        # Always close the browser to free resources
+        await env.close()
+        
+        # For local browsers, create a fresh environment
+        if use_local_browser:
+            new_env = LocalBrowserEnvironment(task)
+            await env_pool.put(new_env)
+        else:
+            await env_pool.put(env)
 
 async def main():
     """
@@ -344,6 +619,11 @@ async def main():
         type=int,
         help="Filter tasks to only include those where num_validator_human_scores <= this value",
     )
+    parser.add_argument(
+        "--local-browser",
+        action="store_true",
+        help="Use local browser instead of Plato's hosted browsers",
+    )
     args = parser.parse_args()
 
     client = Plato(api_key=PLATO_API_KEY, base_url=PLATO_BASE_URL)
@@ -367,7 +647,6 @@ async def main():
 
     # Get tasks for the selected simulator
     simulator_tasks = await client.load_tasks(selected_simulator_name)
-    breakpoint()
 
     # Filter tasks based on max_num_validator_human_scores if specified
     if args.max_num_validator_human_scores is not None:
@@ -409,11 +688,34 @@ async def main():
     num_runs = args.runs or int(input("Enter number of runs per task: ") or "1")
     concurrency = args.concurrency or int(input("Enter concurrency (max parallel tasks): ") or "5")
 
+    # Ask about local browser if not specified in args
+    use_local_browser = args.local_browser
+    if not args.local_browser:
+        local_choice = input("Use local browsers instead of Plato hosted browsers? (y/n): ").lower()
+        use_local_browser = local_choice == 'y'
+
+    if use_local_browser:
+        print("Using local browsers with BrowserEnv")
+    else:
+        print("Using Plato hosted browsers")
+
     # Setup semaphore for concurrency
     sem = asyncio.Semaphore(concurrency)
 
     # Create environment pool
-    env_pool, environments = await create_environment_pool(client, concurrency, tests_to_run)
+    env_pool, environments = await create_environment_pool(client, concurrency, tests_to_run, use_local_browser)
+
+    # Test the first environment if using local browsers
+    if use_local_browser and environments:
+        logger.info("Testing first local browser environment...")
+        try:
+            test_env = environments[0]
+            await test_env.reset(tests_to_run[0], agent_version=agent_version)
+            logger.info("Local browser environment test successful")
+            
+        except Exception as e:
+            logger.error(f"Local browser environment test failed: {e}")
+            raise Exception(f"Local browser environment test failed: {str(e)}")
 
     try:
         # Create tasks
@@ -422,15 +724,40 @@ async def main():
             for _ in range(num_runs):
                 async_tasks.append(
                     run_with_semaphore(
-                        sem, env_pool, task, agent_version=agent_version, task_set=selected_simulator["name"].lower()
+                        sem, env_pool, task, timeout=400, agent_version=agent_version, task_set=selected_simulator["name"].lower(), use_local_browser=use_local_browser
                     )
                 )
 
         # Run tasks
         print(f"\nRunning {len(async_tasks)} tasks with agent: {agent_version}")
-        await asyncio.gather(*async_tasks)
+        
+        # Add error handling for task execution
+        try:
+            await asyncio.gather(*async_tasks)
+            print("\nAll tasks completed!")
+        except Exception as e:
+            logger.error(f"Task execution failed: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            if use_local_browser:
+                logger.error("Local browser environment failed. This usually means:")
+                logger.error("1. Missing system dependencies")
+                logger.error("2. Playwright browsers not installed")
+                logger.error("3. System doesn't support headless browsers")
+                logger.error("4. Port conflicts or permission issues")
+                
+                # Check if any browser processes are still running
+                try:
+                    import subprocess
+                    result = subprocess.run(['pgrep', '-f', 'chromium'], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        logger.error(f"Browser processes still running: {result.stdout.strip()}")
+                        logger.error("Consider killing them with: pkill -f chromium")
+                except Exception:
+                    pass
+            
+            raise Exception(f"Task execution failed: {str(e)}")
 
-        print("\nAll tasks completed!")
     finally:
         # Close all environments in the pool
         logger.info("Closing all environments in pool")
