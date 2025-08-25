@@ -254,14 +254,14 @@ async def run_task(
             eval_result = await env.evaluate()
             logger.info(f"[{task.name}] Evaluation result: {eval_result}")
         except Exception as e:
-            logger.error(f"[{task.name}] Error evaluating task: {e}", traceback.format_exc())
+            logger.error(f"[{task.name}] Error evaluating task: {e}\n{traceback.format_exc()}")
 
     except asyncio.CancelledError:
         logger.info(f"[{task.name}] Task cancelled")
         await env.log({ "cancelled": True }, type="info")
     except Exception as e:
         await env.log({ "error": str(e) }, type="error")
-        logger.error(f"[{task.name}] Error running task: {e}", traceback.format_exc())
+        logger.error(f"[{task.name}] Error running task: {e}\n{traceback.format_exc()}")
     finally:
         logger.info(f"[{task.name}] Closing environment")
         await env.close()
