@@ -148,7 +148,7 @@ async def run_with_concurrency_limit(sem, client, *args, **kwargs):
         try:
             await run_task(client, *args, **kwargs)
         except Exception as e:
-            logger.error(f"Error running task: {e}", traceback.format_exc())
+            logger.error(f"Error running task: {e}", exc_info=True)
 
 
 async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
@@ -172,7 +172,7 @@ async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
     try:
         await env.login(page)
     except Exception as e:
-        logger.warning(f"Error logging in: {e}", traceback.format_exc())
+        logger.warning(f"Error logging in: {e}", exc_info=True)
     await agent.run(max_steps=500)
 
 
@@ -186,7 +186,7 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
         try:
           await env.login(page)
         except Exception as e:
-          logger.warning(f"Error logging in: {e}", traceback.format_exc())
+          logger.warning(f"Error logging in: {e}", exc_info=True)
         async for item in agent.run_in_loop_generator(prompt, max_steps=100):
             await env.log(item)
 
@@ -201,7 +201,7 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
         try:
           await env.login(page)
         except Exception as e:
-          logger.warning(f"Error logging in: {e}", traceback.format_exc())
+          logger.warning(f"Error logging in: {e}", exc_info=True)
         await agent.run(prompt, browser_tool=computer)
 
 
@@ -232,7 +232,7 @@ async def run_task(
     # Format the prompt with task-specific information
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
-    logger.info(f"[{task.name}] Resetting environment")
+    logger.info(f"[{task.name}] Resetting environment {agent_version}")
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
     cdp_url = await env.get_cdp_url()
