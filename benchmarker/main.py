@@ -3,6 +3,7 @@ import os
 import argparse
 import traceback
 import logging
+import requests
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -38,6 +39,13 @@ PLATO_BASE_URL = os.environ.get("PLATO_BASE_URL", "https://plato.so/api")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please set it in your .env file."
+
+# Anchor Browser configuration
+ANCHOR_API_KEY = os.environ.get("ANCHOR_API_KEY")
+ANCHOR_API_URL = os.environ.get("ANCHOR_API_URL", "https://api.anchorbrowser.io/v1")
+
+if not ANCHOR_API_KEY:
+    logger.warning("ANCHOR_API_KEY not set; Anchor browser sessions will fail to create")
 
 # Task set configuration
 TASK_SETS = {
@@ -176,6 +184,31 @@ async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
     await agent.run(max_steps=500)
 
 
+async def _create_anchor_session() -> tuple[str, str]:
+    """Create an Anchor browser session and return (cdp_url, session_id)."""
+    def _post():
+        headers = {"anchor-api-key": ANCHOR_API_KEY or "", "Content-Type": "application/json"}
+        resp = requests.post(f"{ANCHOR_API_URL}/sessions", headers=headers, timeout=300)
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        return data["cdp_url"], data["id"]
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _post)
+
+
+async def _delete_anchor_session(session_id: str) -> None:
+    """Best-effort delete of Anchor browser session."""
+    def _delete():
+        try:
+            requests.delete(f"{ANCHOR_API_URL}/sessions/{session_id}", timeout=20)
+        except Exception:
+            pass
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _delete)
+
+
 async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
     async with RemotePlaywrightComputer(cdp_url) as computer:
         agent = OpenAIAgent(
@@ -235,7 +268,16 @@ async def run_task(
     logger.info(f"[{task.name}] Resetting environment {agent_version}")
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
-    cdp_url = await env.get_cdp_url()
+    # Use Anchor browser instead of environment-provided CDP
+    logger.info(f"[{task.name}] Creating Anchor browser session")
+    anchor_cdp_url = None
+    anchor_session_id = None
+    try:
+        anchor_cdp_url, anchor_session_id = await _create_anchor_session()
+        logger.info(f"[{task.name}] Anchor session created: {anchor_session_id}")
+    except Exception as e:
+        logger.error(f"[{task.name}] Failed to create Anchor session: {e}")
+        raise
     public_url = await env.get_public_url()
 
     try:
@@ -243,11 +285,11 @@ async def run_task(
         logger.info(f"[{task.name}] Live view URL: {live_view_url}")
 
         if "browser_use" in agent_version:
-            await run_browseruse_task(cdp_url, prompt, public_url, env)
+            await run_browseruse_task(anchor_cdp_url, prompt, public_url, env)
         elif "openai" in agent_version:
-            await run_openai_cua_task(cdp_url, prompt, public_url, env)
+            await run_openai_cua_task(anchor_cdp_url, prompt, public_url, env)
         elif "anthropic" in agent_version:
-            await run_anthropic_cua_task(cdp_url, prompt, public_url, env)
+            await run_anthropic_cua_task(anchor_cdp_url, prompt, public_url, env)
 
         # evaluate the task
         try:
@@ -263,6 +305,9 @@ async def run_task(
         await env.log({ "error": str(e) }, type="error")
         logger.error(f"[{task.name}] Error running task: {e}\n{traceback.format_exc()}")
     finally:
+        if anchor_session_id:
+            logger.info(f"[{task.name}] Deleting Anchor session: {anchor_session_id}")
+            await _delete_anchor_session(anchor_session_id)
         logger.info(f"[{task.name}] Closing environment")
         await env.close()
 
