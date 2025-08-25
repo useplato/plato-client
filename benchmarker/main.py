@@ -136,41 +136,19 @@ Here is the task:
 }
 
 
-async def create_environment_pool(client: Plato, pool_size: int, tasks: list):
-    """Create a pool of environments for reuse"""
-    env_pool = asyncio.Queue()
-
-    # Use the first task to get env_id for creating environments
-    first_task = tasks[0]
-
-    async def create_single_environment(i: int):
-        logger.info(f"Creating environment {i+1}/{pool_size}")
-        env = await client.make_environment(first_task.env_id, open_page_on_start=True, record_actions=True, fast=True)
-        await env.wait_for_ready()
-        logger.info(f"Environment {i+1}/{pool_size} ready")
-        return env
-
-    logger.info(f"Creating environment pool of size {pool_size} in parallel")
-
-    # Create all environments in parallel
-    environments = await asyncio.gather(*[
-        create_single_environment(i) for i in range(pool_size)
-    ])
-
-    # Add all environments to the pool
-    for env in environments:
-        await env_pool.put(env)
-
-    logger.info(f"Environment pool of size {pool_size} created successfully")
-    return env_pool, environments
+async def create_concurrency_controllers(pool_size: int):
+    """Create semaphores to control concurrent environment creation"""
+    # Each semaphore allows only 1 task to create an environment at a time
+    semaphores = [asyncio.Semaphore(1) for _ in range(pool_size)]
+    return semaphores
 
 
-async def run_with_semaphore(sem, env_pool, *args, **kwargs):
+async def run_with_concurrency_limit(sem, client, *args, **kwargs):
     async with sem:
         try:
-            await run_task(env_pool, *args, **kwargs)
+            await run_task(client, *args, **kwargs)
         except Exception as e:
-            logger.error(f"Error running task: {e}", traceback.format_exc())
+            logger.error(f"Error running task: {e}", exc_info=True)
 
 
 async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
@@ -194,7 +172,7 @@ async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
     try:
         await env.login(page)
     except Exception as e:
-        logger.warning(f"Error logging in: {e}", traceback.format_exc())
+        logger.warning(f"Error logging in: {e}", exc_info=True)
     await agent.run(max_steps=500)
 
 
@@ -208,7 +186,7 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
         try:
           await env.login(page)
         except Exception as e:
-          logger.warning(f"Error logging in: {e}", traceback.format_exc())
+          logger.warning(f"Error logging in: {e}", exc_info=True)
         async for item in agent.run_in_loop_generator(prompt, max_steps=100):
             await env.log(item)
 
@@ -223,43 +201,41 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
         try:
           await env.login(page)
         except Exception as e:
-          logger.warning(f"Error logging in: {e}", traceback.format_exc())
+          logger.warning(f"Error logging in: {e}", exc_info=True)
         await agent.run(prompt, browser_tool=computer)
 
 
 async def run_task(
-    env_pool: asyncio.Queue,
+    client: Plato,
     task: PlatoTask,
     timeout: float = 400,
     agent_version: str = "browser_use_test",
     task_set: str = "espocrm",
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
-
-    # Get environment from pool
-    env = await env_pool.get()
-    logger.info(f"[{task.name}] Got environment from pool ({task.env_id})")
+    logger.info(f"[{task.name}] Creating New Environment For Task: ({task.env_id})")
+    env = await client.make_environment(task.env_id, open_page_on_start=True, record_actions=True, fast=True)
+    await env.wait_for_ready(timeout=30)
+    logger.info(f"[{task.name}] Environment ready")
 
     # Get the base prompt template from the task set configuration
     if task_set in TASK_SETS:
         base_prompt = TASK_SETS[task_set]["base_prompt"]
     else:
         base_prompt = f"""
-You are a helpful assistant that can help me use the {task_set}.
-Do not navigate to other websites.
-Here is the task:
-{task.prompt}
-"""
+        You are a helpful assistant that can help me use the {task_set}.
+        Do not navigate to other websites.
+        Here is the task:
+        {task.prompt}
+        """
 
     # Format the prompt with task-specific information
     prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
 
-    logger.info(f"[{task.name}] Resetting environment")
+    logger.info(f"[{task.name}] Resetting environment {agent_version}")
     await env.reset(task, agent_version=agent_version)
     logger.info(f"[{task.name}] Environment reset")
     cdp_url = await env.get_cdp_url()
-    if "wss" in cdp_url:
-        cdp_url = cdp_url.replace("wss://", "ws://")
     public_url = await env.get_public_url()
 
     try:
@@ -278,18 +254,17 @@ Here is the task:
             eval_result = await env.evaluate()
             logger.info(f"[{task.name}] Evaluation result: {eval_result}")
         except Exception as e:
-            logger.error(f"[{task.name}] Error evaluating task: {e}", traceback.format_exc())
+            logger.error(f"[{task.name}] Error evaluating task: {e}\n{traceback.format_exc()}")
 
     except asyncio.CancelledError:
         logger.info(f"[{task.name}] Task cancelled")
         await env.log({ "cancelled": True }, type="info")
     except Exception as e:
         await env.log({ "error": str(e) }, type="error")
-        logger.error(f"[{task.name}] Error running task: {e}", traceback.format_exc())
+        logger.error(f"[{task.name}] Error running task: {e}\n{traceback.format_exc()}")
     finally:
-        logger.info(f"[{task.name}] Returning environment to pool")
-        # Return environment to pool instead of closing
-        await env_pool.put(env)
+        logger.info(f"[{task.name}] Closing environment")
+        await env.close()
 
 async def main():
     """
@@ -367,7 +342,6 @@ async def main():
 
     # Get tasks for the selected simulator
     simulator_tasks = await client.load_tasks(selected_simulator_name)
-    breakpoint()
 
     # Filter tasks based on max_num_validator_human_scores if specified
     if args.max_num_validator_human_scores is not None:
@@ -409,20 +383,19 @@ async def main():
     num_runs = args.runs or int(input("Enter number of runs per task: ") or "1")
     concurrency = args.concurrency or int(input("Enter concurrency (max parallel tasks): ") or "5")
 
-    # Setup semaphore for concurrency
-    sem = asyncio.Semaphore(concurrency)
-
-    # Create environment pool
-    env_pool, environments = await create_environment_pool(client, concurrency, tests_to_run)
+    # Setup concurrency controllers
+    concurrency_semaphores = await create_concurrency_controllers(concurrency)
 
     try:
         # Create tasks
         async_tasks = []
-        for task in tests_to_run:
-            for _ in range(num_runs):
+        for i, task in enumerate(tests_to_run):
+            for run_num in range(num_runs):
+                # Distribute tasks across available semaphores for better concurrency
+                semaphore_index = (i * num_runs + run_num) % len(concurrency_semaphores)
                 async_tasks.append(
-                    run_with_semaphore(
-                        sem, env_pool, task, agent_version=agent_version, task_set=selected_simulator["name"].lower()
+                    run_with_concurrency_limit(
+                        concurrency_semaphores[semaphore_index], client, task, agent_version=agent_version, task_set=selected_simulator_name.lower()
                     )
                 )
 
@@ -432,10 +405,8 @@ async def main():
 
         print("\nAll tasks completed!")
     finally:
-        # Close all environments in the pool
-        logger.info("Closing all environments in pool")
-        for env in environments:
-            await env.close()
+        # Each task closes its own environment, so no cleanup needed here
+        logger.info("All tasks completed and environments closed")
         await client.close()
 
 
