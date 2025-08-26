@@ -247,7 +247,7 @@ async def run_task(
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
     logger.info(f"[{task.name}] Creating New Environment For Task: ({task.env_id})")
-    env = await client.make_environment(task.env_id, open_page_on_start=True, record_actions=True, fast=True)
+    env = await client.make_environment(task.env_id, open_page_on_start=True, interface_type=None, record_actions=True, fast=True)
     await env.wait_for_ready(timeout=30)
     logger.info(f"[{task.name}] Environment ready")
 
