@@ -9,6 +9,7 @@ import logging
 from plato.exceptions import PlatoClientError
 from playwright.async_api import Page
 import yaml
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -474,16 +475,18 @@ class PlatoEnvironment:
             # Extract the base domain from the base_url
             if "localhost:8080" in self._client.base_url:
                 proxy_server = "http://localhost:8888"
-            elif "dev.plato.so" in self._client.base_url:
-                proxy_server = "https://dev.proxy.plato.so"
-            elif "staging.plato.so" in self._client.base_url:
-                proxy_server = "https://staging.proxy.plato.so"
-            elif (
-                "plato.so" in self._client.base_url
-                and "staging" not in self._client.base_url
-                and "dev" not in self._client.base_url
-            ):
-                proxy_server = "https://proxy.plato.so"
+            elif "plato.so" in self._client.base_url:
+                # Extract domain from base_url to construct proxy server URL
+                parsed_url = urlparse(self._client.base_url)
+                domain_parts = parsed_url.netloc.split('.')
+
+                # Check if there's a subdomain before "plato.so"
+                if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                    subdomain = domain_parts[0]
+                    proxy_server = f"https://{subdomain}.proxy.plato.so"
+                else:
+                    # No subdomain, use just proxy.plato.so
+                    proxy_server = "https://proxy.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
 
@@ -516,16 +519,19 @@ class PlatoEnvironment:
             # Determine environment based on base_url
             if "localhost:8080" in self._client.base_url:
                 return f"http://localhost:8081/{identifier}"
-            elif "dev.plato.so" in self._client.base_url:
-                return f"https://{identifier}.dev.sims.plato.so"
-            elif "staging.plato.so" in self._client.base_url:
-                return f"https://{identifier}.staging.sims.plato.so"
-            elif (
-                "plato.so" in self._client.base_url
-                and "staging" not in self._client.base_url
-                and "dev" not in self._client.base_url
-            ):
-                return f"https://{identifier}.sims.plato.so"
+            elif "plato.so" in self._client.base_url:
+                # Extract domain from base_url (e.g., "dev", "staging", "amazon")
+                # If no subdomain, use just "sims.plato.so"
+                parsed_url = urlparse(self._client.base_url)
+                domain_parts = parsed_url.netloc.split('.')
+
+                # Check if there's a subdomain before "plato.so"
+                if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                    subdomain = domain_parts[0]
+                    return f"https://{identifier}.{subdomain}.sims.plato.so"
+                else:
+                    # No subdomain, use just sims.plato.so
+                    return f"https://{identifier}.sims.plato.so"
             else:
                 raise PlatoClientError("Unknown base URL")
         except Exception as e:

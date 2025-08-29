@@ -289,8 +289,8 @@ async def test_espocrm_login():
 
 if __name__ == "__main__":
     # Configure these parameters as needed
-    NUM_CONCURRENT_TESTS = 300   # Number of tests to run concurrently
-    TOTAL_TESTS = 300          # Total number of tests to run
+    NUM_CONCURRENT_TESTS = 500   # Number of tests to run concurrently
+    TOTAL_TESTS = 500          # Total number of tests to run
     RUN_LOAD_TEST = True        # Set to False to run single test instead
 
     if RUN_LOAD_TEST:
