@@ -553,3 +553,160 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    # VM Builder API Methods - Placeholder implementations
+    
+    async def create_vm(
+        self, 
+        compose_file_path: str, 
+        env_config_path: str
+    ) -> Dict[str, Any]:
+        """Create a new VM with Docker Compose and environment configuration.
+        
+        Args:
+            compose_file_path (str): Path to the Docker Compose file
+            env_config_path (str): Path to the environment configuration YAML file
+            
+        Returns:
+            Dict[str, Any]: VM creation response with job details
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        # TODO: Implement actual API call
+        # Mock response for now
+        import uuid
+        import time
+        
+        vm_uuid = str(uuid.uuid4())[:8]
+        return {
+            "uuid": vm_uuid,
+            "name": f"vm-{vm_uuid}",
+            "status": "starting",
+            "time_started": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "url": f"https://{vm_uuid}.sims.plato.so",
+            "compose_file": compose_file_path,
+            "env_config": env_config_path
+        }
+    
+    async def get_vm_url(self, vm_uuid: str) -> str:
+        """Get the public URL for a VM.
+        
+        Args:
+            vm_uuid (str): The UUID of the VM
+            
+        Returns:
+            str: The public URL for the VM
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If VM not found.
+        """
+        # TODO: Implement actual API call
+        # Mock response for now
+        return f"https://{vm_uuid}.sims.plato.so"
+    
+    async def save_vm_snapshot(
+        self, 
+        vm_uuid: str, 
+        snapshot_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Save a snapshot of a VM.
+        
+        Args:
+            vm_uuid (str): The UUID of the VM
+            snapshot_name (Optional[str]): Optional name for the snapshot
+            
+        Returns:
+            Dict[str, Any]: Snapshot creation response
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If VM not found.
+        """
+        # TODO: Implement actual API call
+        # Mock response for now
+        import time
+        
+        if not snapshot_name:
+            snapshot_name = f"snapshot-{int(time.time())}"
+            
+        return {
+            "vm_uuid": vm_uuid,
+            "snapshot_name": snapshot_name,
+            "snapshot_id": f"snap-{vm_uuid}-{int(time.time())}",
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "status": "completed"
+        }
+    
+    async def close_vm(self, vm_uuid: str) -> Dict[str, Any]:
+        """Close and terminate a VM.
+        
+        Args:
+            vm_uuid (str): The UUID of the VM to close
+            
+        Returns:
+            Dict[str, Any]: VM termination response
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If VM not found.
+        """
+        # TODO: Implement actual API call
+        # Mock response for now
+        import time
+        
+        return {
+            "vm_uuid": vm_uuid,
+            "status": "terminated",
+            "terminated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "message": "VM successfully terminated"
+        }
+    
+    async def list_active_vms(self) -> List[Dict[str, Any]]:
+        """List all active VMs for the user.
+        
+        Returns:
+            List[Dict[str, Any]]: List of active VMs
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        # TODO: Implement actual API call
+        # Mock response for now - return empty list initially
+        return []
+    
+    async def execute_vm_command(
+        self, 
+        vm_uuid: str, 
+        container_name: str, 
+        command: str
+    ) -> Dict[str, Any]:
+        """Execute a command in a Docker container within a VM.
+        
+        Args:
+            vm_uuid (str): The UUID of the VM
+            container_name (str): Name of the Docker container
+            command (str): Command to execute
+            
+        Returns:
+            Dict[str, Any]: Command execution response
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If VM or container not found.
+        """
+        # TODO: Implement actual API call
+        # Mock response for now
+        import time
+        
+        return {
+            "vm_uuid": vm_uuid,
+            "container_name": container_name,
+            "command": command,
+            "exit_code": 0,
+            "stdout": f"Mock output for command: {command}",
+            "stderr": "",
+            "executed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "execution_time_ms": 150
+        }
+

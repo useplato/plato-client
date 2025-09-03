@@ -258,5 +258,133 @@ def list_simulators():
     handle_async(_list())
 
 
+@cli.group(context_settings=dict(
+    ignore_unknown_options=True,
+    allow_extra_args=True,
+))
+@click.pass_context
+def build(ctx):
+    """Plato VM management commands."""
+    # If no subcommand is provided, show help
+    if not ctx.args:
+        from plato.builder.cli import app
+        # Show typer help
+        try:
+            app(["--help"])
+        except SystemExit:
+            pass
+        return
+    
+    # Import the typer app and run it with the remaining arguments
+    from plato.builder.cli import app
+    
+    # Use typer's main function to handle the command
+    try:
+        app(ctx.args)
+    except SystemExit:
+        pass  # Typer uses SystemExit for normal operation
+
+
+# Add individual build subcommands for better click integration
+@build.command("up")
+@click.option("-f", "--file", "compose_file", required=True, help="Docker Compose file path")
+@click.option("-P", "--env-config", required=True, help="Environment configuration file (env.yml)")
+def build_up(compose_file, env_config):
+    """Create a New VM"""
+    from plato.builder.cli import app
+    try:
+        app(["up", "-f", compose_file, "-P", env_config])
+    except SystemExit:
+        pass
+
+
+@build.command("open")
+@click.argument("vm_uuid", required=False)
+def build_open(vm_uuid):
+    """Open VM"""
+    from plato.builder.cli import app
+    args = ["open"]
+    if vm_uuid:
+        args.append(vm_uuid)
+    try:
+        app(args)
+    except SystemExit:
+        pass
+
+
+@build.command("save")
+@click.argument("vm_uuid", required=False)
+@click.option("--name", "snapshot_name", help="Snapshot name")
+def build_save(vm_uuid, snapshot_name):
+    """Save VM Snapshot"""
+    from plato.builder.cli import app
+    args = ["save"]
+    if vm_uuid:
+        args.append(vm_uuid)
+    if snapshot_name:
+        args.extend(["--name", snapshot_name])
+    try:
+        app(args)
+    except SystemExit:
+        pass
+
+
+@build.command("close")
+@click.argument("vm_uuid", required=False)
+@click.option("--force", is_flag=True, help="Force close without confirmation")
+def build_close(vm_uuid, force):
+    """Close VM"""
+    from plato.builder.cli import app
+    args = ["close"]
+    if vm_uuid:
+        args.append(vm_uuid)
+    if force:
+        args.append("--force")
+    try:
+        app(args)
+    except SystemExit:
+        pass
+
+
+@build.command("ls")
+def build_ls():
+    """List Active VMs"""
+    from plato.builder.cli import app
+    try:
+        app(["ls"])
+    except SystemExit:
+        pass
+
+
+@build.command("select")
+@click.argument("vm_uuid", required=False)
+def build_select(vm_uuid):
+    """Select VM"""
+    from plato.builder.cli import app
+    args = ["select"]
+    if vm_uuid:
+        args.append(vm_uuid)
+    try:
+        app(args)
+    except SystemExit:
+        pass
+
+
+@build.command("exec")
+@click.argument("container_name")
+@click.argument("command")
+@click.option("--vm", "vm_uuid", help="VM UUID (uses selected VM if not provided)")
+def build_exec(container_name, command, vm_uuid):
+    """Execute Commands in Docker Container"""
+    from plato.builder.cli import app
+    args = ["exec", container_name, command]
+    if vm_uuid:
+        args.extend(["--vm", vm_uuid])
+    try:
+        app(args)
+    except SystemExit:
+        pass
+
+
 if __name__ == '__main__':
     cli() 
