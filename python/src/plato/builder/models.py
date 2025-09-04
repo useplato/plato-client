@@ -2,7 +2,7 @@
 Configuration models for Plato Builder CLI
 """
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -82,16 +82,16 @@ class VMCreationResponse(BaseModel):
 
 
 class ConfigureVMRequest(BaseModel):
-    """Request model for configuring a VM"""
-    job_uuid: str
-    compose_file_path: str
-    env_config_path: str
+    """Request model for configuring a VM with Docker Compose and environment config."""
+    job_uuid: str = Field(..., description="The UUID of the job to configure")
+    compose_config: Dict = Field(..., description="Docker Compose configuration as JSON object")
+    env_config: Dict = Field(..., description="Environment configuration as JSON object")
 
 
 class VMConfigurationResponse(BaseModel):
     """Response model for VM configuration"""
     job_uuid: str
-    compose_file: str
-    env_config: str
+    compose_config: Dict
+    env_config: Dict
     configured_at: str
     message: str

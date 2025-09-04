@@ -11,6 +11,7 @@ import logging
 import time
 import json
 import asyncio
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -774,11 +775,18 @@ class Plato:
         if not os.path.exists(env_config_path):
             raise FileNotFoundError(f"Environment config file not found: {env_config_path}")
         
-        # Send file paths as JSON
+        # Read and parse YAML files
+        with open(compose_file_path, 'r') as f:
+            compose_config = yaml.safe_load(f)
+        
+        with open(env_config_path, 'r') as f:
+            env_config = yaml.safe_load(f)
+        
+        # Send parsed YAML content as JSON
         request_data = {
             "job_uuid": vm_uuid,
-            "compose_file_path": compose_file_path,
-            "env_config_path": env_config_path
+            "compose_config": compose_config,
+            "env_config": env_config
         }
         
         async with self.http_session.post(
