@@ -9,6 +9,8 @@ import aiohttp
 import os
 import logging
 import time
+import json
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +67,121 @@ class Plato:
         if self._http_session is not None and not self._http_session.closed:
             await self._http_session.close()
             self._http_session = None
+
+    async def _listen_for_sse_result(
+        self,
+        correlation_id: str,
+        timeout: int = 600
+    ) -> Dict[str, Any]:
+        """Listen for SSE results for a given correlation ID.
+        
+        Args:
+            correlation_id (str): The correlation ID to listen for
+            timeout (int): Timeout in seconds
+            
+        Returns:
+            Dict[str, Any]: The final result from the SSE stream
+            
+        Raises:
+            PlatoClientError: If the operation fails or times out
+        """
+        headers = {"X-API-Key": self.api_key}
+        sse_url = f"{self.base_url}/public-build/events/{correlation_id}"
+        
+        try:
+            timeout_obj = aiohttp.ClientTimeout(total=timeout)
+            async with aiohttp.ClientSession(timeout=timeout_obj) as session:
+                logger.info(f"Connecting to SSE stream: {sse_url}")
+                async with session.get(sse_url, headers=headers) as response:
+                    await self._handle_response_error(response)
+                    logger.info(f"SSE connection established, response status: {response.status}")
+                    
+                    buffer = ""
+                    try:
+                        async for chunk in response.content:
+                            chunk_str = chunk.decode('utf-8')
+                            # Handle escaped newlines that come from the SSE stream
+                            chunk_str = chunk_str.replace('\\n', '\n')
+                            buffer += chunk_str
+                            # Process complete lines
+                            while '\n' in buffer:
+                                line, buffer = buffer.split('\n', 1)
+                                line = line.strip()
+                                
+                                if not line:
+                                    continue
+                                    
+                                if line.startswith('data: '):
+                                    try:
+                                        data_str = line[6:]  # Remove 'data: ' prefix
+                                        event_data = json.loads(data_str)
+                                        
+                                        # Check for completion events
+                                        event_type = event_data.get('event_type')
+                                        
+                                        if event_type == 'connected':
+                                            logger.info(f"Connected to SSE stream for {correlation_id}")
+                                            continue
+                                        
+                                        elif event_type == 'completed':
+                                            logger.info(f"Operation {correlation_id} completed successfully")
+                                            return {
+                                                'success': True,
+                                                'data': event_data,
+                                                'message': event_data.get('message', 'Operation completed successfully')
+                                            }
+                                        
+                                        elif event_type == 'failed':
+                                            error_msg = event_data.get('error') or event_data.get('message', 'Operation failed')
+                                            logger.error(f"Operation {correlation_id} failed: {error_msg}")
+                                            raise PlatoClientError(f"Operation failed: {error_msg}")
+                                        
+                                        else:
+                                            logger.info(f"Received event {event_type} for {correlation_id}: {event_data}")
+                                            
+                                    except json.JSONDecodeError as e:
+                                        logger.warning(f"Failed to parse SSE data: {data_str}. Error: {e}")
+                                        continue
+                                
+                                elif line.startswith('event: '):
+                                    # Event type line, can be used for additional processing if needed
+                                    continue
+                    
+                    except aiohttp.ClientPayloadError as e:
+                        logger.warning(f"SSE stream ended or connection lost: {e}")
+                        # Stream ended - check if we received any final events in the buffer
+                        if buffer.strip():
+                            # Process any remaining lines in buffer
+                            remaining_lines = buffer.strip().split('\n')
+                            for line in remaining_lines:
+                                line = line.strip()
+                                if line.startswith('data: '):
+                                    try:
+                                        data_str = line[6:]
+                                        event_data = json.loads(data_str)
+                                        event_type = event_data.get('event_type')
+                                        
+                                        if event_type == 'completed':
+                                            logger.info(f"Operation {correlation_id} completed successfully")
+                                            return {
+                                                'success': True,
+                                                'data': event_data,
+                                                'message': event_data.get('message', 'Operation completed successfully')
+                                            }
+                                        elif event_type == 'failed':
+                                            error_msg = event_data.get('error') or event_data.get('message', 'Operation failed')
+                                            raise PlatoClientError(f"Operation failed: {error_msg}")
+                                    except json.JSONDecodeError:
+                                        continue
+                        
+        except asyncio.TimeoutError:
+            raise PlatoClientError(f"Operation {correlation_id} timed out after {timeout} seconds")
+        except Exception as e:
+            logger.error(f"Exception in SSE listener: {e}")
+            raise PlatoClientError(f"Failed to listen for SSE results: {str(e)}")
+        
+        # If we get here, the stream ended without a completion event
+        raise PlatoClientError(f"SSE stream ended unexpectedly for operation {correlation_id}")
 
     async def _handle_response_error(self, response: aiohttp.ClientResponse) -> None:
         """Handle HTTP error responses by extracting the actual error message.
@@ -553,40 +670,140 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
-    # VM Builder API Methods - Placeholder implementations
+    # VM Builder API Methods
     
     async def create_vm(
-        self, 
-        compose_file_path: str, 
-        env_config_path: str
+        self,
+        service_name: str,
+        version: str = "latest",
+        alias: Optional[str] = None,
+        vcpu_count: int = 1,
+        mem_size_mib: int = 2048,
+        overlay_size_mb: int = 8192,
+        port: int = 8080,
+        wait_time: int = 30,
+        vm_timeout: int = 1800,
+        messaging_port: int = 7000
     ) -> Dict[str, Any]:
-        """Create a new VM with Docker Compose and environment configuration.
+        """Create a new VM.
         
         Args:
-            compose_file_path (str): Path to the Docker Compose file
-            env_config_path (str): Path to the environment configuration YAML file
+            service_name (str): Name of the service to create VM for
+            version (str): Version of the service
+            alias (Optional[str]): Optional alias for the VM
+            vcpu_count (int): Number of vCPUs
+            mem_size_mib (int): Memory size in MiB
+            overlay_size_mb (int): Overlay size in MB (max 8192)
+            port (int): Service port (min 1024)
+            wait_time (int): Wait time in seconds
+            vm_timeout (int): VM timeout in seconds (max 1800)
+            messaging_port (int): Messaging port
             
         Returns:
-            Dict[str, Any]: VM creation response with job details
+            Dict[str, Any]: VM creation response
             
         Raises:
             aiohttp.ClientError: If the API request fails.
         """
-        # TODO: Implement actual API call
-        # Mock response for now
-        import uuid
-        import time
+        headers = {"X-API-Key": self.api_key}
         
-        vm_uuid = str(uuid.uuid4())[:8]
-        return {
-            "uuid": vm_uuid,
-            "name": f"vm-{vm_uuid}",
-            "status": "starting",
-            "time_started": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "url": f"https://{vm_uuid}.sims.plato.so",
-            "compose_file": compose_file_path,
-            "env_config": env_config_path
+        request_data = {
+            "service": service_name,
+            "version": version,
+            "alias": alias,
+            "vcpu_count": vcpu_count,
+            "mem_size_mib": mem_size_mib,
+            "overlay_size_mb": overlay_size_mb,
+            "port": port,
+            "wait_time": wait_time,
+            "vm_timeout": vm_timeout,
+            "messaging_port": messaging_port
         }
+        
+        async with self.http_session.post(
+            f"{self.base_url}/public-build/vm/create",
+            json=request_data,
+            headers=headers,
+        ) as response:
+            await self._handle_response_error(response)
+            initial_response = await response.json()
+            
+            # Wait for SSE completion
+            correlation_id = initial_response.get("correlation_id")
+            if correlation_id:
+                logger.info(f"Waiting for VM creation to complete (correlation_id: {correlation_id})")
+                sse_result = await self._listen_for_sse_result(correlation_id, vm_timeout)
+                
+                # Update the response with actual status
+                if sse_result.get('success'):
+                    initial_response["status"] = "running"
+                    if "data" in sse_result and "ssh_ip" in sse_result["data"]:
+                        initial_response["ssh_ip"] = sse_result["data"]["ssh_ip"]
+                    if "data" in sse_result and "host_ip" in sse_result["data"]:
+                        initial_response["host_ip"] = sse_result["data"]["host_ip"]
+                else:
+                    initial_response["status"] = "failed"
+            
+            return initial_response
+    
+    async def configure_vm(
+        self,
+        vm_uuid: str,
+        compose_file_path: str,
+        env_config_path: str
+    ) -> Dict[str, Any]:
+        """Configure a VM with Docker Compose and environment configuration.
+        
+        Args:
+            vm_uuid (str): The UUID of the VM to configure
+            compose_file_path (str): Path to the Docker Compose file
+            env_config_path (str): Path to the environment configuration YAML file
+            
+        Returns:
+            Dict[str, Any]: Configuration response
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            FileNotFoundError: If the files don't exist.
+        """
+        headers = {"X-API-Key": self.api_key}
+        
+        # Validate files exist
+        if not os.path.exists(compose_file_path):
+            raise FileNotFoundError(f"Docker Compose file not found: {compose_file_path}")
+        if not os.path.exists(env_config_path):
+            raise FileNotFoundError(f"Environment config file not found: {env_config_path}")
+        
+        # Send file paths as JSON
+        request_data = {
+            "job_uuid": vm_uuid,
+            "compose_file_path": compose_file_path,
+            "env_config_path": env_config_path
+        }
+        
+        async with self.http_session.post(
+            f"{self.base_url}/public-build/vm/configure",
+            json=request_data,
+            headers=headers,
+        ) as response:
+            await self._handle_response_error(response)
+            initial_response = await response.json()
+            
+            # Wait for SSE completion if correlation_id is provided
+            correlation_id = initial_response.get("correlation_id")
+            if correlation_id:
+                logger.info(f"Waiting for VM configuration to complete (correlation_id: {correlation_id})")
+                sse_result = await self._listen_for_sse_result(correlation_id, 300)  # 5 minute timeout
+                
+                # Update the response with actual status
+                if sse_result.get('success'):
+                    initial_response["status"] = "configured"
+                    initial_response["message"] = sse_result.get('message', 'VM configuration completed successfully')
+                else:
+                    initial_response["status"] = "failed"
+                    initial_response["message"] = sse_result.get('message', 'VM configuration failed')
+            
+            return initial_response
     
     async def get_vm_url(self, vm_uuid: str) -> str:
         """Get the public URL for a VM.
@@ -608,13 +825,19 @@ class Plato:
     async def save_vm_snapshot(
         self, 
         vm_uuid: str, 
-        snapshot_name: Optional[str] = None
+        snapshot_name: Optional[str] = None,
+        service: str = "default",
+        version: str = "latest",
+        timeout: int = 1800
     ) -> Dict[str, Any]:
         """Save a snapshot of a VM.
         
         Args:
             vm_uuid (str): The UUID of the VM
             snapshot_name (Optional[str]): Optional name for the snapshot
+            service (str): Service name
+            version (str): Version
+            timeout (int): Snapshot timeout
             
         Returns:
             Dict[str, Any]: Snapshot creation response
@@ -623,20 +846,42 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
             PlatoClientError: If VM not found.
         """
-        # TODO: Implement actual API call
-        # Mock response for now
-        import time
+        headers = {"X-API-Key": self.api_key}
         
-        if not snapshot_name:
-            snapshot_name = f"snapshot-{int(time.time())}"
-            
-        return {
-            "vm_uuid": vm_uuid,
+        request_data = {
+            "service": service,
+            "version": version,
             "snapshot_name": snapshot_name,
-            "snapshot_id": f"snap-{vm_uuid}-{int(time.time())}",
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "status": "completed"
+            "timeout": timeout
         }
+        
+        async with self.http_session.post(
+            f"{self.base_url}/public-build/vm/{vm_uuid}/snapshot",
+            json=request_data,
+            headers=headers,
+        ) as response:
+            await self._handle_response_error(response)
+            initial_response = await response.json()
+            
+            # Wait for SSE completion
+            correlation_id = initial_response.get("correlation_id")
+            if correlation_id:
+                logger.info(f"Waiting for snapshot creation to complete (correlation_id: {correlation_id})")
+                sse_result = await self._listen_for_sse_result(correlation_id, timeout)
+                
+                # Update the response with actual status
+                if sse_result.get('success'):
+                    initial_response["status"] = "completed"
+                    if "data" in sse_result:
+                        snapshot_data = sse_result["data"]
+                        if "snapshot_dir" in snapshot_data:
+                            initial_response["snapshot_dir"] = snapshot_data["snapshot_dir"]
+                        if "snapshot_s3_uri" in snapshot_data:
+                            initial_response["snapshot_s3_uri"] = snapshot_data["snapshot_s3_uri"]
+                else:
+                    initial_response["status"] = "failed"
+            
+            return initial_response
     
     async def close_vm(self, vm_uuid: str) -> Dict[str, Any]:
         """Close and terminate a VM.
@@ -651,19 +896,34 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
             PlatoClientError: If VM not found.
         """
-        # TODO: Implement actual API call
-        # Mock response for now
-        import time
+        headers = {"X-API-Key": self.api_key}
         
-        return {
-            "vm_uuid": vm_uuid,
-            "status": "terminated",
-            "terminated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "message": "VM successfully terminated"
-        }
+        async with self.http_session.delete(
+            f"{self.base_url}/public-build/vm/{vm_uuid}",
+            headers=headers,
+        ) as response:
+            await self._handle_response_error(response)
+            initial_response = await response.json()
+            
+            # Wait for SSE completion
+            correlation_id = initial_response.get("correlation_id")
+            if correlation_id:
+                logger.info(f"Waiting for VM termination to complete (correlation_id: {correlation_id})")
+                sse_result = await self._listen_for_sse_result(correlation_id, 300)  # 5 minute timeout
+                
+                # Update the response with actual status
+                if sse_result.get('success'):
+                    initial_response["status"] = "terminated"
+                else:
+                    initial_response["status"] = "failed"
+            
+            return initial_response
     
-    async def list_active_vms(self) -> List[Dict[str, Any]]:
+    async def list_active_vms(self, service: Optional[str] = None) -> List[Dict[str, Any]]:
         """List all active VMs for the user.
+        
+        Args:
+            service (Optional[str]): Filter by service name
         
         Returns:
             List[Dict[str, Any]]: List of active VMs
@@ -671,15 +931,27 @@ class Plato:
         Raises:
             aiohttp.ClientError: If the API request fails.
         """
-        # TODO: Implement actual API call
-        # Mock response for now - return empty list initially
-        return []
+        headers = {"X-API-Key": self.api_key}
+        
+        params = {}
+        if service:
+            params["service"] = service
+        
+        async with self.http_session.get(
+            f"{self.base_url}/public-build/vm/list",
+            params=params,
+            headers=headers,
+        ) as response:
+            await self._handle_response_error(response)
+            response_data = await response.json()
+            return response_data.get("vms", [])
     
     async def execute_vm_command(
         self, 
         vm_uuid: str, 
         container_name: str, 
-        command: str
+        command: str,
+        timeout: int = 300
     ) -> Dict[str, Any]:
         """Execute a command in a Docker container within a VM.
         
@@ -687,6 +959,7 @@ class Plato:
             vm_uuid (str): The UUID of the VM
             container_name (str): Name of the Docker container
             command (str): Command to execute
+            timeout (int): Command timeout in seconds
             
         Returns:
             Dict[str, Any]: Command execution response
@@ -695,18 +968,56 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
             PlatoClientError: If VM or container not found.
         """
-        # TODO: Implement actual API call
-        # Mock response for now
-        import time
+        headers = {"X-API-Key": self.api_key}
         
-        return {
-            "vm_uuid": vm_uuid,
+        request_data = {
             "container_name": container_name,
             "command": command,
-            "exit_code": 0,
-            "stdout": f"Mock output for command: {command}",
-            "stderr": "",
-            "executed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "execution_time_ms": 150
+            "timeout": timeout
         }
+        
+        async with self.http_session.post(
+            f"{self.base_url}/public-build/vm/{vm_uuid}/execute",
+            json=request_data,
+            headers=headers,
+        ) as response:
+            await self._handle_response_error(response)
+            initial_response = await response.json()
+            
+            # Wait for SSE completion
+            correlation_id = initial_response.get("correlation_id")
+            if correlation_id:
+                logger.info(f"Waiting for command execution to complete (correlation_id: {correlation_id})")
+                sse_result = await self._listen_for_sse_result(correlation_id, timeout)
+                
+                # Update the response with actual command results
+                if sse_result.get('success'):
+                    if "data" in sse_result:
+                        command_data = sse_result["data"]
+                        if "stdout" in command_data:
+                            initial_response["stdout"] = command_data["stdout"]
+                        if "stderr" in command_data:
+                            initial_response["stderr"] = command_data["stderr"]
+                        # Note: exit_code and execution_time_ms might be in the SSE data too
+                else:
+                    initial_response["stderr"] = sse_result.get("message", "Command execution failed")
+                    initial_response["exit_code"] = 1
+            
+            return initial_response
+    
+    async def list_registry_simulators(self) -> List[Dict[str, Any]]:
+        """List all simulators in the registry filtered by organization.
+        
+        Returns:
+            List[Dict[str, Any]]: List of simulator registry items
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/simulator/list-by-org", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
 

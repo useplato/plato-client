@@ -1,0 +1,3 @@
+plato:
+    vcpus: 1
+    sim_name: test

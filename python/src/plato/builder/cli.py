@@ -4,12 +4,9 @@ Plato Builder CLI - VM management commands using typer
 """
 
 import asyncio
-import json
 import os
-import sys
 import time
 import uuid
-from pathlib import Path
 from typing import List, Optional
 
 import typer
@@ -77,8 +74,27 @@ async def create_vm_with_sdk(compose_file: str, env_config: str, config: Environ
     
     client = Plato()
     try:
-        # Call SDK to create VM
-        vm_data = await client.create_vm(compose_file, env_config)
+        # Step 1: Create VM with configuration parameters
+        console.print("[dim]Step 1/2: Creating VM and waiting for it to start...[/dim]")
+        vm_data = await client.create_vm(
+            service_name=config.plato.sim_name,
+            alias=config.plato.sim_name,
+            vcpu_count=config.plato.vcpus,
+            mem_size_mib=config.plato.memory,
+            overlay_size_mb=config.plato.storage,
+            port=config.plato.access_port,
+            messaging_port=config.plato.messaging_port
+        )
+        
+        vm_uuid = vm_data["uuid"]
+        
+        # Step 2: Configure VM with Docker Compose and environment files
+        console.print("[dim]Step 2/2: Configuring VM with Docker Compose and environment files...[/dim]")
+        await client.configure_vm(
+            vm_uuid=vm_uuid,
+            compose_file_path=compose_file,
+            env_config_path=env_config
+        )
         
         job = VMJob(
             uuid=vm_data["uuid"],
@@ -129,40 +145,33 @@ def up(
     if config.db:
         console.print(f"[green]✓[/green] Database: {config.db.db_type} v{config.db.db_version}")
     
-    # Simulate VM startup with progress indicator
+    # Create VM with progress indicator
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task("Starting VM...", total=None)
+        task = progress.add_task("Creating VM...", total=None)
         
-        # Simulate startup delay
-        time.sleep(2)
+        # Create job using SDK
+        async def _create_vm():
+            progress.update(task, description="Creating VM...")
+            return await create_vm_with_sdk(compose_file, env_config, config)
         
-        progress.update(task, description="Initializing containers...")
-        time.sleep(1)
+        job = handle_async(_create_vm())
         
-        progress.update(task, description="Setting up networking...")
-        time.sleep(1)
-        
-        progress.update(task, description="Configuring database...")
-        time.sleep(1)
-        
-        progress.update(task, description="VM ready!")
-    
-    # Create job using SDK
-    async def _create_vm():
-        return await create_vm_with_sdk(compose_file, env_config, config)
-    
-    job = handle_async(_create_vm())
+        progress.update(task, description="VM created and running!")
+        time.sleep(1)  # Brief pause to show completion
     
     # Display results
-    console.print("\n[bold green]VM started successfully![/bold green]")
+    status_style = "green" if job.status == "running" else "yellow" if job.status == "starting" else "red"
+    status_message = "VM started successfully!" if job.status == "running" else f"VM status: {job.status}"
+    
+    console.print(f"\n[bold {status_style}]{status_message}[/bold {status_style}]")
     console.print(f"Job UUID: [bold]{job.uuid}[/bold]")
     console.print(f"Name: [bold]{job.name}[/bold]")
     console.print(f"Time Started: [bold]{job.time_started}[/bold]")
-    console.print(f"Status: [bold green]{job.status}[/bold green]")
+    console.print(f"Status: [bold {status_style}]{job.status}[/bold {status_style}]")
     console.print(f"URL: [bold blue]{job.url}[/bold blue]")
     
     # Set as selected VM
@@ -205,7 +214,7 @@ def open_vm(
     
     url = handle_async(_get_vm_url())
     
-    console.print(f"[bold green]VM URL:[/bold green]")
+    console.print("[bold green]VM URL:[/bold green]")
     console.print(f"{url}")
 
 
@@ -248,13 +257,19 @@ def save_vm(
             from plato.sdk import Plato
             client = Plato()
             try:
-                return await client.save_vm_snapshot(target_vm.uuid, snapshot_name)
+                return await client.save_vm_snapshot(
+                    target_vm.uuid, 
+                    snapshot_name, 
+                    service="vm-service",  # Default service name
+                    version="latest",
+                    timeout=1800
+                )
             finally:
                 await client.close()
         
         snapshot_data = handle_async(_save_snapshot())
     
-    console.print(f"[bold green]Snapshot saved successfully![/bold green]")
+    console.print("[bold green]Snapshot saved successfully![/bold green]")
     console.print(f"VM: [bold]{target_vm.name}[/bold] ({target_vm.uuid})")
     console.print(f"Snapshot: [bold]{snapshot_data['snapshot_name']}[/bold]")
     console.print(f"Snapshot ID: [bold]{snapshot_data['snapshot_id']}[/bold]")
@@ -478,6 +493,64 @@ def exec_command(
     if exec_result['stderr']:
         console.print("\n[bold red]Error Output:[/bold red]")
         console.print(exec_result['stderr'])
+
+
+@app.command("registry")
+def registry():
+    """
+    List Registry Simulators
+    
+    Shows all simulators available in the registry for your organization.
+    """
+    # Get simulators from SDK
+    async def _list_registry():
+        from plato.sdk import Plato
+        client = Plato()
+        try:
+            return await client.list_registry_simulators()
+        finally:
+            await client.close()
+    
+    simulators = handle_async(_list_registry())
+    
+    if not simulators:
+        console.print("[yellow]No simulators found in registry.[/yellow]")
+        return
+    
+    # Create table to display registry
+    table = Table(title="Simulator Registry")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="magenta")
+    table.add_column("Description", style="white", max_width=40)
+    table.add_column("Type", style="blue")
+    table.add_column("Enabled", style="green")
+    table.add_column("Version", style="yellow")
+    table.add_column("Port", style="dim")
+    
+    for sim in simulators:
+        # Format enabled status
+        enabled_status = "✅ Yes" if sim.get("enabled", False) else "❌ No"
+        
+        # Format description - truncate if too long
+        description = sim.get("description") or "No description"
+        if len(description) > 37:
+            description = description[:34] + "..."
+        
+        # Format port
+        port_info = str(sim.get("internal_app_port", "N/A"))
+        
+        table.add_row(
+            str(sim.get("id", "")),
+            sim.get("name", "Unknown"),
+            description,
+            sim.get("sim_type", "unknown"),
+            enabled_status,
+            sim.get("version_tag", "latest"),
+            port_info
+        )
+    
+    console.print(table)
+    console.print(f"\n[dim]Total simulators: {len(simulators)}[/dim]")
 
 
 if __name__ == "__main__":

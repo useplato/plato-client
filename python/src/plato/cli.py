@@ -386,5 +386,15 @@ def build_exec(container_name, command, vm_uuid):
         pass
 
 
+@build.command("registry")
+def build_registry():
+    """List Registry Simulators"""
+    from plato.builder.cli import app
+    try:
+        app(["registry"])
+    except SystemExit:
+        pass
+
+
 if __name__ == '__main__':
     cli() 
