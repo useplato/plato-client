@@ -683,6 +683,14 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
         click.echo("❌ Failed to setup local chisel client", err=True)
         return
 
+    # Ask permission and set up SSH config with unique host name
+    ssh_host = None
+    if click.confirm("💡 Set up SSH config for easy connection?", default=True):
+        ssh_host = _setup_ssh_config_with_password(local_port, vm_job_uuid)
+    
+    # Store ssh_host for use in commands
+    sandbox_info["ssh_host"] = ssh_host or f"plato-sandbox-{vm_job_uuid[:8]}"
+
     click.echo("🚀 Sandbox is ready! Choose an action:")
 
     while True:
@@ -700,7 +708,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
         if choice == 1:
             # VS Code via SSH tunnel
             click.echo(f"🔧 Opening VS Code connected to sandbox...")
-            success = _open_editor_via_ssh("code", vm_job_uuid, local_port)
+            success = _open_editor_via_ssh("code", sandbox_info["ssh_host"], local_port)
             if success:
                 click.echo("✅ VS Code opened successfully")
                 click.echo(
@@ -712,7 +720,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
         elif choice == 2:
             # Cursor via SSH tunnel
             click.echo(f"🔧 Opening Cursor connected to sandbox...")
-            success = _open_editor_via_ssh("cursor", vm_job_uuid, local_port)
+            success = _open_editor_via_ssh("cursor", sandbox_info["ssh_host"], local_port)
             if success:
                 click.echo("✅ Cursor opened successfully")
                 click.echo(
@@ -728,7 +736,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                 click.echo("📊 Sandbox VM Information:")
                 click.echo(f"  🆔 Job UUID: {vm_job_uuid}")
                 click.echo(f"  📈 Status: {status_response.get('status', 'unknown')}")
-                click.echo(f"  🔗 SSH: ssh plato-sandbox")
+                click.echo(f"  🔗 SSH: ssh {sandbox_info['ssh_host']}")
                 click.echo(f"  🔑 SSH key authentication (passwordless)")
                 click.echo(f"  📁 Code directory: /opt/plato")
                 click.echo(f"  🌿 Development branch: {sandbox_info['dev_branch']}")
@@ -840,10 +848,6 @@ async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
         if chisel_process.poll() is None:
             click.echo(f"✅ Chisel client running (local SSH port: {local_ssh_port})")
 
-            # Ask permission and set up SSH config
-            if click.confirm("💡 Set up SSH config for easy connection?", default=True):
-                _setup_ssh_config_with_password(local_ssh_port)
-
             return local_ssh_port
         else:
             stdout, stderr = chisel_process.communicate()
@@ -855,7 +859,7 @@ async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
         return None
 
 
-def _setup_ssh_config_with_password(local_port: int):
+def _setup_ssh_config_with_password(local_port: int, vm_job_uuid: str):
     """Setup SSH config with SSH key authentication for sandbox"""
     import os
 
@@ -866,9 +870,12 @@ def _setup_ssh_config_with_password(local_port: int):
         # Get the path to our SSH key
         key_path = os.path.join(ssh_config_dir, "plato_sandbox_key")
 
+        # Create unique SSH host name with job UUID
+        ssh_host = f"plato-sandbox-{vm_job_uuid[:8]}"
+
         # Create SSH config entry with key authentication
         config_entry = f"""
-Host plato-sandbox
+Host {ssh_host}
     HostName localhost
     Port {local_port}
     User root
@@ -888,14 +895,14 @@ Host plato-sandbox
             with open(ssh_config_path, "r") as f:
                 existing_config = f.read()
 
-        # Remove any existing plato-sandbox entry
-        if "Host plato-sandbox" in existing_config:
+        # Remove any existing entry for this specific host
+        if f"Host {ssh_host}" in existing_config:
             lines = existing_config.split("\n")
             new_lines = []
             skip_block = False
 
             for line in lines:
-                if line.strip() == "Host plato-sandbox":
+                if line.strip() == f"Host {ssh_host}":
                     skip_block = True
                     continue
                 elif line.startswith("Host ") and skip_block:
@@ -914,41 +921,44 @@ Host plato-sandbox
             f.write(config_entry)
 
         click.echo("✅ SSH config updated!")
-        click.echo("🔗 Passwordless connection: ssh plato-sandbox")
+        click.echo(f"🔗 Passwordless connection: ssh {ssh_host}")
         click.echo("🔑 Uses SSH key authentication (no password needed)")
         click.echo("📁 Remote path: /opt/plato")
+        
+        return ssh_host
 
     except Exception as e:
         click.echo(f"❌ Failed to setup SSH config: {e}")
+        return None
 
 
-def _open_editor_via_ssh(editor: str, vm_job_uuid: str, local_port: int) -> bool:
+def _open_editor_via_ssh(editor: str, ssh_host: str, local_port: int) -> bool:
     """Open editor with simple SSH connection"""
     import subprocess
 
     try:
         if editor == "code":
             subprocess.run(
-                ["code", "--remote", "ssh-remote+plato-sandbox", "/opt/plato"],
+                ["code", "--remote", f"ssh-remote+{ssh_host}", "/opt/plato"],
                 check=False,
             )
             click.echo(
-                "💡 If connection fails, use: F1 → 'Remote-SSH: Connect to Host' → 'plato-sandbox'"
+                f"💡 If connection fails, use: F1 → 'Remote-SSH: Connect to Host' → '{ssh_host}'"
             )
         elif editor == "cursor":
             subprocess.run(
-                ["cursor", "--remote", "ssh-remote+plato-sandbox", "/opt/plato"],
+                ["cursor", "--remote", f"ssh-remote+{ssh_host}", "/opt/plato"],
                 check=False,
             )
             click.echo(
-                "💡 If connection fails, use: F1 → 'Remote-SSH: Connect to Host' → 'plato-sandbox'"
+                f"💡 If connection fails, use: F1 → 'Remote-SSH: Connect to Host' → '{ssh_host}'"
             )
 
         return True
 
     except FileNotFoundError:
         click.echo(f"❌ {editor} not found. Please install {editor}.")
-        click.echo(f"💡 Alternative: ssh plato-sandbox (SSH key authentication)")
+        click.echo(f"💡 Alternative: ssh {ssh_host} (SSH key authentication)")
         return False
     except Exception as e:
         click.echo(f"❌ Error opening {editor}: {e}")
