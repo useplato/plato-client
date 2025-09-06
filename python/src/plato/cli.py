@@ -427,7 +427,6 @@ def _hub_push(hub_config: dict, extra_args: list):
             if result.returncode != 0:
                 console.print(
                     f"❌ Failed to clone simulator repo: {result.stderr.strip()}",
-                    err=True,
                 )
                 return
 
@@ -511,7 +510,6 @@ def _hub_pull(hub_config: dict, extra_args: list):
             if result.returncode != 0:
                 console.print(
                     f"❌ Failed to clone simulator repo: {result.stderr.strip()}",
-                    err=True,
                 )
                 return
 
@@ -597,7 +595,7 @@ async def _wait_for_vm_ready(client: "Plato", correlation_id: str, timeout: int 
 
 
 async def _wait_for_setup_ready(
-    client: "Plato", correlation_id: str, timeout: int = 300
+    client: "Plato", correlation_id: str, timeout: int = 600
 ):
     """Wait for sandbox setup to complete by monitoring SSE stream and capture SSH key"""
     import aiohttp
@@ -619,7 +617,8 @@ async def _wait_for_setup_ready(
 
             async for line in response.content:
                 if time.time() - start_time > timeout:
-                    console.print(f"⏰ Timeout reached after {timeout} seconds")
+                    console.print(f"⏰ Timeout reached after {timeout} seconds ({timeout//60} minutes)")
+                    console.print(f"[red]Setup is taking longer than expected - this may indicate a problem[/red]")
                     raise Exception(f"Sandbox setup timed out after {timeout} seconds")
 
                 line_str = line.decode("utf-8").strip()
@@ -629,53 +628,71 @@ async def _wait_for_setup_ready(
                         encoded_data = line_str[6:]  # Remove 'data: ' prefix
                         decoded_data = base64.b64decode(encoded_data).decode("utf-8")
                         event_data = json.loads(decoded_data)
+                        
+                        # Debug: Show all event types for troubleshooting
+                        event_type = event_data.get("event_type", "unknown")
+                        console.print(f"[dim]🔍 Event: '{event_type}' | Complete: {event_data.get('is_workflow_complete', False)} | Message: {event_data.get('message', 'none')}[/dim]")
 
-                        if (
-                            event_data.get("event_type") == "completed"
-                            or event_data.get("event_type") == "workflow_progress"
-                        ):
-                            message = event_data.get("message", "Setup progress...")
-                            console.print(f"🔧 {message}")
-
-                            # Show stdout/stderr for debugging
-                            stdout = event_data.get("stdout", "")
-                            stderr = event_data.get("stderr", "")
-
-                            if stdout and stdout.strip():
-                                console.print(f"📤 Output: {stdout.strip()}")
-                            if stderr and stderr.strip():
-                                console.print(f"📤 Error: {stderr.strip()}")
-
-                            # Check if chisel server started successfully - that means we're done
-                            if "Chisel server started successfully" in stdout:
-                                # Show completion panel
-                                success_panel = Panel.fit(
-                                    "[green]Tunnel server is now running and ready for connections![/green]\n"
-                                    "[dim]SSH access and file synchronization enabled[/dim]",
-                                    title="[bold green]🎉 Setup Complete[/bold green]",
-                                    border_style="green"
-                                )
-                                console.print(success_panel)
-                                return True
+                        if event_data.get("event_type") == "completed":
+                            console.print(f"[green]✅ SANDBOX SETUP COMPLETED")
+                            success_panel = Panel.fit(
+                                "[green]Sandbox setup completed successfully![/green]\n"
+                                "[dim]All setup steps completed - environment is ready[/dim]",
+                                title="[bold green]🎉 Setup Complete[/bold green]",
+                                border_style="green"
+                            )
+                            console.print(success_panel)
+                            return True
 
                         elif event_data.get("event_type") == "failed":
                             error = event_data.get("error", "Unknown error")
                             stdout = event_data.get("stdout", "")
                             stderr = event_data.get("stderr", "")
                             message = event_data.get("message", "")
-
-                            console.print(f"[red]❌ STEP FAILED: {message}")
-                            console.print(f"[red]❌ Error: {error}")
-                            if stdout:
-                                console.print(f"📤 STDOUT: {stdout}")
-                            if stderr:
-                                console.print(f"📤 STDERR: {stderr}")
                             
-                            # Show ALL event data for debugging
-                            import json
-                            console.print(f"🔍 FULL ERROR DATA: {json.dumps(event_data, indent=2)}")
+                            console.print(f"[red]❌ SANDBOX SETUP FAILED")
+                            console.print(f"[red]Failed Step: {message}")
+                            console.print(f"[red]Error: {error}")
+                            
+                            if stdout and stdout.strip():
+                                console.print(f"[yellow]📤 Command Output:")
+                                for line in stdout.strip().split('\n'):
+                                    console.print(f"   {line}")
+                            
+                            if stderr and stderr.strip():
+                                # Filter SSH warnings here too
+                                stderr_lines = stderr.strip().split('\n')
+                                real_errors = []
+                                for line in stderr_lines:
+                                    if not any(warning in line for warning in [
+                                        "Warning: Permanently added",
+                                        "Warning: Known hosts file",
+                                        "debconf: unable to initialize frontend", 
+                                        "debconf: falling back to frontend",
+                                        "WARNING! Your credentials are stored unencrypted",
+                                        "Configure a credential helper to remove this warning"
+                                    ]):
+                                        real_errors.append(line)
+                                
+                                if real_errors:
+                                    console.print(f"[red]📤 Error Details:")
+                                    for line in real_errors:
+                                        console.print(f"   {line}")
 
-                            raise Exception(f"Step failed: {message} | Error: {error}")
+                            raise Exception(f"Sandbox setup failed at step: {message}")
+                            
+                        # Handle workflow-level completion - this is the proper success indicator
+                        elif (event_data.get("event_type") == "workflow_completed" or 
+                              (event_data.get("event_type") == "completed" and event_data.get("is_workflow_complete"))):
+                            console.print(f"[green]✅ SANDBOX WORKFLOW COMPLETED")
+                            success_panel = Panel.fit(
+                                "[green]Sandbox setup completed successfully![/green]\n"
+                                "[dim]All workflow steps completed - environment is ready[/dim]",
+                                title="[bold green]🎉 Setup Complete[/bold green]",
+                                border_style="green"
+                            )
+                            console.print(success_panel)
+                            return True
 
                     except (json.JSONDecodeError, base64.binascii.Error):
                         continue  # Skip malformed lines
@@ -683,6 +700,11 @@ async def _wait_for_setup_ready(
     except Exception as e:
         console.print(f"[red]❌ Error waiting for sandbox setup: {e}")
         return False
+
+    # If we exit the loop without seeing "Chisel server started successfully", that's a failure
+    console.print(f"[red]❌ Setup stream ended without success confirmation")
+    console.print(f"[red]Expected to see 'Chisel server started successfully' but didn't")
+    return False
 
 
 def _setup_local_ssh_key():
@@ -922,13 +944,11 @@ async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
                 console.print("✅ Chisel installed successfully")
             except subprocess.CalledProcessError:
                 console.print(
-                    "❌ Failed to install chisel. Please install manually.", err=True
-                )
+                    "❌ Failed to install chisel. Please install manually."                )
                 return None
             except FileNotFoundError:
                 console.print(
-                    "❌ curl not found. Please install chisel manually.", err=True
-                )
+                    "❌ curl not found. Please install chisel manually."                )
                 return None
 
         # Parse the SSH URL to get server details
@@ -1259,7 +1279,6 @@ def _ensure_gitignore_protects_credentials():
 
             console.print(
                 f"✅ Added {len(patterns_to_add)} credential protection patterns to .gitignore",
-                err=True,
             )
 
     except Exception as e:
@@ -1392,18 +1411,15 @@ def clone(
                 available = [s["name"] for s in simulators]
                 if available:
                     console.print(
-                        f"💡 Available simulators: {', '.join(available)}", err=True
-                    )
+                        f"💡 Available simulators: {', '.join(available)}"                    )
                 return
 
             if not simulator.get("has_repo", False):
                 console.print(
                     f"❌ Simulator '{sim_name}' exists but doesn't have a repository configured.",
-                    err=True,
                 )
                 console.print(
                     "💡 Contact your administrator to set up a repository for this simulator.",
-                    err=True,
                 )
                 return
 
@@ -1412,7 +1428,6 @@ def clone(
             if not repo_info.get("has_repo", False):
                 console.print(
                     f"❌ Repository for simulator '{sim_name}' is not available.",
-                    err=True,
                 )
                 console.print(f"💡 Attempting to create repository for '{sim_name}'...")
 
@@ -1428,8 +1443,7 @@ def clone(
                     else:
                         error_text = await create_response.text()
                         console.print(
-                            f"❌ Failed to create repository: {error_text}", err=True
-                        )
+                            f"❌ Failed to create repository: {error_text}"                        )
                         return
                 except Exception as create_e:
                     console.print(f"[red]❌ Failed to create repository: {create_e}")
@@ -1452,12 +1466,10 @@ def clone(
                 else:
                     console.print(
                         f"⚠️  Warning: URL not HTTPS, authentication may fail: {clone_url}",
-                        err=True,
                     )
             except Exception as creds_e:
                 console.print(
-                    f"⚠️  Warning: Could not get admin credentials: {creds_e}", err=True
-                )
+                    f"⚠️  Warning: Could not get admin credentials: {creds_e}"                )
                 console.print("💡 Clone may require manual authentication")
 
             # Determine target directory
@@ -1511,20 +1523,17 @@ def clone(
 
                 except Exception as config_e:
                     console.print(
-                        f"⚠️  Warning: Could not create hub config: {config_e}", err=True
-                    )
+                        f"⚠️  Warning: Could not create hub config: {config_e}"                    )
 
                 if repo_info.get("description"):
                     console.print(f"Description: {repo_info['description']}")
 
             except subprocess.CalledProcessError as e:
                 console.print(
-                    f"❌ Failed to clone repository: {e.stderr.strip()}", err=True
-                )
+                    f"❌ Failed to clone repository: {e.stderr.strip()}"                )
                 if "Authentication failed" in e.stderr:
                     console.print(
                         "💡 Hint: Make sure your Git credentials are configured for Gitea access.",
-                        err=True,
                     )
             except FileNotFoundError:
                 console.print("❌ Git is not installed or not in PATH")
@@ -1572,18 +1581,15 @@ def link(
                 available = [s["name"] for s in simulators]
                 if available:
                     console.print(
-                        f"💡 Available simulators: {', '.join(available)}", err=True
-                    )
+                        f"💡 Available simulators: {', '.join(available)}"                    )
                 return
 
             if not simulator.get("has_repo", False):
                 console.print(
                     f"❌ Simulator '{sim_name}' exists but doesn't have a repository configured.",
-                    err=True,
                 )
                 console.print(
                     "💡 Contact your administrator to set up a repository for this simulator.",
-                    err=True,
                 )
                 return
 
@@ -1591,8 +1597,7 @@ def link(
             repo_info = await client.get_simulator_repository(simulator["id"])
             if not repo_info.get("has_repo", False):
                 console.print(
-                    f"Repository for simulator '{sim_name}' is not available.", err=True
-                )
+                    f"Repository for simulator '{sim_name}' is not available."                )
                 return
 
             clone_url = repo_info["clone_url"]
@@ -1656,7 +1661,6 @@ def link(
             except subprocess.CalledProcessError as e:
                 console.print(
                     f"❌ Failed to link repository: {e.stderr.decode().strip()}",
-                    err=True,
                 )
             except FileNotFoundError:
                 console.print("❌ Git is not installed or not in PATH")
@@ -1757,7 +1761,6 @@ def git(ctx: typer.Context):
                     hub_config = json.load(f)
                 console.print(
                     f"✅ Found Plato hub configuration for '{hub_config['simulator_name']}'",
-                    err=True,
                 )
             except Exception as e:
                 console.print(f"[red]❌ Error reading hub config: {e}")
@@ -1767,7 +1770,6 @@ def git(ctx: typer.Context):
             # Fallback to regular git command
             console.print(
                 "⚠️  No Plato hub configuration found. Running regular git command...",
-                err=True,
             )
             git_cmd = ["git"] + list(args)
             result = subprocess.run(git_cmd, capture_output=False, text=True)
@@ -1831,11 +1833,9 @@ def sandbox(
 
             if not os.path.exists(config_file):
                 console.print(
-                    "❌ No Plato hub configuration found in this directory.", err=True
-                )
+                    "❌ No Plato hub configuration found in this directory."                )
                 console.print(
                     "💡 Use 'uv run plato hub clone <sim_name>' or 'uv run plato hub link <sim_name>' first.",
-                    err=True,
                 )
                 return
 
@@ -1887,7 +1887,6 @@ def sandbox(
             if not clone_url:
                 console.print(
                     "❌ Authentication required. Run 'uv run plato hub login' first.",
-                    err=True,
                 )
                 return
 
@@ -2021,7 +2020,6 @@ def sandbox(
             if not setup_success:
                 console.print(
                     "❌ Sandbox setup failed - check the error messages above for details",
-                    err=True,
                 )
                 # VM was created but setup failed, still cleanup if not keeping VM
                 if not keep_vm:
