@@ -554,14 +554,20 @@ async def _wait_for_setup_ready(
                             error = event_data.get("error", "Unknown error")
                             stdout = event_data.get("stdout", "")
                             stderr = event_data.get("stderr", "")
+                            message = event_data.get("message", "")
 
-                            click.echo(f"❌ Setup failed: {error}")
+                            click.echo(f"❌ STEP FAILED: {message}")
+                            click.echo(f"❌ Error: {error}")
                             if stdout:
-                                click.echo(f"📤 Output: {stdout}")
+                                click.echo(f"📤 STDOUT: {stdout}")
                             if stderr:
-                                click.echo(f"📤 Error: {stderr}")
+                                click.echo(f"📤 STDERR: {stderr}")
+                            
+                            # Show ALL event data for debugging
+                            import json
+                            click.echo(f"🔍 FULL ERROR DATA: {json.dumps(event_data, indent=2)}")
 
-                            raise Exception(f"Sandbox setup failed: {error}")
+                            raise Exception(f"Step failed: {message} | Error: {error}")
 
                     except (json.JSONDecodeError, base64.binascii.Error):
                         continue  # Skip malformed lines
@@ -621,7 +627,7 @@ def _setup_local_ssh_key():
 
 
 async def _setup_sandbox(
-    client: "Plato", vm_job_uuid: str, dev_branch: str, clone_url: str
+    client: "Plato", vm_job_uuid: str, dev_branch: str, clone_url: str, chisel_port: int = 6000
 ):
     """Setup the sandbox environment with code and chisel SSH"""
     import json
@@ -633,7 +639,12 @@ async def _setup_sandbox(
         local_key_path, local_public_key = _setup_local_ssh_key()
 
         # Setup sandbox environment via new endpoint
-        setup_data = {"branch": dev_branch, "clone_url": clone_url, "timeout": 300}
+        setup_data = {
+            "branch": dev_branch, 
+            "clone_url": clone_url, 
+            "chisel_port": chisel_port,
+            "timeout": 300
+        }
 
         # Add client SSH public key if available
         if local_public_key:
@@ -811,7 +822,7 @@ async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
         chisel_cmd = [
             "chisel",
             "client",
-            f"http://{server_url}/connect-job/{job_path}",
+            ssh_url,
             f"{local_ssh_port}:127.0.0.1:22",
         ]
 
@@ -1643,7 +1654,8 @@ def git(ctx):
     help="VM configuration file (default: plato-config.yml)",
 )
 @click.option("--keep-vm", is_flag=True, help="Keep VM running after sandbox exits")
-def sandbox(config: str, keep_vm: bool):
+@click.option("--chisel-port", default=6000, help="Port for chisel server (default: 6000)")
+def sandbox(config: str, keep_vm: bool, chisel_port: int):
     """Start a development sandbox environment.
 
     Creates a development VM with your simulator code and opens an interactive environment.
@@ -1693,6 +1705,7 @@ def sandbox(config: str, keep_vm: bool):
                 "overlay_size_mb": 2048,
                 "port": 8080,
                 "messaging_port": 7000,
+                "chisel_port": chisel_port,
             }
 
             if os.path.exists(config):
@@ -1700,11 +1713,16 @@ def sandbox(config: str, keep_vm: bool):
                     with open(config, "r") as f:
                         user_config = yaml.safe_load(f)
                     vm_config.update(user_config)
+                    # Override chisel_port if user specified it via CLI
+                    if chisel_port != 6000:  # User specified a different port
+                        vm_config["chisel_port"] = chisel_port
                     click.echo(f"✅ Loaded VM config from {config}")
+                    click.echo(f"🔗 Using chisel port: {vm_config['chisel_port']}")
                 except Exception as e:
                     click.echo(f"⚠️  Could not load {config}, using defaults: {e}")
             else:
                 click.echo(f"⚠️  No {config} found, using default VM configuration")
+                click.echo(f"🔗 Using chisel port: {chisel_port}")
 
             # Step 3: Create development branch and push current state
             branch_uuid = str(uuid.uuid4())[:8]
@@ -1827,7 +1845,7 @@ def sandbox(config: str, keep_vm: bool):
             click.echo(f"🔧 Setting up sandbox environment...")
 
             setup_response = await _setup_sandbox(
-                client, vm_job_uuid, dev_branch, clone_url
+                client, vm_job_uuid, dev_branch, clone_url, vm_config["chisel_port"]
             )
 
             if not setup_response:
@@ -1835,7 +1853,6 @@ def sandbox(config: str, keep_vm: bool):
                 return
 
             ssh_url = setup_response["ssh_url"]
-            chisel_port = setup_response.get("chisel_port", 5555)
             correlation_id = setup_response["correlation_id"]
 
             # Wait for sandbox setup to complete
@@ -1869,7 +1886,7 @@ def sandbox(config: str, keep_vm: bool):
                 "dev_branch": dev_branch,
                 "vm_url": vm_info["url"],
                 "ssh_url": ssh_url,
-                "chisel_port": chisel_port,
+                "chisel_port": vm_config["chisel_port"],
             }
             await _run_interactive_sandbox(sandbox_info, client, keep_vm)
 
