@@ -624,4 +624,63 @@ class Plato:
         ) as response:
             await self._handle_response_error(response)
             return await response.json()
+    
+    async def create_simulator(self, name: str, description: str = None, sim_type: str = "docker_app") -> Dict[str, Any]:
+        """Create a new simulator.
+        
+        Args:
+            name (str): The name of the simulator
+            description (str, optional): Description of the simulator
+            sim_type (str, optional): Type of simulator (default: docker_app)
+            
+        Returns:
+            Dict[str, Any]: Created simulator information.
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If creation fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        
+        # Basic simulator configuration
+        simulator_data = {
+            "name": name,
+            "description": description or f"Simulator for {name}",
+            "simType": sim_type,
+            "enabled": True,
+            "config": {
+                "image_name": f"plato-{name}:latest",
+                "internal_app_port": 80,
+                "supported_providers": ["ecs_service", "ecs_task"]
+            }
+        }
+        
+        async with self.http_session.post(
+            f"{self.base_url}/env/simulators",
+            json=simulator_data,
+            headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+    
+    async def create_simulator_repository(self, simulator_id: int) -> Dict[str, Any]:
+        """Create a repository for a simulator.
+        
+        Args:
+            simulator_id (int): The ID of the simulator to create repository for.
+            
+        Returns:
+            Dict[str, Any]: Created repository information.
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If creation fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/gitea/simulators/{simulator_id}/repo",
+            headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
 

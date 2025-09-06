@@ -7,6 +7,8 @@ import asyncio
 import json
 import sys
 import os
+import shutil
+import tempfile
 from typing import Optional
 
 import click
@@ -376,13 +378,345 @@ def _hub_pull(hub_config: dict, extra_args: list):
                 elif os.path.isdir(src):
                     if os.path.exists(dst):
                         shutil.rmtree(dst)
-                    shutil.copytree(src, dst)
+                        shutil.copytree(src, dst)
             
             click.echo(f"✅ Successfully pulled from simulator '{sim_name}'")
             click.echo("💡 Files updated in current directory. Review and commit to your monorepo as needed.")
     
     except Exception as e:
         click.echo(f"❌ Error during pull: {e}", err=True)
+
+
+async def _wait_for_vm_ready(client: 'Plato', correlation_id: str, timeout: int = 300):
+    """Wait for VM to be ready by monitoring SSE stream"""
+    import aiohttp
+    import json
+    import base64
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        async with client.http_session.get(
+            f"{client.base_url}/public-build/events/{correlation_id}",
+            headers={"X-API-Key": client.api_key}
+        ) as response:
+            if response.status != 200:
+                raise Exception(f"Failed to connect to event stream: {response.status}")
+            
+            async for line in response.content:
+                if time.time() - start_time > timeout:
+                    raise Exception(f"VM startup timed out after {timeout} seconds")
+                
+                line_str = line.decode('utf-8').strip()
+                if line_str.startswith('data: '):
+                    try:
+                        # Decode base64 data
+                        encoded_data = line_str[6:]  # Remove 'data: ' prefix
+                        decoded_data = base64.b64decode(encoded_data).decode('utf-8')
+                        event_data = json.loads(decoded_data)
+                        
+                        if event_data.get('event_type') == 'completed':
+                            click.echo("🟢 VM startup completed")
+                            return True
+                        elif event_data.get('event_type') == 'failed':
+                            error = event_data.get('error', 'Unknown error')
+                            raise Exception(f"VM startup failed: {error}")
+                        else:
+                            # Show progress
+                            message = event_data.get('message', 'Starting...')
+                            click.echo(f"⏳ {message}")
+                            
+                    except (json.JSONDecodeError, base64.binascii.Error):
+                        continue  # Skip malformed lines
+                        
+    except Exception as e:
+        click.echo(f"❌ Error waiting for VM: {e}", err=True)
+        return False
+
+
+async def _wait_for_setup_ready(client: 'Plato', correlation_id: str, timeout: int = 300):
+    """Wait for sandbox setup to complete by monitoring SSE stream"""
+    import aiohttp
+    import json
+    import base64
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        async with client.http_session.get(
+            f"{client.base_url}/public-build/events/{correlation_id}",
+            headers={"X-API-Key": client.api_key}
+        ) as response:
+            if response.status != 200:
+                raise Exception(f"Failed to connect to setup stream: {response.status}")
+            
+            async for line in response.content:
+                if time.time() - start_time > timeout:
+                    raise Exception(f"Sandbox setup timed out after {timeout} seconds")
+                
+                line_str = line.decode('utf-8').strip()
+                if line_str.startswith('data: '):
+                    try:
+                        # Decode base64 data
+                        encoded_data = line_str[6:]  # Remove 'data: ' prefix
+                        decoded_data = base64.b64decode(encoded_data).decode('utf-8')
+                        event_data = json.loads(decoded_data)
+                        
+                        if event_data.get('event_type') == 'completed' or event_data.get('event_type') == 'workflow_progress':
+                            message = event_data.get('message', 'Setup progress...')
+                            click.echo(f"🔧 {message}")
+                            
+                            # Check if this is the final completion
+                            if event_data.get('is_workflow_complete'):
+                                click.echo("🟢 Sandbox setup completed")
+                                return True
+                                
+                        elif event_data.get('event_type') == 'failed':
+                            error = event_data.get('error', 'Unknown error')
+                            raise Exception(f"Sandbox setup failed: {error}")
+                            
+                    except (json.JSONDecodeError, base64.binascii.Error):
+                        continue  # Skip malformed lines
+                        
+    except Exception as e:
+        click.echo(f"❌ Error waiting for sandbox setup: {e}", err=True)
+        return False
+
+
+async def _setup_sandbox(client: 'Plato', vm_job_uuid: str, dev_branch: str, clone_url: str):
+    """Setup the sandbox environment with code and chisel SSH"""
+    import json
+    import uuid
+    
+    try:
+        # Setup sandbox environment via new endpoint
+        setup_response = await client.http_session.post(
+            f"{client.base_url}/public-build/vm/{vm_job_uuid}/setup-sandbox",
+            json={
+                "branch": dev_branch,
+                "clone_url": clone_url,
+                "timeout": 300
+            },
+            headers={"X-API-Key": client.api_key}
+        )
+        
+        if setup_response.status != 200:
+            error = await setup_response.text()
+            click.echo(f"❌ Failed to setup sandbox: {error}", err=True)
+            return None
+            
+        return await setup_response.json()
+        
+    except Exception as e:
+        click.echo(f"❌ Error setting up sandbox: {e}", err=True)
+        return None
+
+
+async def _run_interactive_sandbox(ssh_url: str, vm_job_uuid: str, client: 'Plato', keep_vm: bool):
+    """Run interactive sandbox mode with editor integration"""
+    import subprocess
+    import os
+    
+    # Setup local chisel client for SSH tunneling
+    local_port = await _setup_chisel_client(ssh_url)
+    if not local_port:
+        click.echo("❌ Failed to setup local chisel client", err=True)
+        return
+    
+    click.echo("🚀 Sandbox is ready! Choose an action:")
+    
+    while True:
+        click.echo("\n📋 Sandbox Menu:")
+        click.echo("  1. Open VS Code connected to sandbox")
+        click.echo("  2. Open Cursor connected to sandbox") 
+        click.echo("  3. Open terminal via SSH")
+        click.echo("  4. Show VM info")
+        click.echo("  5. Stop sandbox and cleanup")
+        
+        try:
+            choice = click.prompt("Choose an action (1-5)", type=int)
+        except (KeyboardInterrupt, EOFError):
+            break
+        
+        if choice == 1:
+            # VS Code via SSH tunnel
+            click.echo(f"🔧 Opening VS Code connected to sandbox...")
+            success = await _setup_ssh_config_and_open_editor('code', vm_job_uuid, local_port)
+            if success:
+                click.echo("✅ VS Code opened successfully")
+                click.echo("💡 Your code is available at /opt/plato in the remote environment")
+            else:
+                click.echo("❌ Failed to open VS Code")
+                
+        elif choice == 2:
+            # Cursor via SSH tunnel
+            click.echo(f"🔧 Opening Cursor connected to sandbox...")
+            success = await _setup_ssh_config_and_open_editor('cursor', vm_job_uuid, local_port)
+            if success:
+                click.echo("✅ Cursor opened successfully")
+                click.echo("💡 Your code is available at /opt/plato in the remote environment")
+            else:
+                click.echo("❌ Failed to open Cursor")
+                
+        elif choice == 3:
+            # Direct SSH via local tunnel
+            click.echo(f"🔧 Opening SSH terminal...")
+            try:
+                subprocess.run(['ssh', '-p', str(local_port), 'root@localhost'], check=False)
+            except Exception as e:
+                click.echo(f"❌ Failed to open SSH: {e}")
+                
+        elif choice == 4:
+            # Show VM status
+            try:
+                status_response = await client.get_job_status(vm_job_uuid)
+                click.echo(f"📊 VM Status: {status_response.get('status', 'unknown')}")
+                click.echo(f"🔗 SSH: ssh -p {local_port} root@localhost")
+                click.echo(f"📁 Code directory: /opt/plato")
+                if 'message' in status_response:
+                    click.echo(f"📝 Message: {status_response['message']}")
+            except Exception as e:
+                click.echo(f"❌ Failed to get VM status: {e}")
+                
+        elif choice == 5:
+            # Stop and cleanup
+            break
+        else:
+            click.echo("❌ Invalid choice. Please enter 1-5.")
+
+
+async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
+    """Setup local chisel client and return the local SSH port"""
+    import subprocess
+    import random
+    import time
+    
+    try:
+        # Install chisel client if needed
+        chisel_path = shutil.which('chisel')
+        if not chisel_path:
+            click.echo("📦 Installing chisel client...")
+            # Try to install chisel
+            try:
+                subprocess.run([
+                    'curl', '-L', 
+                    'https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz',
+                    '-o', '/tmp/chisel.gz'
+                ], check=True, capture_output=True)
+                
+                subprocess.run(['gunzip', '/tmp/chisel.gz'], check=True, capture_output=True)
+                subprocess.run(['chmod', '+x', '/tmp/chisel'], check=True, capture_output=True)
+                subprocess.run(['sudo', 'mv', '/tmp/chisel', '/usr/local/bin/chisel'], check=True, capture_output=True)
+                click.echo("✅ Chisel installed successfully")
+            except subprocess.CalledProcessError:
+                click.echo("❌ Failed to install chisel. Please install manually.", err=True)
+                return None
+            except FileNotFoundError:
+                click.echo("❌ curl not found. Please install chisel manually.", err=True)
+                return None
+        
+        # Parse the SSH URL to get server details
+        # ssh_url format: https://domain.com/connect-job/job_uuid/chisel_port
+        if '/connect-job/' not in ssh_url:
+            click.echo(f"❌ Invalid SSH URL format: {ssh_url}", err=True)
+            return None
+        
+        url_parts = ssh_url.split('/connect-job/')
+        base_url = url_parts[0].replace('https://', '').replace('http://', '')
+        job_path = url_parts[1]  # job_uuid/chisel_port
+        
+        # Extract server and port for chisel
+        server_url = f"{base_url}"
+        if 'localhost' in base_url:
+            server_url = server_url.replace('localhost', '127.0.0.1')  # chisel works better with IP
+        
+        # Generate random local port for SSH tunneling
+        local_ssh_port = random.randint(2200, 2299)
+        
+        # Start chisel client for SSH tunneling (22:localhost:22 means tunnel port 22 to VM's port 22)
+        chisel_cmd = ['chisel', 'client', f"http://{server_url}/connect-job/{job_path}", 
+                      f"{local_ssh_port}:localhost:22"]
+        
+        click.echo(f"🔗 Starting chisel client: {' '.join(chisel_cmd)}")
+        
+        # Start chisel in background
+        chisel_process = subprocess.Popen(
+            chisel_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        # Wait a moment for chisel to establish connection
+        time.sleep(3)
+        
+        # Check if chisel is still running
+        if chisel_process.poll() is None:
+            click.echo(f"✅ Chisel client running (local SSH port: {local_ssh_port})")
+            return local_ssh_port
+        else:
+            stdout, stderr = chisel_process.communicate()
+            click.echo(f"❌ Chisel client failed: {stderr.decode()}", err=True)
+            return None
+        
+    except Exception as e:
+        click.echo(f"❌ Error setting up chisel: {e}", err=True)
+        return None
+
+
+async def _setup_ssh_config_and_open_editor(editor: str, vm_job_uuid: str, local_port: int) -> bool:
+    """Setup SSH config and open editor"""
+    import subprocess
+    
+    try:
+        # Create SSH config entry
+        ssh_config_dir = os.path.expanduser("~/.ssh")
+        os.makedirs(ssh_config_dir, exist_ok=True)
+        
+        config_entry = f"""
+# Plato Sandbox VM {vm_job_uuid}
+Host {vm_job_uuid}
+    HostName localhost
+    Port {local_port}
+    User root
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    ConnectTimeout 10
+
+"""
+        
+        ssh_config_path = os.path.join(ssh_config_dir, "config")
+        
+        # Read existing config
+        existing_config = ""
+        if os.path.exists(ssh_config_path):
+            with open(ssh_config_path, 'r') as f:
+                existing_config = f.read()
+        
+        # Add config if not already present
+        if f"Host {vm_job_uuid}" not in existing_config:
+            with open(ssh_config_path, 'a') as f:
+                f.write(config_entry)
+        
+        # Open editor
+        if editor == 'code':
+            subprocess.run(['code', '--remote', f"ssh-remote+{vm_job_uuid}", '/opt/plato'], 
+                          check=False, capture_output=True)
+        elif editor == 'cursor':
+            subprocess.run(['cursor', '--remote', f"ssh-remote+{vm_job_uuid}", '/opt/plato'], 
+                          check=False, capture_output=True)
+        else:
+            return False
+            
+        return True
+        
+    except FileNotFoundError:
+        click.echo(f"❌ {editor} not found. Please install {editor}.")
+        return False
+    except Exception as e:
+        click.echo(f"❌ Error opening {editor}: {e}")
+        return False
 
 
 def _hub_status(hub_config: dict, command: str, extra_args: list):
@@ -536,6 +870,82 @@ def _ensure_gitignore_protects_credentials():
 def hub():
     """Plato Hub - Manage simulator repositories and development environments."""
     pass
+
+
+@hub.command()
+@click.argument('sim_name')
+@click.option('--description', help='Description for the new simulator')
+@click.option('--sim-type', default='docker_app', help='Type of simulator (default: docker_app)')
+@click.option('--directory', help='Directory to create and clone into (default: sim_name)')
+def init(sim_name: str, description: Optional[str], sim_type: str, directory: Optional[str]):
+    """Initialize a new simulator with repository and clone it.
+    
+    SIM_NAME: The name of the new simulator to create
+    """
+    async def _init():
+        client = Plato()
+        try:
+            click.echo(f"🚀 Initializing new simulator '{sim_name}'...")
+            
+            # Check if simulator already exists
+            existing_simulators = await client.list_gitea_simulators()
+            for sim in existing_simulators:
+                if sim['name'].lower() == sim_name.lower():
+                    click.echo(f"❌ Simulator '{sim_name}' already exists", err=True)
+                    return
+            
+            # Step 1: Create the simulator
+            click.echo(f"📦 Creating simulator '{sim_name}'...")
+            simulator = await client.create_simulator(
+                name=sim_name,
+                description=description,
+                sim_type=sim_type
+            )
+            click.echo(f"✅ Created simulator: {simulator['name']} (ID: {simulator['id']})")
+            
+            # Step 2: Create repository for the simulator
+            click.echo(f"📁 Creating repository for simulator...")
+            repo_info = await client.create_simulator_repository(simulator['id'])
+            click.echo(f"✅ Created repository: {repo_info['full_name']}")
+            
+            # Step 3: Clone the repository
+            target_dir = directory or sim_name
+            
+            # Get authenticated clone URL
+            creds = await client.get_gitea_credentials()
+            clone_url = repo_info['clone_url']
+            if clone_url.startswith('https://'):
+                authenticated_url = clone_url.replace('https://', f"https://{creds['username']}:{creds['password']}@")
+                clone_url = authenticated_url
+            
+            click.echo(f"📥 Cloning {repo_info['full_name']} to {target_dir}...")
+            
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ['git', 'clone', clone_url, target_dir],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                click.echo(f"✅ Successfully cloned to: {target_dir}")
+                click.echo(f"🎉 Simulator '{sim_name}' is ready!")
+                click.echo(f"💡 cd {target_dir} && start developing your simulator")
+                
+                if repo_info.get('description'):
+                    click.echo(f"📝 Description: {repo_info['description']}")
+                    
+            except subprocess.CalledProcessError as e:
+                click.echo(f"❌ Failed to clone repository: {e.stderr.strip()}", err=True)
+            except FileNotFoundError:
+                click.echo("❌ Git is not installed or not in PATH", err=True)
+                
+        except Exception as e:
+            click.echo(f"❌ Initialization failed: {e}", err=True)
+        finally:
+            await client.close()
+    
+    handle_async(_init())
 
 
 @hub.command()
@@ -885,43 +1295,207 @@ def git(ctx):
 
 
 @hub.command()
-def sandbox():
+@click.option('--config', default='plato-config.yml', help='VM configuration file (default: plato-config.yml)')
+@click.option('--keep-vm', is_flag=True, help='Keep VM running after sandbox exits')
+def sandbox(config: str, keep_vm: bool):
     """Start a development sandbox environment.
     
-    Checks for plato hub configuration and starts a dev machine (placeholder).
+    Creates a development VM with your simulator code and opens an interactive environment.
     """
-    import os
-    import json
-    
-    try:
-        # Check for .plato-hub.json configuration
-        config_file = '.plato-hub.json'
+    async def _sandbox():
+        import os
+        import json
+        import yaml
+        import uuid
+        import subprocess
+        import asyncio
+        from datetime import datetime
         
-        if not os.path.exists(config_file):
-            click.echo("❌ No Plato hub configuration found in this directory.", err=True)
-            click.echo("💡 Use 'uv run plato hub clone <sim_name>' or 'uv run plato hub link <sim_name>' first.", err=True)
-            return
+        client = Plato()
+        vm_job_uuid = None
         
         try:
-            with open(config_file, 'r') as f:
-                hub_config = json.load(f)
+            # Step 1: Check for .plato-hub.json configuration
+            config_file = '.plato-hub.json'
             
-            sim_name = hub_config['simulator_name']
-            repo_name = hub_config['repository']['full_name']
+            if not os.path.exists(config_file):
+                click.echo("❌ No Plato hub configuration found in this directory.", err=True)
+                click.echo("💡 Use 'uv run plato hub clone <sim_name>' or 'uv run plato hub link <sim_name>' first.", err=True)
+                return
             
-            click.echo(f"✅ Found Plato hub configuration for simulator '{sim_name}'")
-            click.echo(f"🔗 Linked to: {repo_name}")
-            click.echo(f"📁 Sync directory: {hub_config.get('sync_directory', 'current')}")
+            try:
+                with open(config_file, 'r') as f:
+                    hub_config = json.load(f)
+                
+                sim_name = hub_config['simulator_name']
+                click.echo(f"✅ Found Plato simulator: {sim_name}")
+                
+            except Exception as e:
+                click.echo(f"❌ Error reading hub config: {e}", err=True)
+                return
             
+            # Step 2: Load VM configuration
+            vm_config = {
+                'vcpu_count': 1,
+                'mem_size_mib': 1024, 
+                'overlay_size_mb': 2048,
+                'port': 8080,
+                'messaging_port': 7000
+            }
+            
+            if os.path.exists(config):
+                try:
+                    with open(config, 'r') as f:
+                        user_config = yaml.safe_load(f)
+                    vm_config.update(user_config)
+                    click.echo(f"✅ Loaded VM config from {config}")
+                except Exception as e:
+                    click.echo(f"⚠️  Could not load {config}, using defaults: {e}")
+            else:
+                click.echo(f"⚠️  No {config} found, using default VM configuration")
+            
+            # Step 3: Create development branch and push current state
+            branch_uuid = str(uuid.uuid4())[:8]
+            dev_branch = f"dev-{branch_uuid}"
+            
+            click.echo(f"🌱 Creating development branch: {dev_branch}")
+            
+            # Get authenticated URL
+            clone_url = _get_authenticated_url(hub_config)
+            if not clone_url:
+                click.echo("❌ Authentication required. Run 'uv run plato hub login' first.", err=True)
+                return
+            
+            # Create temp repo to push current state
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_repo = os.path.join(temp_dir, 'temp_repo')
+                current_dir = os.getcwd()
+                
+                # Clone the repository
+                subprocess.run(['git', 'clone', clone_url, temp_repo], 
+                              capture_output=True, text=True, check=True)
+                
+                os.chdir(temp_repo)
+                
+                # Create and checkout development branch
+                subprocess.run(['git', 'checkout', '-b', dev_branch], 
+                              capture_output=True, check=True)
+                
+                # Copy current directory contents
+                for item in os.listdir(current_dir):
+                    if item.startswith('.git') or item == '.plato-hub.json':
+                        continue
+                    
+                    src = os.path.join(current_dir, item)
+                    dst = os.path.join('.', item)
+                    
+                    if os.path.isfile(src):
+                        shutil.copy2(src, dst)
+                    elif os.path.isdir(src):
+                        if os.path.exists(dst):
+                            shutil.rmtree(dst)
+                        shutil.copytree(src, dst)
+                
+                # Commit and push branch
+                subprocess.run(['git', 'add', '.'], capture_output=True)
+                subprocess.run(['git', 'commit', '-m', f'Development snapshot for sandbox {branch_uuid}'], 
+                              capture_output=True)
+                subprocess.run(['git', 'push', 'origin', dev_branch], 
+                              capture_output=True, text=True, check=True)
+                
+                os.chdir(current_dir)
+            
+            click.echo(f"✅ Created and pushed development branch: {dev_branch}")
+            
+            # Step 4: Start VM
+            click.echo(f"🚀 Starting sandbox VM...")
+            
+            # Create VM
+            vm_response = await client.http_session.post(
+                f"{client.base_url}/public-build/vm/create",
+                json={
+                    "service": sim_name,
+                    "version": "sandbox",
+                    "vcpu_count": vm_config['vcpu_count'],
+                    "mem_size_mib": vm_config['mem_size_mib'], 
+                    "overlay_size_mb": vm_config['overlay_size_mb'],
+                    "port": vm_config['port'],
+                    "messaging_port": vm_config['messaging_port'],
+                    "wait_time": 120,
+                    "vm_timeout": 1800,
+                    "alias": f"{sim_name}-sandbox"
+                },
+                headers={"X-API-Key": client.api_key}
+            )
+            
+            if vm_response.status != 200:
+                error = await vm_response.text()
+                click.echo(f"❌ Failed to create VM: {error}", err=True)
+                return
+                
+            vm_info = await vm_response.json()
+            vm_job_uuid = vm_info['uuid']
+            correlation_id = vm_info['correlation_id']
+            
+            click.echo(f"✅ VM created: {vm_job_uuid}")
+            click.echo(f"🔗 URL: {vm_info['url']}")
+            click.echo(f"⏳ Waiting for VM to start...")
+            
+            # Wait for VM to be ready by monitoring SSE stream
+            await _wait_for_vm_ready(client, correlation_id)
+            
+            click.echo(f"✅ VM is ready!")
+            
+            # Step 5: Setup sandbox environment 
+            click.echo(f"🔧 Setting up sandbox environment...")
+            
+            setup_response = await _setup_sandbox(client, vm_job_uuid, dev_branch, clone_url)
+            
+            if not setup_response:
+                click.echo("❌ Failed to setup sandbox environment", err=True)
+                return
+                
+            ssh_url = setup_response['ssh_url']
+            chisel_port = setup_response.get('chisel_port', 5555)
+            correlation_id = setup_response['correlation_id']
+            
+            # Wait for sandbox setup to complete
+            click.echo(f"⏳ Setting up sandbox environment...")
+            setup_success = await _wait_for_setup_ready(client, correlation_id)
+            
+            if not setup_success:
+                click.echo("❌ Sandbox setup failed", err=True)
+                return
+            
+            click.echo(f"✅ Sandbox environment ready!")
+            click.echo(f"🔗 SSH URL: {ssh_url}")
+            click.echo(f"📁 Code available at: /opt/plato")
+            
+            # Step 6: Interactive sandbox mode
+            await _run_interactive_sandbox(ssh_url, vm_job_uuid, client, keep_vm)
+            
+        except KeyboardInterrupt:
+            click.echo("\n🛑 Sandbox interrupted by user")
         except Exception as e:
-            click.echo(f"❌ Error reading hub config: {e}", err=True)
-            return
-        
-        click.echo("🚧 Sandbox environment starting... (placeholder)")
-        click.echo("This will eventually start a development environment for the current repository.")
-        
-    except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+            click.echo(f"❌ Sandbox failed: {e}", err=True)
+        finally:
+            # Cleanup VM unless keep_vm is specified
+            if vm_job_uuid and not keep_vm:
+                try:
+                    click.echo("🧹 Cleaning up VM...")
+                    await client.http_session.delete(
+                        f"{client.base_url}/public-build/vm/{vm_job_uuid}",
+                        headers={"X-API-Key": client.api_key}
+                    )
+                    click.echo("✅ VM cleaned up")
+                except Exception as cleanup_e:
+                    click.echo(f"⚠️  Failed to cleanup VM: {cleanup_e}", err=True)
+            elif keep_vm:
+                click.echo(f"💡 VM {vm_job_uuid} is still running (use --keep-vm flag was used)")
+                
+            await client.close()
+    
+    handle_async(_sandbox())
 
 
 if __name__ == '__main__':
