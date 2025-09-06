@@ -436,13 +436,16 @@ async def _wait_for_vm_ready(client: 'Plato', correlation_id: str, timeout: int 
 
 
 async def _wait_for_setup_ready(client: 'Plato', correlation_id: str, timeout: int = 300):
-    """Wait for sandbox setup to complete by monitoring SSE stream"""
+    """Wait for sandbox setup to complete by monitoring SSE stream and capture SSH key"""
     import aiohttp
     import json
     import base64
     import time
+    import re
+    import os
     
     start_time = time.time()
+    ssh_public_key = None
     
     try:
         async with client.http_session.get(
@@ -463,6 +466,7 @@ async def _wait_for_setup_ready(client: 'Plato', correlation_id: str, timeout: i
                         encoded_data = line_str[6:]  # Remove 'data: ' prefix
                         decoded_data = base64.b64decode(encoded_data).decode('utf-8')
                         event_data = json.loads(decoded_data)
+                        
                         
                         if event_data.get('event_type') == 'completed' or event_data.get('event_type') == 'workflow_progress':
                             message = event_data.get('message', 'Setup progress...')
@@ -485,20 +489,68 @@ async def _wait_for_setup_ready(client: 'Plato', correlation_id: str, timeout: i
         return False
 
 
+def _setup_local_ssh_key():
+    """Generate local SSH key pair for sandbox access"""
+    import os
+    import subprocess
+    
+    try:
+        # Create SSH directory if it doesn't exist
+        ssh_dir = os.path.expanduser("~/.ssh")
+        os.makedirs(ssh_dir, exist_ok=True)
+        
+        # Generate local SSH key pair if it doesn't exist
+        local_key_path = os.path.join(ssh_dir, "plato_sandbox_key")
+        if not os.path.exists(local_key_path):
+            subprocess.run([
+                'ssh-keygen', '-t', 'rsa', '-b', '2048', 
+                '-f', local_key_path, '-N', '', 
+                '-C', 'plato-sandbox-client'
+            ], check=True, capture_output=True)
+            
+            # Set proper permissions
+            os.chmod(local_key_path, 0o600)
+            os.chmod(f"{local_key_path}.pub", 0o644)
+            
+            click.echo(f"🔑 Generated SSH key pair: {local_key_path}")
+        
+        # Read our public key to send to the VM
+        with open(f"{local_key_path}.pub", 'r') as f:
+            local_public_key = f.read().strip()
+        
+        click.echo(f"🔑 SSH key ready for passwordless access")
+        return local_key_path, local_public_key
+        
+    except Exception as e:
+        click.echo(f"⚠️  Warning: Failed to setup SSH key: {e}")
+        return None, None
+
+
 async def _setup_sandbox(client: 'Plato', vm_job_uuid: str, dev_branch: str, clone_url: str):
     """Setup the sandbox environment with code and chisel SSH"""
     import json
     import uuid
     
     try:
+        # Generate local SSH key for passwordless access
+        click.echo("🔑 Setting up SSH authentication...")
+        local_key_path, local_public_key = _setup_local_ssh_key()
+        
         # Setup sandbox environment via new endpoint
+        setup_data = {
+            "branch": dev_branch,
+            "clone_url": clone_url,
+            "timeout": 300
+        }
+        
+        # Add client SSH public key if available
+        if local_public_key:
+            setup_data["client_ssh_public_key"] = local_public_key
+            click.echo("🔑 Sending SSH public key for passwordless access")
+        
         setup_response = await client.http_session.post(
             f"{client.base_url}/public-build/vm/{vm_job_uuid}/setup-sandbox",
-            json={
-                "branch": dev_branch,
-                "clone_url": clone_url,
-                "timeout": 300
-            },
+            json=setup_data,
             headers={"X-API-Key": client.api_key}
         )
         
@@ -514,10 +566,13 @@ async def _setup_sandbox(client: 'Plato', vm_job_uuid: str, dev_branch: str, clo
         return None
 
 
-async def _run_interactive_sandbox(ssh_url: str, vm_job_uuid: str, client: 'Plato', keep_vm: bool):
+async def _run_interactive_sandbox(sandbox_info: dict, client: 'Plato', keep_vm: bool):
     """Run interactive sandbox mode with editor integration"""
     import subprocess
     import os
+    
+    vm_job_uuid = sandbox_info['vm_job_uuid']
+    ssh_url = sandbox_info['ssh_url']
     
     # Setup local chisel client for SSH tunneling
     local_port = await _setup_chisel_client(ssh_url)
@@ -531,19 +586,18 @@ async def _run_interactive_sandbox(ssh_url: str, vm_job_uuid: str, client: 'Plat
         click.echo("\n📋 Sandbox Menu:")
         click.echo("  1. Open VS Code connected to sandbox")
         click.echo("  2. Open Cursor connected to sandbox") 
-        click.echo("  3. Open terminal via SSH")
-        click.echo("  4. Show VM info")
-        click.echo("  5. Stop sandbox and cleanup")
+        click.echo("  3. Show VM info")
+        click.echo("  4. Stop sandbox and cleanup")
         
         try:
-            choice = click.prompt("Choose an action (1-5)", type=int)
+            choice = click.prompt("Choose an action (1-4)", type=int)
         except (KeyboardInterrupt, EOFError):
             break
         
         if choice == 1:
             # VS Code via SSH tunnel
             click.echo(f"🔧 Opening VS Code connected to sandbox...")
-            success = await _setup_ssh_config_and_open_editor('code', vm_job_uuid, local_port)
+            success = _open_editor_via_ssh('code', vm_job_uuid, local_port)
             if success:
                 click.echo("✅ VS Code opened successfully")
                 click.echo("💡 Your code is available at /opt/plato in the remote environment")
@@ -553,7 +607,7 @@ async def _run_interactive_sandbox(ssh_url: str, vm_job_uuid: str, client: 'Plat
         elif choice == 2:
             # Cursor via SSH tunnel
             click.echo(f"🔧 Opening Cursor connected to sandbox...")
-            success = await _setup_ssh_config_and_open_editor('cursor', vm_job_uuid, local_port)
+            success = _open_editor_via_ssh('cursor', vm_job_uuid, local_port)
             if success:
                 click.echo("✅ Cursor opened successfully")
                 click.echo("💡 Your code is available at /opt/plato in the remote environment")
@@ -561,30 +615,32 @@ async def _run_interactive_sandbox(ssh_url: str, vm_job_uuid: str, client: 'Plat
                 click.echo("❌ Failed to open Cursor")
                 
         elif choice == 3:
-            # Direct SSH via local tunnel
-            click.echo(f"🔧 Opening SSH terminal...")
-            try:
-                subprocess.run(['ssh', '-p', str(local_port), 'root@localhost'], check=False)
-            except Exception as e:
-                click.echo(f"❌ Failed to open SSH: {e}")
-                
-        elif choice == 4:
-            # Show VM status
+            # Show VM info
             try:
                 status_response = await client.get_job_status(vm_job_uuid)
-                click.echo(f"📊 VM Status: {status_response.get('status', 'unknown')}")
-                click.echo(f"🔗 SSH: ssh -p {local_port} root@localhost")
-                click.echo(f"📁 Code directory: /opt/plato")
+                click.echo("📊 Sandbox VM Information:")
+                click.echo(f"  🆔 Job UUID: {vm_job_uuid}")
+                click.echo(f"  📈 Status: {status_response.get('status', 'unknown')}")
+                click.echo(f"  🔗 SSH: ssh plato-sandbox")
+                click.echo(f"  🔑 SSH key authentication (passwordless)")
+                click.echo(f"  📁 Code directory: /opt/plato")
+                click.echo(f"  🌿 Development branch: {sandbox_info['dev_branch']}")
+                click.echo(f"  💻 VM URL: {sandbox_info['vm_url']}")
+                
+                # Show chisel connection info
+                click.echo(f"  🔗 Chisel tunnel: localhost:{local_port} → VM:22")
+                
                 if 'message' in status_response:
-                    click.echo(f"📝 Message: {status_response['message']}")
+                    click.echo(f"  📝 Status message: {status_response['message']}")
+                    
             except Exception as e:
                 click.echo(f"❌ Failed to get VM status: {e}")
                 
-        elif choice == 5:
+        elif choice == 4:
             # Stop and cleanup
             break
         else:
-            click.echo("❌ Invalid choice. Please enter 1-5.")
+            click.echo("❌ Invalid choice. Please enter 1-4.")
 
 
 async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
@@ -635,9 +691,9 @@ async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
         # Generate random local port for SSH tunneling
         local_ssh_port = random.randint(2200, 2299)
         
-        # Start chisel client for SSH tunneling (22:localhost:22 means tunnel port 22 to VM's port 22)
+        # Start chisel client for SSH tunneling (22:127.0.0.1:22 means tunnel port 22 to VM's port 22)
         chisel_cmd = ['chisel', 'client', f"http://{server_url}/connect-job/{job_path}", 
-                      f"{local_ssh_port}:localhost:22"]
+                      f"{local_ssh_port}:127.0.0.1:22"]
         
         click.echo(f"🔗 Starting chisel client: {' '.join(chisel_cmd)}")
         
@@ -654,6 +710,11 @@ async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
         # Check if chisel is still running
         if chisel_process.poll() is None:
             click.echo(f"✅ Chisel client running (local SSH port: {local_ssh_port})")
+            
+            # Ask permission and set up SSH config
+            if click.confirm("💡 Set up SSH config for easy connection?", default=True):
+                _setup_ssh_config_with_password(local_ssh_port)
+            
             return local_ssh_port
         else:
             stdout, stderr = chisel_process.communicate()
@@ -665,21 +726,25 @@ async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
         return None
 
 
-async def _setup_ssh_config_and_open_editor(editor: str, vm_job_uuid: str, local_port: int) -> bool:
-    """Setup SSH config and open editor"""
-    import subprocess
+def _setup_ssh_config_with_password(local_port: int):
+    """Setup SSH config with SSH key authentication for sandbox"""
+    import os
     
     try:
-        # Create SSH config entry
         ssh_config_dir = os.path.expanduser("~/.ssh")
         os.makedirs(ssh_config_dir, exist_ok=True)
         
+        # Get the path to our SSH key
+        key_path = os.path.join(ssh_config_dir, "plato_sandbox_key")
+        
+        # Create SSH config entry with key authentication
         config_entry = f"""
-# Plato Sandbox VM {vm_job_uuid}
-Host {vm_job_uuid}
+Host plato-sandbox
     HostName localhost
     Port {local_port}
     User root
+    IdentityFile {key_path}
+    IdentitiesOnly yes
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
     ConnectTimeout 10
@@ -694,25 +759,57 @@ Host {vm_job_uuid}
             with open(ssh_config_path, 'r') as f:
                 existing_config = f.read()
         
-        # Add config if not already present
-        if f"Host {vm_job_uuid}" not in existing_config:
-            with open(ssh_config_path, 'a') as f:
-                f.write(config_entry)
-        
-        # Open editor
-        if editor == 'code':
-            subprocess.run(['code', '--remote', f"ssh-remote+{vm_job_uuid}", '/opt/plato'], 
-                          check=False, capture_output=True)
-        elif editor == 'cursor':
-            subprocess.run(['cursor', '--remote', f"ssh-remote+{vm_job_uuid}", '/opt/plato'], 
-                          check=False, capture_output=True)
-        else:
-            return False
+        # Remove any existing plato-sandbox entry
+        if "Host plato-sandbox" in existing_config:
+            lines = existing_config.split('\n')
+            new_lines = []
+            skip_block = False
             
+            for line in lines:
+                if line.strip() == "Host plato-sandbox":
+                    skip_block = True
+                    continue
+                elif line.startswith("Host ") and skip_block:
+                    skip_block = False
+                    new_lines.append(line)
+                elif not skip_block:
+                    new_lines.append(line)
+            
+            existing_config = '\n'.join(new_lines)
+        
+        # Add new config
+        with open(ssh_config_path, 'w') as f:
+            f.write(existing_config.rstrip())
+            if existing_config and not existing_config.endswith('\n'):
+                f.write('\n')
+            f.write(config_entry)
+        
+        click.echo("✅ SSH config updated!")
+        click.echo("🔗 Passwordless connection: ssh plato-sandbox")
+        click.echo("🔑 Uses SSH key authentication (no password needed)")
+        click.echo("📁 Remote path: /opt/plato")
+        
+    except Exception as e:
+        click.echo(f"❌ Failed to setup SSH config: {e}")
+
+
+def _open_editor_via_ssh(editor: str, vm_job_uuid: str, local_port: int) -> bool:
+    """Open editor with simple SSH connection"""
+    import subprocess
+    
+    try:
+        if editor == 'code':
+            subprocess.run(['code', '--remote', 'ssh-remote+plato-sandbox', '/opt/plato'], check=False)
+            click.echo("💡 If connection fails, use: F1 → 'Remote-SSH: Connect to Host' → 'plato-sandbox'")
+        elif editor == 'cursor':
+            subprocess.run(['cursor', '--remote', 'ssh-remote+plato-sandbox', '/opt/plato'], check=False) 
+            click.echo("💡 If connection fails, use: F1 → 'Remote-SSH: Connect to Host' → 'plato-sandbox'")
+        
         return True
         
     except FileNotFoundError:
         click.echo(f"❌ {editor} not found. Please install {editor}.")
+        click.echo(f"💡 Alternative: ssh plato-sandbox (SSH key authentication)")
         return False
     except Exception as e:
         click.echo(f"❌ Error opening {editor}: {e}")
@@ -1009,19 +1106,18 @@ def clone(sim_name: str, directory: Optional[str]):
             clone_url = repo_info['clone_url']
             repo_name = repo_info['name']
             
-            # Use admin credentials if available for authenticated cloning
-            if repo_info.get('admin_credentials'):
-                creds = repo_info['admin_credentials']
-                # Construct authenticated URL: https://username:password@domain/path
+            # Get admin credentials for authentication
+            try:
+                creds = await client.get_gitea_credentials()
                 if clone_url.startswith('https://'):
-                    # Replace https:// with https://username:password@
                     authenticated_url = clone_url.replace('https://', f"https://{creds['username']}:{creds['password']}@")
                     clone_url = authenticated_url
-                    click.echo(f"Using admin credentials for authentication (user: {creds['username']})")
+                    click.echo(f"✅ Using admin credentials for authentication (user: {creds['username']})")
                 else:
-                    click.echo(f"Warning: Could not authenticate - URL not HTTPS: {clone_url}", err=True)
-            else:
-                click.echo("⚠️  Warning: No admin credentials provided - clone may require manual authentication", err=True)
+                    click.echo(f"⚠️  Warning: URL not HTTPS, authentication may fail: {clone_url}", err=True)
+            except Exception as creds_e:
+                click.echo(f"⚠️  Warning: Could not get admin credentials: {creds_e}", err=True)
+                click.echo("💡 Clone may require manual authentication", err=True)
             
             # Determine target directory
             if directory:
@@ -1033,6 +1129,7 @@ def clone(sim_name: str, directory: Optional[str]):
             
             # Clone the repository
             import subprocess
+            import json
             
             try:
                 result = subprocess.run(
@@ -1043,6 +1140,30 @@ def clone(sim_name: str, directory: Optional[str]):
                 )
                 click.echo(f"✅ Successfully cloned {repo_info['full_name']}")
                 click.echo(f"Repository cloned to: {target_dir}")
+                
+                # Create .plato-hub.json configuration in the cloned directory
+                try:
+                    hub_config = {
+                        "simulator_name": sim_name,
+                        "simulator_id": simulator['id'],
+                        "repository": {
+                            "name": repo_info['name'],
+                            "full_name": repo_info['full_name'],
+                            "clone_url": repo_info['clone_url'].replace('https://', 'https://').split('@')[-1] if '@' in repo_info['clone_url'] else repo_info['clone_url'],  # Strip any embedded auth
+                            "description": repo_info.get('description')
+                        },
+                        "sync_directory": os.path.basename(target_dir)
+                    }
+                    
+                    config_path = os.path.join(target_dir, '.plato-hub.json')
+                    with open(config_path, 'w') as f:
+                        json.dump(hub_config, f, indent=2)
+                    
+                    click.echo("✅ Created Plato hub configuration")
+                    click.echo("💡 You can now use 'uv run plato hub sandbox' in this directory")
+                    
+                except Exception as config_e:
+                    click.echo(f"⚠️  Warning: Could not create hub config: {config_e}", err=True)
                 
                 if repo_info.get('description'):
                     click.echo(f"Description: {repo_info['description']}")
@@ -1442,7 +1563,11 @@ def sandbox(config: str, keep_vm: bool):
             click.echo(f"⏳ Waiting for VM to start...")
             
             # Wait for VM to be ready by monitoring SSE stream
-            await _wait_for_vm_ready(client, correlation_id)
+            vm_ready = await _wait_for_vm_ready(client, correlation_id)
+            
+            if not vm_ready:
+                click.echo("❌ VM failed to start properly", err=True)
+                return
             
             click.echo(f"✅ VM is ready!")
             
@@ -1465,6 +1590,16 @@ def sandbox(config: str, keep_vm: bool):
             
             if not setup_success:
                 click.echo("❌ Sandbox setup failed", err=True)
+                # VM was created but setup failed, still cleanup if not keeping VM
+                if not keep_vm:
+                    try:
+                        await client.http_session.delete(
+                            f"{client.base_url}/public-build/vm/{vm_job_uuid}",
+                            headers={"X-API-Key": client.api_key}
+                        )
+                        click.echo("🧹 Cleaned up failed VM")
+                    except:
+                        pass
                 return
             
             click.echo(f"✅ Sandbox environment ready!")
@@ -1472,7 +1607,14 @@ def sandbox(config: str, keep_vm: bool):
             click.echo(f"📁 Code available at: /opt/plato")
             
             # Step 6: Interactive sandbox mode
-            await _run_interactive_sandbox(ssh_url, vm_job_uuid, client, keep_vm)
+            sandbox_info = {
+                'vm_job_uuid': vm_job_uuid,
+                'dev_branch': dev_branch,
+                'vm_url': vm_info['url'],
+                'ssh_url': ssh_url,
+                'chisel_port': chisel_port
+            }
+            await _run_interactive_sandbox(sandbox_info, client, keep_vm)
             
         except KeyboardInterrupt:
             click.echo("\n🛑 Sandbox interrupted by user")
