@@ -607,4 +607,21 @@ class Plato:
         ) as response:
             await self._handle_response_error(response)
             return await response.json()
+    
+    async def get_gitea_credentials(self) -> Dict[str, Any]:
+        """Get Gitea admin credentials for the organization.
+        
+        Returns:
+            Dict[str, Any]: Gitea credentials including username and password.
+            
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If user doesn't have access.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/gitea/credentials", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
 

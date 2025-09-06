@@ -264,6 +264,273 @@ def list_simulators():
     handle_async(_list())
 
 
+# Helper functions for hub git operations
+def _hub_push(hub_config: dict, extra_args: list):
+    """Push current directory contents to simulator repository"""
+    import tempfile
+    import shutil
+    import subprocess
+    
+    try:
+        clone_url = _get_authenticated_url(hub_config)
+        if not clone_url:
+            click.echo("❌ Authentication failed. Run 'uv run plato hub login' first.", err=True)
+            return
+            
+        sim_name = hub_config['simulator_name']
+        
+        click.echo(f"📤 Pushing to simulator '{sim_name}'...")
+        
+        # Create temporary directory for isolated git operations
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_repo = os.path.join(temp_dir, 'temp_repo')
+            
+            # Clone the simulator repository
+            result = subprocess.run(['git', 'clone', clone_url, temp_repo], 
+                                  capture_output=True, text=True)
+            if result.returncode != 0:
+                click.echo(f"❌ Failed to clone simulator repo: {result.stderr.strip()}", err=True)
+                return
+            
+            # Copy current directory contents to temp repo (excluding git and config files)
+            current_dir = os.getcwd()
+            for item in os.listdir(current_dir):
+                if item.startswith('.'):
+                    continue  # Skip hidden files
+                
+                src = os.path.join(current_dir, item)
+                dst = os.path.join(temp_repo, item)
+                
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+                elif os.path.isdir(src):
+                    if os.path.exists(dst):
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst)
+            
+            # Commit and push changes
+            os.chdir(temp_repo)
+            subprocess.run(['git', 'add', '.'], check=True)
+            
+            # Check if there are changes to commit
+            status_result = subprocess.run(['git', 'status', '--porcelain'], 
+                                        capture_output=True, text=True)
+            if not status_result.stdout.strip():
+                click.echo("📝 No changes to push")
+                return
+            
+            subprocess.run(['git', 'commit', '-m', f'Sync from {hub_config["sync_directory"]} directory'], 
+                          check=True)
+            
+            # Push to main branch (or specified branch)
+            push_args = ['git', 'push', 'origin', 'main'] + extra_args
+            result = subprocess.run(push_args, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                click.echo(f"✅ Successfully pushed to simulator '{sim_name}'")
+            else:
+                click.echo(f"❌ Push failed: {result.stderr.strip()}", err=True)
+    
+    except Exception as e:
+        click.echo(f"❌ Error during push: {e}", err=True)
+
+
+def _hub_pull(hub_config: dict, extra_args: list):
+    """Pull changes from simulator repository to current directory"""
+    import tempfile
+    import subprocess
+    import shutil
+    
+    try:
+        clone_url = _get_authenticated_url(hub_config)
+        if not clone_url:
+            click.echo("❌ Authentication failed. Run 'uv run plato hub login' first.", err=True)
+            return
+            
+        sim_name = hub_config['simulator_name']
+        
+        click.echo(f"📥 Pulling from simulator '{sim_name}'...")
+        
+        # Create temporary directory for isolated git operations  
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_repo = os.path.join(temp_dir, 'temp_repo')
+            
+            # Clone the simulator repository
+            result = subprocess.run(['git', 'clone', clone_url, temp_repo], 
+                                  capture_output=True, text=True)
+            if result.returncode != 0:
+                click.echo(f"❌ Failed to clone simulator repo: {result.stderr.strip()}", err=True)
+                return
+            
+            # Copy contents from temp repo to current directory (excluding git files)
+            current_dir = os.getcwd()
+            for item in os.listdir(temp_repo):
+                if item.startswith('.git'):
+                    continue  # Skip git directory
+                
+                src = os.path.join(temp_repo, item)
+                dst = os.path.join(current_dir, item)
+                
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+                elif os.path.isdir(src):
+                    if os.path.exists(dst):
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst)
+            
+            click.echo(f"✅ Successfully pulled from simulator '{sim_name}'")
+            click.echo("💡 Files updated in current directory. Review and commit to your monorepo as needed.")
+    
+    except Exception as e:
+        click.echo(f"❌ Error during pull: {e}", err=True)
+
+
+def _hub_status(hub_config: dict, command: str, extra_args: list):
+    """Show git status for the hub-linked directory in isolation"""
+    import tempfile
+    import subprocess
+    import shutil
+    
+    try:
+        clone_url = _get_authenticated_url(hub_config)
+        if not clone_url:
+            # For read-only commands, try without auth first
+            clone_url = hub_config['repository']['clone_url']
+            
+        sim_name = hub_config['simulator_name']
+        
+        # Create temporary directory for isolated git operations
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_repo = os.path.join(temp_dir, 'temp_repo')
+            current_dir = os.getcwd()
+            
+            # Try to clone the simulator repository first to get the baseline
+            clone_result = subprocess.run(['git', 'clone', clone_url, temp_repo], 
+                                        capture_output=True, text=True)
+            
+            if clone_result.returncode != 0:
+                # If clone fails (auth issues, empty repo, etc), create fresh repo
+                subprocess.run(['git', 'init', '--initial-branch=main', temp_repo], 
+                              capture_output=True, check=True)
+                click.echo(f"📁 Creating isolated view (couldn't fetch remote: {clone_result.stderr.strip()[:50]}...)")
+            else:
+                click.echo(f"📡 Comparing against simulator repository")
+                
+            # Copy current directory contents over the cloned/initialized repo
+            os.chdir(temp_repo)
+            
+            # Remove all files except .git to replace with current directory content
+            for item in os.listdir('.'):
+                if not item.startswith('.git'):
+                    item_path = os.path.join('.', item)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+            
+            # Copy current directory contents 
+            for item in os.listdir(current_dir):
+                if item.startswith('.git') or item == '.plato-hub.json':
+                    continue  # Skip git and config files
+                
+                src = os.path.join(current_dir, item)
+                dst = os.path.join('.', item)
+                
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+                elif os.path.isdir(src):
+                    shutil.copytree(src, dst)
+            
+            # Run the requested command
+            git_cmd = ['git', command] + extra_args
+            result = subprocess.run(git_cmd, capture_output=False, text=True)
+            
+    except Exception as e:
+        click.echo(f"❌ Error during {command}: {e}", err=True)
+
+
+def _get_authenticated_url(hub_config: dict) -> Optional[str]:
+    """Get authenticated clone URL using cached credentials"""
+    import os
+    import json
+    
+    # Check for cached credentials
+    cache_dir = os.path.expanduser("~/.plato-hub")
+    cache_file = os.path.join(cache_dir, "credentials.json")
+    
+    if not os.path.exists(cache_file):
+        return None
+    
+    try:
+        with open(cache_file, 'r') as f:
+            credentials = json.load(f)
+        
+        base_url = hub_config['repository']['clone_url']
+        username = credentials.get('username')
+        password = credentials.get('password')
+        
+        if username and password and base_url.startswith('https://'):
+            return base_url.replace('https://', f"https://{username}:{password}@")
+        
+    except Exception:
+        pass
+    
+    return None
+
+
+def _ensure_gitignore_protects_credentials():
+    """Add credential files to .gitignore if not already present"""
+    import subprocess
+    
+    try:
+        # Check if we're in a git repository
+        result = subprocess.run(['git', 'rev-parse', '--git-dir'], capture_output=True)
+        if result.returncode != 0:
+            return  # Not in a git repo, nothing to do
+        
+        # Get git root directory
+        root_result = subprocess.run(['git', 'rev-parse', '--show-toplevel'], 
+                                   capture_output=True, text=True)
+        if root_result.returncode != 0:
+            return
+        
+        git_root = root_result.stdout.strip()
+        gitignore_path = os.path.join(git_root, '.gitignore')
+        
+        # Patterns to protect
+        protect_patterns = [
+            "# Plato hub credentials",
+            "credentials.json",
+            ".plato-hub/",
+            "*.plato-hub.json"
+        ]
+        
+        # Read existing gitignore
+        existing_content = ""
+        if os.path.exists(gitignore_path):
+            with open(gitignore_path, 'r') as f:
+                existing_content = f.read()
+        
+        # Check which patterns need to be added
+        patterns_to_add = []
+        for pattern in protect_patterns:
+            if pattern not in existing_content:
+                patterns_to_add.append(pattern)
+        
+        # Add missing patterns
+        if patterns_to_add:
+            with open(gitignore_path, 'a') as f:
+                if existing_content and not existing_content.endswith('\n'):
+                    f.write('\n')
+                f.write('\n'.join(patterns_to_add) + '\n')
+            
+            click.echo(f"✅ Added {len(patterns_to_add)} credential protection patterns to .gitignore", err=True)
+        
+    except Exception as e:
+        # Silently fail - gitignore protection is nice-to-have, not critical
+        pass
+
+
 # Hub commands for Git repository management
 @cli.group()
 def hub():
@@ -452,50 +719,32 @@ def link(sim_name: str, directory: Optional[str]):
             os.chdir(target_dir)
             
             try:
-                # Check if we're in a git repository
-                git_check = subprocess.run(['git', 'rev-parse', '--git-dir'], capture_output=True)
-                if git_check.returncode != 0:
-                    click.echo("❌ Not in a git repository. Initialize git first with 'git init'", err=True)
-                    return
+                import json
                 
-                # Get the git root directory to check if we're in the right place
-                git_root_result = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True)
-                if git_root_result.returncode == 0:
-                    git_root = git_root_result.stdout.strip()
-                    current_abs_path = os.path.abspath(target_dir)
-                    
-                    if git_root != current_abs_path:
-                        click.echo(f"⚠️  Warning: You're in a subdirectory of a git repository!", err=True)
-                        click.echo(f"Git root: {git_root}", err=True)
-                        click.echo(f"Current dir: {current_abs_path}", err=True)
-                        click.echo("💡 This will modify the parent repository's remote. Continue? (y/N)", err=True)
-                        
-                        if not click.confirm(""):
-                            click.echo("❌ Aborted", err=True)
-                            return
+                # Create plato hub configuration file (without credentials)
+                hub_config = {
+                    "simulator_name": sim_name,
+                    "simulator_id": simulator['id'],
+                    "repository": {
+                        "name": repo_info['name'],
+                        "full_name": repo_info['full_name'],
+                        "clone_url": repo_info['clone_url'].replace('https://', 'https://').split('@')[-1] if '@' in repo_info['clone_url'] else repo_info['clone_url'],  # Strip any embedded auth
+                        "description": repo_info.get('description')
+                    },
+                    "sync_directory": os.path.basename(target_dir)
+                }
                 
-                # Check if remote already exists
-                result = subprocess.run(
-                    ['git', 'remote', 'get-url', 'origin'],
-                    capture_output=True,
-                    text=True
-                )
+                # Write config to .plato-hub.json
+                config_file = os.path.join(target_dir, '.plato-hub.json')
+                with open(config_file, 'w') as f:
+                    json.dump(hub_config, f, indent=2)
                 
-                if result.returncode == 0:
-                    current_url = result.stdout.strip()
-                    if current_url == clone_url:
-                        click.echo("✅ Remote origin already correctly configured")
-                    else:
-                        # Update remote URL
-                        subprocess.run(['git', 'remote', 'set-url', 'origin', clone_url], check=True)
-                        click.echo(f"✅ Updated remote origin to {repo_info['full_name']}")
-                else:
-                    # Add remote origin
-                    subprocess.run(['git', 'remote', 'add', 'origin', clone_url], check=True)
-                    click.echo(f"✅ Added remote origin: {repo_info['full_name']}")
-                
+                click.echo(f"✅ Created Plato hub configuration for '{sim_name}'")
                 click.echo(f"🔗 Directory '{target_dir}' is now linked to {repo_info['full_name']}")
-                click.echo("💡 You can now use 'uv run plato hub git <command>' or regular git commands.")
+                click.echo("💡 This directory will sync with the simulator repo independently")
+                click.echo("💡 Run 'uv run plato hub login' to authenticate")
+                click.echo("💡 Then use 'uv run plato hub git push/pull' to sync")
+                click.echo("💡 Your monorepo structure remains intact!")
                 
             except subprocess.CalledProcessError as e:
                 click.echo(f"❌ Failed to link repository: {e.stderr.decode().strip()}", err=True)
@@ -508,6 +757,57 @@ def link(sim_name: str, directory: Optional[str]):
             await client.close()
     
     handle_async(_link())
+
+
+@hub.command()
+def login():
+    """Authenticate with Plato hub for git operations."""
+    async def _login():
+        import os
+        import json
+        from datetime import datetime
+        
+        client = Plato()
+        try:
+            click.echo("🔐 Authenticating with Plato hub...")
+            
+            # Get admin credentials from the API
+            creds = await client.get_gitea_credentials()
+            
+            # Create cache directory
+            cache_dir = os.path.expanduser("~/.plato-hub")
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            # Cache credentials securely
+            credentials = {
+                "username": creds['username'],
+                "password": creds['password'],
+                "org_name": creds['org_name'],
+                "cached_at": datetime.now().isoformat()
+            }
+            
+            # Save credentials to cache
+            cache_file = os.path.join(cache_dir, "credentials.json") 
+            with open(cache_file, 'w') as f:
+                json.dump(credentials, f, indent=2)
+            
+            # Set restrictive permissions on credentials file
+            os.chmod(cache_file, 0o600)
+            
+            # Add credentials to gitignore for security
+            _ensure_gitignore_protects_credentials()
+            
+            click.echo("✅ Successfully authenticated with Plato hub")
+            click.echo(f"👤 Username: {creds['username']}")
+            click.echo(f"🏢 Organization: {creds['org_name']}")
+            click.echo("💡 Credentials cached securely for git operations")
+            
+        except Exception as e:
+            click.echo(f"❌ Login failed: {e}", err=True)
+        finally:
+            await client.close()
+    
+    handle_async(_login())
 
 
 @hub.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
@@ -532,40 +832,49 @@ def git(ctx):
         return
     
     try:
-        # Check if we're in a git repository
-        result = subprocess.run(
-            ['git', 'rev-parse', '--is-inside-work-tree'],
-            capture_output=True,
-            text=True
-        )
+        import json
+        import tempfile
+        import shutil
         
-        if result.returncode != 0:
-            click.echo("❌ Not in a git repository", err=True)
+        # Check for .plato-hub.json configuration
+        config_file = '.plato-hub.json'
+        hub_config = None
+        
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r') as f:
+                    hub_config = json.load(f)
+                click.echo(f"✅ Found Plato hub configuration for '{hub_config['simulator_name']}'", err=True)
+            except Exception as e:
+                click.echo(f"❌ Error reading hub config: {e}", err=True)
+                return
+        
+        if not hub_config:
+            # Fallback to regular git command
+            click.echo("⚠️  No Plato hub configuration found. Running regular git command...", err=True)
+            git_cmd = ['git'] + list(args)
+            result = subprocess.run(git_cmd, capture_output=False, text=True)
+            if result.returncode != 0:
+                ctx.exit(result.returncode)
             return
         
-        # Check if we have a Plato remote configured
-        result = subprocess.run(
-            ['git', 'remote', 'get-url', 'origin'],
-            capture_output=True,
-            text=True
-        )
+        # Handle Plato hub-specific git operations
+        command = args[0] if args else ''
         
-        has_plato_remote = False
-        if result.returncode == 0:
-            origin_url = result.stdout.strip()
-            if 'hub.plato.so' in origin_url or 'gitea' in origin_url.lower():
-                has_plato_remote = True
-        
-        if not has_plato_remote:
-            click.echo("⚠️  Warning: No Plato hub remote detected. Use 'uv run plato hub link <sim_name>' first.", err=True)
-        
-        # Execute the git command
-        git_cmd = ['git'] + list(args)
-        result = subprocess.run(git_cmd, capture_output=False, text=True)
-        
-        # Exit with the same code as git
-        if result.returncode != 0:
-            ctx.exit(result.returncode)
+        if command == 'push':
+            _hub_push(hub_config, list(args[1:]) if len(args) > 1 else [])
+        elif command == 'pull':
+            _hub_pull(hub_config, list(args[1:]) if len(args) > 1 else [])
+        elif command in ['status', 'log', 'diff', 'branch']:
+            # For read-only commands, create a temporary isolated view
+            _hub_status(hub_config, command, list(args[1:]) if len(args) > 1 else [])
+        else:
+            # For other commands, run them normally but warn about hub context
+            click.echo(f"⚠️  Running '{command}' in hub-linked directory", err=True)
+            git_cmd = ['git'] + list(args)
+            result = subprocess.run(git_cmd, capture_output=False, text=True)
+            if result.returncode != 0:
+                ctx.exit(result.returncode)
             
     except FileNotFoundError:
         click.echo("❌ Git is not installed or not in PATH", err=True)
@@ -579,47 +888,40 @@ def git(ctx):
 def sandbox():
     """Start a development sandbox environment.
     
-    Checks for git initialization and starts a dev machine (placeholder).
+    Checks for plato hub configuration and starts a dev machine (placeholder).
     """
     import os
-    import subprocess
+    import json
     
     try:
-        # Check if we're in a git repository
-        result = subprocess.run(
-            ['git', 'rev-parse', '--is-inside-work-tree'],
-            capture_output=True,
-            text=True
-        )
+        # Check for .plato-hub.json configuration
+        config_file = '.plato-hub.json'
         
-        if result.returncode != 0:
-            click.echo("❌ You must initialize a Plato hub git repository first.", err=True)
+        if not os.path.exists(config_file):
+            click.echo("❌ No Plato hub configuration found in this directory.", err=True)
             click.echo("💡 Use 'uv run plato hub clone <sim_name>' or 'uv run plato hub link <sim_name>' first.", err=True)
             return
         
-        # Check if it's linked to a Plato repository
-        result = subprocess.run(
-            ['git', 'remote', 'get-url', 'origin'],
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode == 0:
-            origin_url = result.stdout.strip()
-            if 'gitea' in origin_url.lower() or 'plato' in origin_url.lower():
-                click.echo("✅ Plato hub repository detected")
-                click.echo(f"🔗 Remote: {origin_url}")
-            else:
-                click.echo("⚠️  Warning: This doesn't appear to be a Plato hub repository")
-                click.echo(f"Current remote: {origin_url}")
+        try:
+            with open(config_file, 'r') as f:
+                hub_config = json.load(f)
+            
+            sim_name = hub_config['simulator_name']
+            repo_name = hub_config['repository']['full_name']
+            
+            click.echo(f"✅ Found Plato hub configuration for simulator '{sim_name}'")
+            click.echo(f"🔗 Linked to: {repo_name}")
+            click.echo(f"📁 Sync directory: {hub_config.get('sync_directory', 'current')}")
+            
+        except Exception as e:
+            click.echo(f"❌ Error reading hub config: {e}", err=True)
+            return
         
         click.echo("🚧 Sandbox environment starting... (placeholder)")
         click.echo("This will eventually start a development environment for the current repository.")
         
-    except FileNotFoundError:
-        click.echo("❌ Git is not installed or not in PATH", err=True)
-    except subprocess.CalledProcessError as e:
-        click.echo(f"❌ Error checking git status: {e.stderr.decode().strip()}", err=True)
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
 
 
 if __name__ == '__main__':
