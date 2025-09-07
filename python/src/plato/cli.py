@@ -1097,7 +1097,14 @@ async def _wait_for_sim_ready(
                             stdout = status_result.get("stdout", "")
                             if stdout and stdout.strip():
                                 try:
-                                    status_data = json.loads(stdout.strip())
+                                    # Clean up the JSON string by removing invalid control characters
+                                    cleaned_stdout = stdout.strip()
+                                    # Replace problematic control characters that break JSON parsing
+                                    import re
+                                    # Remove or replace control characters except for \n, \r, \t
+                                    cleaned_stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', cleaned_stdout)
+                                    
+                                    status_data = json.loads(cleaned_stdout)
                                     sim_status = status_data.get("status", "unknown")
                                     message = status_data.get("message", "")
                                     timestamp = status_data.get("timestamp", "")
