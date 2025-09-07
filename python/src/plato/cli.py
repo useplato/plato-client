@@ -1084,42 +1084,39 @@ async def _wait_for_sim_ready(client: "Plato", vm_job_uuid: str, timeout: int = 
                 )
                 
                 if status_response.status == 200:
+                    # Just show the response directly - much simpler
                     response_data = await status_response.json()
-                    correlation_id = response_data.get("correlation_id")
                     
-                    if correlation_id:
-                        # Monitor the status check via SSE to get actual status
-                        status_result = await _monitor_status_check(client, correlation_id, timeout=30)
-                        
-                        if status_result:
-                            sim_status = status_result.get("status", "unknown")
-                            message = status_result.get("message", "")
-                            
-                            if sim_status == "ready":
-                                progress.update(task, description="✅ Simulator ready!")
-                                console.print(f"[green]✅ Simulator initialization completed successfully![/green]")
-                                if message:
-                                    console.print(f"📄 {message}")
-                                return True
-                            elif sim_status == "failed":
-                                progress.update(task, description="❌ Initialization failed")
-                                console.print(f"[red]❌ Simulator initialization failed[/red]")
-                                if message:
-                                    console.print(f"📄 Error: {message}")
-                                return False
-                            elif sim_status in ["pending", "initializing"]:
-                                elapsed = int(time.time() - start_time)
-                                if sim_status != last_status:
-                                    console.print(f"🔄 Status: {sim_status} - {message}")
-                                    last_status = sim_status
-                                
-                                if elapsed > 300:  # 5 minutes
-                                    progress.update(task, description="❌ Taking too long...")
-                                    console.print("[red]❌ Initialization taking too long[/red]")
-                                    console.print("🔍 [yellow]Database connection might be failing[/yellow]")
-                                    return False
-                                else:
-                                    progress.update(task, description=f"⏳ {sim_status.title()}... ({elapsed}s)")
+                    # Extract status info and show it
+                    sim_status = response_data.get("status", "unknown")
+                    message = response_data.get("message", "")
+                    timestamp = response_data.get("timestamp", "")
+                    
+                    elapsed = int(time.time() - start_time)
+                    
+                    # Update progress and show status
+                    if sim_status != last_status:
+                        console.print(f"🔄 [{timestamp}] Status: [bold]{sim_status}[/bold] - {message}")
+                        last_status = sim_status
+                    
+                    if sim_status == "ready":
+                        progress.update(task, description="✅ Simulator ready!")
+                        console.print(f"[green]🎉 Simulator initialization completed successfully![/green]")
+                        return True
+                    elif sim_status == "failed":
+                        progress.update(task, description="❌ Initialization failed")
+                        console.print(f"[red]❌ Simulator initialization failed: {message}[/red]")
+                        return False
+                    elif sim_status in ["pending", "initializing"]:
+                        if elapsed > 300:  # 5 minutes
+                            progress.update(task, description="❌ Taking too long...")
+                            console.print("[red]❌ Initialization taking too long[/red]")
+                            console.print("🔍 [yellow]Database connection might be failing[/yellow]")
+                            return False
+                        else:
+                            progress.update(task, description=f"⏳ {sim_status.title()}... ({elapsed}s)")
+                    else:
+                        progress.update(task, description=f"🔍 Status: {sim_status} ({elapsed}s)")
                 
                 await asyncio.sleep(5)
                 
