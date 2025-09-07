@@ -1084,39 +1084,45 @@ async def _wait_for_sim_ready(client: "Plato", vm_job_uuid: str, timeout: int = 
                 )
                 
                 if status_response.status == 200:
-                    # Just show the response directly - much simpler
                     response_data = await status_response.json()
+                    correlation_id = response_data.get("correlation_id")
                     
-                    # Extract status info and show it
-                    sim_status = response_data.get("status", "unknown")
-                    message = response_data.get("message", "")
-                    timestamp = response_data.get("timestamp", "")
-                    
-                    elapsed = int(time.time() - start_time)
-                    
-                    # Update progress and show status
-                    if sim_status != last_status:
-                        console.print(f"🔄 [{timestamp}] Status: [bold]{sim_status}[/bold] - {message}")
-                        last_status = sim_status
-                    
-                    if sim_status == "ready":
-                        progress.update(task, description="✅ Simulator ready!")
-                        console.print(f"[green]🎉 Simulator initialization completed successfully![/green]")
-                        return True
-                    elif sim_status == "failed":
-                        progress.update(task, description="❌ Initialization failed")
-                        console.print(f"[red]❌ Simulator initialization failed: {message}[/red]")
-                        return False
-                    elif sim_status in ["pending", "initializing"]:
-                        if elapsed > 300:  # 5 minutes
-                            progress.update(task, description="❌ Taking too long...")
-                            console.print("[red]❌ Initialization taking too long[/red]")
-                            console.print("🔍 [yellow]Database connection might be failing[/yellow]")
-                            return False
+                    if correlation_id:
+                        console.print(f"🔗 Monitoring status via SSE: {correlation_id}")
+                        
+                        # Listen to the SSE stream for the actual status
+                        status_result = await _monitor_status_check(client, correlation_id, timeout=30)
+                        
+                        if status_result:
+                            sim_status = status_result.get("status", "unknown")
+                            message = status_result.get("message", "")
+                            timestamp = status_result.get("timestamp", "")
+                            
+                            console.print(f"📊 Status Response: {json.dumps(status_result, indent=2)}")
+                            
+                            if sim_status == "ready":
+                                progress.update(task, description="✅ Simulator ready!")
+                                console.print(f"[green]🎉 Simulator initialization completed![/green]")
+                                return True
+                            elif sim_status == "failed":
+                                progress.update(task, description="❌ Initialization failed")
+                                console.print(f"[red]❌ Initialization failed: {message}[/red]")
+                                return False
+                            elif sim_status in ["pending", "initializing"]:
+                                elapsed = int(time.time() - start_time)
+                                console.print(f"🔄 Status: [bold]{sim_status}[/bold] - {message}")
+                                
+                                if elapsed > 300:
+                                    console.print("[red]❌ Taking too long - likely database issue[/red]")
+                                    return False
+                                else:
+                                    progress.update(task, description=f"⏳ {sim_status.title()}... ({elapsed}s)")
                         else:
-                            progress.update(task, description=f"⏳ {sim_status.title()}... ({elapsed}s)")
+                            console.print("⚠️ No status data received from SSE stream")
                     else:
-                        progress.update(task, description=f"🔍 Status: {sim_status} ({elapsed}s)")
+                        console.print(f"⚠️ No correlation_id in response: {response_data}")
+                else:
+                    console.print(f"❌ Status check failed: {status_response.status}")
                 
                 await asyncio.sleep(5)
                 
