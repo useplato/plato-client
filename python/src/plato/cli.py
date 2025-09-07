@@ -9,7 +9,7 @@ import json
 import os
 import shutil
 import tempfile
-from typing import Optional
+from typing import Optional, Dict
 
 import typer
 from rich.console import Console
@@ -22,10 +22,51 @@ from rich.prompt import Confirm
 from plato.sdk import Plato
 from plato.exceptions import PlatoClientError
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field, ValidationError
+from typing import Literal
 
 # Initialize Rich console
 console = Console()
 app = typer.Typer(help="[bold blue]Plato CLI[/bold blue] - Manage Plato environments from the command line.")
+
+
+# Pydantic models for plato-config.yml structure
+class ComputeConfig(BaseModel):
+    """Compute resource configuration for the VM."""
+    cpus: int = Field(default=1, ge=1, le=8, description="Number of CPU cores")
+    memory: int = Field(default=2048, ge=512, le=16384, description="Memory in MB")
+    disk: int = Field(default=10240, ge=1024, le=102400, description="Disk space in MB")
+    app_port: int = Field(default=8080, ge=1024, le=65535, description="Application port")
+    plato_messaging_port: int = Field(default=7000, ge=1024, le=65535, description="Plato messaging port")
+
+
+class EntrypointConfig(BaseModel):
+    """Entrypoint configuration for the simulator."""
+    type: Literal["docker"] = Field(default="docker", description="Entrypoint type")
+    file: str = Field(default="docker-compose.yml", description="Entrypoint file path")
+
+
+class MutationListenerConfig(BaseModel):
+    """Mutation listener configuration for database monitoring."""
+    type: Literal["db"] = Field(default="db", description="Listener type")
+    db_type: Literal["postgresql", "mysql", "sqlite"] = Field(description="Database type")
+    db_host: str = Field(description="Database host")
+    db_port: int = Field(ge=1, le=65535, description="Database port")
+    db_user: str = Field(description="Database user")
+    db_password: str = Field(description="Database password (can use env vars like ${VAR})")
+    db_database: str = Field(description="Database name")
+
+
+class DatasetConfig(BaseModel):
+    """Dataset configuration with entrypoint and mutation listeners."""
+    entrypoint: EntrypointConfig = Field(description="Entrypoint configuration")
+    mutation_listeners: Dict[str, MutationListenerConfig] = Field(default={}, description="Container mutation listeners")
+
+
+class PlatoConfig(BaseModel):
+    """Main Plato configuration structure."""
+    compute: ComputeConfig = Field(default_factory=ComputeConfig)
+    datasets: Dict[str, DatasetConfig] = Field(description="Available datasets")
 
 # Load environment variables from multiple possible locations
 load_dotenv()  # Load from current directory
@@ -756,6 +797,43 @@ def _setup_local_ssh_key():
         return None, None
 
 
+async def _create_default_config(config_path: str):
+    """Create a default plato-config.yml file with standard VM specifications."""
+    import yaml
+    
+    # Create default config with base dataset
+    default_config = PlatoConfig(
+        compute=ComputeConfig(),
+        datasets={
+            "base": DatasetConfig(
+                entrypoint=EntrypointConfig(
+                    type="docker",
+                    file="datasets/base/docker-compose.yml"
+                ),
+                mutation_listeners={
+                    "container-1": MutationListenerConfig(
+                        type="db",
+                        db_type="postgresql",
+                        db_host="base-db.internal",
+                        db_port=5432,
+                        db_user="base_user",
+                        db_password="${BASE_DB_PASSWORD}",
+                        db_database="base_db"
+                    )
+                }
+            )
+        }
+    )
+    
+    try:
+        with open(config_path, 'w') as f:
+            # Convert Pydantic model to dict and write as YAML
+            yaml.dump(default_config.model_dump(), f, default_flow_style=False, sort_keys=False, indent=2)
+    except Exception as e:
+        console.print(f"[red]❌ Failed to create default config: {e}")
+        raise
+
+
 async def _setup_sandbox(
     client: "Plato", vm_job_uuid: str, dev_branch: str, clone_url: str, chisel_port: int = 6000
 ):
@@ -1452,25 +1530,16 @@ def clone(
             clone_url = repo_info["clone_url"]
             repo_name = repo_info["name"]
 
-            # Get admin credentials for authentication
-            try:
-                creds = await client.get_gitea_credentials()
-                if clone_url.startswith("https://"):
-                    authenticated_url = clone_url.replace(
-                        "https://", f"https://{creds['username']}:{creds['password']}@"
-                    )
-                    clone_url = authenticated_url
-                    console.print(
-                        f"✅ Using admin credentials for authentication (user: {creds['username']})"
-                    )
-                else:
-                    console.print(
-                        f"⚠️  Warning: URL not HTTPS, authentication may fail: {clone_url}",
-                    )
-            except Exception as creds_e:
-                console.print(
-                    f"⚠️  Warning: Could not get admin credentials: {creds_e}"                )
-                console.print("💡 Clone may require manual authentication")
+            # Get cached credentials (same as other hub git operations)
+            hub_config_for_auth = {"repository": {"clone_url": clone_url}}
+            authenticated_clone_url = _get_authenticated_url(hub_config_for_auth)
+            
+            if authenticated_clone_url:
+                clone_url = authenticated_clone_url
+                console.print("✅ Using cached credentials for authentication")
+            else:
+                console.print("⚠️  No cached credentials found. Run 'uv run plato hub login' first.")
+                return
 
             # Determine target directory
             if directory:
@@ -1529,12 +1598,10 @@ def clone(
                     console.print(f"Description: {repo_info['description']}")
 
             except subprocess.CalledProcessError as e:
-                console.print(
-                    f"❌ Failed to clone repository: {e.stderr.strip()}"                )
+                console.print(f"❌ Failed to clone repository: {e.stderr.strip()}")
                 if "Authentication failed" in e.stderr:
-                    console.print(
-                        "💡 Hint: Make sure your Git credentials are configured for Gitea access.",
-                    )
+                    console.print("🔧 Try running: uv run plato hub login")
+                    console.print("💡 Or check if the repository exists and you have access to it")
             except FileNotFoundError:
                 console.print("❌ Git is not installed or not in PATH")
 
@@ -1806,6 +1873,7 @@ def git(ctx: typer.Context):
 @hub_app.command()
 def sandbox(
     config: str = typer.Option("plato-config.yml", "--config", help="VM configuration file"),
+    dataset: str = typer.Option("base", "--dataset", help="Dataset to use for the sandbox"),
     keep_vm: bool = typer.Option(False, "--keep-vm", help="Keep VM running after sandbox exits"),
     chisel_port: int = typer.Option(6000, "--chisel-port", help="Port for chisel server"),
 ):
@@ -1813,6 +1881,30 @@ def sandbox(
     [bold magenta]Start a development sandbox environment.[/bold magenta]
     
     Creates a development VM with your simulator code and opens an interactive environment.
+    Uses plato-config.yml to configure compute resources, datasets, and mutation listeners.
+    
+    Expected plato-config.yml structure:
+        compute:
+          cpus: 1
+          memory: 2048        # MB
+          disk: 10240         # MB
+          app_port: 8080
+          plato_messaging_port: 7000
+        
+        datasets:
+          base:
+            entrypoint:
+              type: "docker"
+              file: "datasets/base/docker-compose.yml"
+            mutation_listeners:
+              container-1:
+                type: "db"
+                db_type: "postgresql"
+                db_host: "base-db.internal"
+                db_port: 5432
+                db_user: "base_user"
+                db_password: "${BASE_DB_PASSWORD}"
+                db_database: "base_db"
     """
 
     async def _sandbox():
@@ -1850,31 +1942,53 @@ def sandbox(
                 console.print(f"[red]❌ Error reading hub config: {e}")
                 return
 
-            # Step 2: Load VM configuration
-            vm_config = {
-                "vcpu_count": 1,
-                "mem_size_mib": 1024,
-                "overlay_size_mb": 2048,
-                "port": 8080,
-                "messaging_port": 7000,
-                "chisel_port": chisel_port,
-            }
-
+            # Step 2: Load VM configuration from plato-config.yml
+            plato_config = None
+            
             if os.path.exists(config):
                 try:
                     with open(config, "r") as f:
-                        user_config = yaml.safe_load(f)
-                    vm_config.update(user_config)
-                    # Override chisel_port if user specified it via CLI
-                    if chisel_port != 6000:  # User specified a different port
-                        vm_config["chisel_port"] = chisel_port
-                    console.print(f"[green]✅ Loaded VM config from {config}")
-                    console.print(f"🔗 Using chisel port: {vm_config['chisel_port']}")
+                        config_data = yaml.safe_load(f)
+                    plato_config = PlatoConfig.model_validate(config_data or {})
+                    console.print(f"[green]✅ Loaded config from {config}")
                 except Exception as e:
-                    console.print(f"[yellow]⚠️  Could not load {config}, using defaults: {e}")
+                    console.print(f"[yellow]⚠️  Could not load {config}: {e}")
             else:
-                console.print(f"[yellow]⚠️  No {config} found, using default VM configuration")
-                console.print(f"🔗 Using chisel port: {chisel_port}")
+                # Create default config if it doesn't exist
+                console.print(f"[yellow]⚠️  No {config} found in current directory")
+                if Confirm.ask("💡 Would you like to create a default plato-config.yml file?", default=True):
+                    await _create_default_config(config)
+                    console.print(f"[green]✅ Created default {config}")
+                    try:
+                        with open(config, "r") as f:
+                            config_data = yaml.safe_load(f)
+                        plato_config = PlatoConfig.model_validate(config_data or {})
+                    except Exception:
+                        pass
+                        
+            # Create default plato_config if loading failed
+            if plato_config is None:
+                plato_config = PlatoConfig(
+                    compute=ComputeConfig(),
+                    datasets={
+                        "base": DatasetConfig(
+                            entrypoint=EntrypointConfig(type="docker", file="datasets/base/docker-compose.yml"),
+                            mutation_listeners={}
+                        )
+                    }
+                )
+                console.print("[yellow]📋 Using default configuration")
+            
+            # Show config summary
+            compute = plato_config.compute
+            console.print(f"💻 CPUs: {compute.cpus}, Memory: {compute.memory}MB, Disk: {compute.disk}MB")
+            console.print(f"🔗 App port: {compute.app_port}, Messaging port: {compute.plato_messaging_port}")
+            console.print(f"📊 Dataset: {dataset}")
+            if dataset in plato_config.datasets:
+                entrypoint = plato_config.datasets[dataset].entrypoint
+                console.print(f"🚀 Entrypoint: {entrypoint.type} - {entrypoint.file}")
+            else:
+                console.print(f"[yellow]⚠️  Dataset '{dataset}' not found, VM will use compute config only")
 
             # Step 3: Create development branch and push current state
             branch_uuid = str(uuid.uuid4())[:8]
@@ -1965,11 +2079,7 @@ def sandbox(
                 json={
                     "service": sim_name,
                     "version": "sandbox",
-                    "vcpu_count": vm_config["vcpu_count"],
-                    "mem_size_mib": vm_config["mem_size_mib"],
-                    "overlay_size_mb": vm_config["overlay_size_mb"],
-                    "port": vm_config["port"],
-                    "messaging_port": vm_config["messaging_port"],
+                    "plato_config": plato_config.model_dump(),
                     "wait_time": 120,
                     "vm_timeout": 1800,
                     "alias": f"{sim_name}-sandbox",
@@ -2003,7 +2113,7 @@ def sandbox(
             console.print(f"🔧 Setting up sandbox environment...")
 
             setup_response = await _setup_sandbox(
-                client, vm_job_uuid, dev_branch, clone_url, vm_config["chisel_port"]
+                client, vm_job_uuid, dev_branch, clone_url, chisel_port
             )
 
             if not setup_response:
@@ -2052,7 +2162,7 @@ def sandbox(
                 "dev_branch": dev_branch,
                 "vm_url": vm_info["url"],
                 "ssh_url": ssh_url,
-                "chisel_port": vm_config["chisel_port"],
+                "chisel_port": chisel_port,
             }
             await _run_interactive_sandbox(sandbox_info, client, keep_vm)
 
