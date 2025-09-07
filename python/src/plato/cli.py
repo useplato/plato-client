@@ -9,7 +9,7 @@ import json
 import os
 import shutil
 import tempfile
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 import typer
 from rich.console import Console
@@ -45,6 +45,7 @@ class EntrypointConfig(BaseModel):
     type: Literal["docker"] = Field(default="docker", description="Entrypoint type")
     file: str = Field(default="docker-compose.yml", description="Entrypoint file path")
     healthy_wait_timeout: int = Field(default=300, ge=30, le=1800, description="Timeout in seconds to wait for services to become healthy")
+    required_services: List[str] = Field(default=["*"], description="List of services to wait for (use ['*'] for all services)")
 
 
 class MutationListenerConfig(BaseModel):
@@ -636,6 +637,88 @@ async def _wait_for_vm_ready(client: "Plato", correlation_id: str, timeout: int 
         return False
 
 
+async def _monitor_ssh_execution(
+    client: "Plato", correlation_id: str, operation_name: str, timeout: int = 600
+) -> bool:
+    """Monitor SSH command execution via SSE and show output."""
+    import aiohttp
+    import json
+    import base64
+    import time
+
+    start_time = time.time()
+
+    try:
+        async with client.http_session.get(
+            f"{client.base_url}/public-build/events/{correlation_id}",
+            headers={"X-API-Key": client.api_key},
+        ) as response:
+            if response.status != 200:
+                console.print(f"❌ Failed to connect to event stream: {response.status}")
+                return False
+
+            async for line in response.content:
+                if time.time() - start_time > timeout:
+                    console.print(f"⏰ Operation timed out after {timeout} seconds")
+                    return False
+
+                line_str = line.decode("utf-8").strip()
+                if line_str.startswith("data: "):
+                    try:
+                        # Decode base64 data
+                        encoded_data = line_str[6:]  # Remove 'data: ' prefix
+                        decoded_data = base64.b64decode(encoded_data).decode("utf-8")
+                        event_data = json.loads(decoded_data)
+                        
+                        event_type = event_data.get("event_type", "unknown")
+                        
+                        if event_type == "completed":
+                            # Show command output
+                            stdout = event_data.get("stdout", "")
+                            stderr = event_data.get("stderr", "")
+                            
+                            if stdout and stdout.strip():
+                                console.print("📤 [green]Command Output:[/green]")
+                                for line in stdout.strip().split('\n'):
+                                    console.print(f"   {line}")
+                            
+                            if stderr and stderr.strip():
+                                console.print("📤 [red]Error Output:[/red]")
+                                for line in stderr.strip().split('\n'):
+                                    console.print(f"   {line}")
+                            
+                            return True
+
+                        elif event_type == "failed":
+                            error = event_data.get("error", "Unknown error")
+                            stdout = event_data.get("stdout", "")
+                            stderr = event_data.get("stderr", "")
+                            
+                            console.print(f"❌ [red]{operation_name} failed: {error}[/red]")
+                            
+                            if stdout and stdout.strip():
+                                console.print("📤 [yellow]Command Output:[/yellow]")
+                                for line in stdout.strip().split('\n'):
+                                    console.print(f"   {line}")
+                            
+                            if stderr and stderr.strip():
+                                console.print("📤 [red]Error Output:[/red]")
+                                for line in stderr.strip().split('\n'):
+                                    console.print(f"   {line}")
+                            
+                            return False
+
+                    except (json.JSONDecodeError, base64.binascii.Error):
+                        continue  # Skip malformed lines
+
+    except Exception as e:
+        console.print(f"❌ Error monitoring {operation_name}: {e}")
+        return False
+
+    console.print(f"❌ {operation_name} stream ended without completion")
+    return False
+
+
 async def _wait_for_setup_ready(
     client: "Plato", correlation_id: str, timeout: int = 600
 ):
@@ -810,7 +893,8 @@ async def _create_default_config(config_path: str):
                 entrypoint=EntrypointConfig(
                     type="docker",
                     file="datasets/base/docker-compose.yml",
-                    healthy_wait_timeout=300
+                    healthy_wait_timeout=300,
+                    required_services=["*"]
                 ),
                 mutation_listeners={
                     "container-1": MutationListenerConfig(
@@ -938,31 +1022,51 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             console.print(f"🚀 [cyan]Starting simulator services...[/cyan]")
             
             try:
-                # Call the start-sim endpoint
-                start_response = await client.http_session.post(
-                    f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-sim",
-                    json={
-                        "dataset": sandbox_info.get("dataset", "base"),
-                        "plato_config": sandbox_info.get("plato_config", {}),
-                        "plato_worker_version": "latest",
-                        "timeout": 600,
-                    },
-                    headers={"X-API-Key": client.api_key},
-                )
+                with console.status("[cyan]🚀 Starting simulator services...", spinner="dots"):
+                    # Call the start-sim endpoint
+                    start_response = await client.http_session.post(
+                        f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-sim",
+                        json={
+                            "dataset": sandbox_info.get("dataset", "base"),
+                            "plato_config": sandbox_info.get("plato_config", {}),
+                            "plato_worker_version": "latest",
+                            "timeout": 600,
+                        },
+                        headers={"X-API-Key": client.api_key},
+                    )
 
                 if start_response.status == 200:
                     response_data = await start_response.json()
-                    console.print("✅ [green]Simulator services started successfully[/green]")
+                    console.print("✅ [green]Simulator start request submitted successfully[/green]")
                     console.print(f"📊 Dataset: {response_data.get('dataset', 'unknown')}")
                     console.print(f"🔧 Worker version: {response_data.get('plato_worker_version', 'unknown')}")
-                    messaging_port = sandbox_info.get("plato_config", {}).get("compute", {}).get("plato_messaging_port", 7000)
-                    console.print(f"🔗 Messaging port: {messaging_port}")
+                    
+                    correlation_id = response_data.get('correlation_id')
+                    if correlation_id:
+                        console.print("⏳ [cyan]Monitoring startup progress...[/cyan]")
+                        
+                        # Monitor the SSH command execution via SSE
+                        success = await _monitor_ssh_execution(client, correlation_id, "Simulator startup")
+                        
+                        if success:
+                            console.print("🎉 [green]Simulator started successfully![/green]")
+                        else:
+                            console.print("❌ [red]Simulator startup failed or timed out[/red]")
+                            console.print("💡 [yellow]Check logs with SSH to investigate[/yellow]")
                 else:
                     error = await start_response.text()
-                    console.print(f"❌ [red]Failed to start simulator: {error}[/red]")
+                    console.print(f"❌ [red]Failed to start simulator[/red]")
+                    console.print(f"📄 [red]Error details: {error}[/red]")
+                    
+                    # Show debugging info
+                    console.print("🔍 [yellow]Debug info:[/yellow]")
+                    console.print(f"  • VM UUID: {sandbox_info['vm_job_uuid']}")
+                    console.print(f"  • Dataset: {sandbox_info.get('dataset', 'unknown')}")
+                    console.print(f"  • API Key: {'✅ Present' if client.api_key else '❌ Missing'}")
                     
             except Exception as e:
-                console.print(f"❌ [red]Error starting simulator: {e}[/red]")
+                console.print(f"❌ [red]Error calling start simulator API: {e}[/red]")
+                console.print("🔍 [yellow]This might be a network issue or API problem[/yellow]")
 
         elif choice == 2:
             # VS Code via SSH tunnel
