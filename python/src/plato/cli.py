@@ -707,6 +707,14 @@ async def _monitor_ssh_execution(
     client: "Plato", correlation_id: str, operation_name: str, timeout: int = 600
 ) -> bool:
     """Monitor SSH command execution via SSE and show output."""
+    result = await _monitor_ssh_execution_with_data(client, correlation_id, operation_name, timeout)
+    return result is not None and result.get("success", False)
+
+
+async def _monitor_ssh_execution_with_data(
+    client: "Plato", correlation_id: str, operation_name: str, timeout: int = 600
+) -> dict:
+    """Monitor SSH command execution via SSE and return event data."""
     import aiohttp
     import json
     import base64
@@ -723,12 +731,12 @@ async def _monitor_ssh_execution(
                 console.print(
                     f"❌ Failed to connect to event stream: {response.status}"
                 )
-                return False
+                return None
 
             async for line in response.content:
                 if time.time() - start_time > timeout:
                     console.print(f"⏰ Operation timed out after {timeout} seconds")
-                    return False
+                    return None
 
                 line_str = line.decode("utf-8").strip()
                 if line_str.startswith("data: "):
@@ -758,7 +766,7 @@ async def _monitor_ssh_execution(
                                     for line in filtered_stderr.strip().split("\n"):
                                         console.print(f"   {line}")
 
-                            return True
+                            return {"success": True, "stdout": stdout, "stderr": stderr, "event_data": event_data}
 
                         elif event_type == "failed":
                             error = event_data.get("error", "Unknown error")
@@ -782,17 +790,17 @@ async def _monitor_ssh_execution(
                                     for line in filtered_stderr.strip().split("\n"):
                                         console.print(f"   {line}")
 
-                            return False
+                            return {"success": False, "stdout": stdout, "stderr": stderr, "event_data": event_data, "error": error}
 
                     except (json.JSONDecodeError, base64.binascii.Error):
                         continue  # Skip malformed lines
 
     except Exception as e:
         console.print(f"❌ Error monitoring {operation_name}: {e}")
-        return False
+        return None
 
     console.print(f"❌ {operation_name} stream ended without completion")
-    return False
+    return None
 
 
 async def _wait_for_setup_ready(
@@ -1080,11 +1088,11 @@ async def _wait_for_sim_ready(
                     if sse_stream_url and correlation_id:
                         console.print(f"🔗 Monitoring via SSE: {sse_stream_url}")
 
-                        status_result = await _monitor_ssh_execution(
+                        status_result = await _monitor_ssh_execution_with_data(
                             client, correlation_id, "Status check", timeout=30
                         )
 
-                        if status_result:
+                        if status_result and status_result.get("success"):
                             # Parse the status from the command output
                             stdout = status_result.get("stdout", "")
                             if stdout and stdout.strip():
