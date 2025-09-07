@@ -1104,10 +1104,14 @@ async def _wait_for_sim_ready(
 
                                     # Only show if status changed
                                     if sim_status != last_status:
-                                        # Format status nicely
+                                        # Format status nicely - truncate long messages for display
+                                        display_message = message
+                                        if len(message) > 200:
+                                            display_message = message[:200] + "..."
+                                        
                                         status_panel = Panel.fit(
                                             f"[bold]Status:[/bold] {sim_status}\n"
-                                            f"[bold]Message:[/bold] {message}\n"
+                                            f"[bold]Message:[/bold] {display_message}\n"
                                             f"[bold]Time:[/bold] {timestamp}",
                                             title=f"[bold cyan]📊 Simulator Status[/bold cyan]",
                                             border_style="cyan",
@@ -1127,9 +1131,11 @@ async def _wait_for_sim_ready(
                                         progress.update(
                                             task, description="❌ Initialization failed"
                                         )
+                                        # Show full error message for failed status
                                         console.print(
-                                            f"[red]❌ Simulator initialization failed: {message}[/red]"
+                                            f"[red]❌ Simulator initialization failed![/red]"
                                         )
+                                        console.print(f"[yellow]Error details:[/yellow] {message}")
                                         return False
                                     elif sim_status in ["pending", "initializing"]:
                                         elapsed = int(time.time() - start_time)
@@ -1143,10 +1149,20 @@ async def _wait_for_sim_ready(
                                                 task,
                                                 description=f"⏳ {sim_status.title()}... ({elapsed}s)",
                                             )
-                                except json.JSONDecodeError:
+                                    elif sim_status == "unknown":
+                                        # Handle unknown status (like "Status file not found")
+                                        elapsed = int(time.time() - start_time)
+                                        if elapsed > 60:  # Give more time for initial startup
+                                            progress.update(
+                                                task,
+                                                description=f"⏳ Starting up... ({elapsed}s)",
+                                            )
+                                        
+                                except json.JSONDecodeError as e:
                                     console.print(
-                                        "⚠️ Could not parse status - retrying..."
+                                        f"⚠️ Could not parse status JSON: {e} - retrying..."
                                     )
+                                    console.print(f"Raw output: {stdout.strip()[:100]}...")
                         else:
                             console.print("⚠️ Status check failed - retrying...")
 
