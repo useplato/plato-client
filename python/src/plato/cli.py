@@ -1085,46 +1085,23 @@ async def _wait_for_sim_ready(client: "Plato", vm_job_uuid: str, timeout: int = 
                 
                 if status_response.status == 200:
                     response_data = await status_response.json()
+                    sse_stream_url = response_data.get("sse_stream_url")
                     correlation_id = response_data.get("correlation_id")
                     
-                    if correlation_id:
-                        console.print(f"🔗 Monitoring status via SSE: {correlation_id}")
+                    if sse_stream_url and correlation_id:
+                        console.print(f"🔗 Monitoring via SSE: {sse_stream_url}")
                         
-                        # Listen to the SSE stream for the actual status
-                        status_result = await _monitor_status_check(client, correlation_id, timeout=30)
+                        status_result = await _monitor_ssh_execution(client, correlation_id, "Status check", timeout=30)
                         
                         if status_result:
-                            sim_status = status_result.get("status", "unknown")
-                            message = status_result.get("message", "")
-                            timestamp = status_result.get("timestamp", "")
-                            
-                            console.print(f"📊 Status Response: {json.dumps(status_result, indent=2)}")
-                            
-                            if sim_status == "ready":
-                                progress.update(task, description="✅ Simulator ready!")
-                                console.print(f"[green]🎉 Simulator initialization completed![/green]")
-                                return True
-                            elif sim_status == "failed":
-                                progress.update(task, description="❌ Initialization failed")
-                                console.print(f"[red]❌ Initialization failed: {message}[/red]")
-                                return False
-                            elif sim_status in ["pending", "initializing"]:
-                                elapsed = int(time.time() - start_time)
-                                console.print(f"🔄 Status: [bold]{sim_status}[/bold] - {message}")
-                                
-                                if elapsed > 300:
-                                    console.print("[red]❌ Taking too long - likely database issue[/red]")
-                                    return False
-                                else:
-                                    progress.update(task, description=f"⏳ {sim_status.title()}... ({elapsed}s)")
+                            console.print("✅ Status check completed - checking again...")
                         else:
-                            console.print("⚠️ No status data received from SSE stream")
-                    else:
-                        console.print(f"⚠️ No correlation_id in response: {response_data}")
+                            console.print("⚠️ Status check failed - retrying...")
+                            
+                    await asyncio.sleep(5)
                 else:
                     console.print(f"❌ Status check failed: {status_response.status}")
-                
-                await asyncio.sleep(5)
+                    await asyncio.sleep(5)
                 
             except Exception as e:
                 console.print(f"[yellow]⚠️  Error checking status: {e}[/yellow]")
