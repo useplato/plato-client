@@ -1044,56 +1044,6 @@ def _filter_ssh_warnings(stderr: str) -> str:
     return "\n".join(filtered_lines)
 
 
-async def _get_status_from_sse(client: "Plato", correlation_id: str, timeout: int = 30) -> Optional[Dict]:
-    """Get status data from SSE stream without showing output."""
-    import aiohttp
-    import json
-    import base64
-    import time
-
-    start_time = time.time()
-
-    try:
-        async with client.http_session.get(
-            f"{client.base_url}/public-build/events/{correlation_id}",
-            headers={"X-API-Key": client.api_key},
-        ) as response:
-            if response.status != 200:
-                return None
-
-            async for line in response.content:
-                if time.time() - start_time > timeout:
-                    return None
-
-                line_str = line.decode("utf-8").strip()
-                if line_str.startswith("data: "):
-                    try:
-                        encoded_data = line_str[6:]  # Remove 'data: ' prefix
-                        decoded_data = base64.b64decode(encoded_data).decode("utf-8")
-                        event_data = json.loads(decoded_data)
-
-                        if event_data.get("event_type") == "completed":
-                            stdout = event_data.get("stdout", "")
-                            if stdout and stdout.strip():
-                                try:
-                                    # Parse the JSON status from stdout
-                                    status_data = json.loads(stdout.strip())
-                                    return status_data
-                                except json.JSONDecodeError:
-                                    pass
-                            return None
-                        elif event_data.get("event_type") == "failed":
-                            return {"status": "unknown", "message": "Status check failed"}
-
-                    except (json.JSONDecodeError, base64.binascii.Error):
-                        continue
-
-    except Exception:
-        pass
-
-    return None
-
-
 async def _wait_for_sim_ready(
     client: "Plato", vm_job_uuid: str, timeout: int = 600
 ) -> bool:
@@ -1130,53 +1080,67 @@ async def _wait_for_sim_ready(
                     if sse_stream_url and correlation_id:
                         console.print(f"🔗 Monitoring via SSE: {sse_stream_url}")
 
-                        # Get status data directly from SSE without showing command output
-                        status_data = await _get_status_from_sse(client, correlation_id, timeout=30)
-                        
-                        if status_data:
-                            sim_status = status_data.get("status", "unknown")
-                            message = status_data.get("message", "")
-                            timestamp = status_data.get("timestamp", "")
-                            
-                            # Only update display if status changed
-                            if sim_status != last_status:
-                                last_status = sim_status
-                                
-                                # Clear previous status and show new one
-                                console.clear()
-                                console.print("✅ [green]Simulator start script completed[/green]")
-                                console.print("⏳ [cyan]Monitoring simulator initialization...[/cyan]")
-                                
-                                # Show current status in a nice table
-                                status_table = Table(title="[bold cyan]📊 Current Simulator Status[/bold cyan]")
-                                status_table.add_column("Property", style="cyan", no_wrap=True)
-                                status_table.add_column("Value", style="white")
-                                
-                                status_color = {
-                                    "ready": "green",
-                                    "failed": "red", 
-                                    "pending": "yellow",
-                                    "initializing": "blue"
-                                }.get(sim_status, "white")
-                                
-                                status_table.add_row("Status", f"[{status_color}]{sim_status}[/{status_color}]")
-                                status_table.add_row("Message", message)
-                                status_table.add_row("Timestamp", timestamp)
-                                status_table.add_row("Elapsed", f"{int(time.time() - start_time)}s")
-                                
-                                console.print(status_table)
-                            
-                            if sim_status == "ready":
-                                console.print(f"[green]🎉 Simulator initialization completed![/green]")
-                                return True
-                            elif sim_status == "failed":
-                                console.print(f"[red]❌ Simulator initialization failed: {message}[/red]")
-                                return False
-                            elif sim_status in ["pending", "initializing"]:
-                                elapsed = int(time.time() - start_time)
-                                if elapsed > 300:
-                                    console.print("[red]❌ Taking too long - likely database issue[/red]")
-                                    return False
+                        status_result = await _monitor_ssh_execution(
+                            client, correlation_id, "Status check", timeout=30
+                        )
+
+                        if status_result:
+                            # Parse the status from the command output
+                            stdout = status_result.get("stdout", "")
+                            if stdout and stdout.strip():
+                                try:
+                                    status_data = json.loads(stdout.strip())
+                                    sim_status = status_data.get("status", "unknown")
+                                    message = status_data.get("message", "")
+                                    timestamp = status_data.get("timestamp", "")
+
+                                    # Only show if status changed
+                                    if sim_status != last_status:
+                                        # Format status nicely
+                                        status_panel = Panel.fit(
+                                            f"[bold]Status:[/bold] {sim_status}\n"
+                                            f"[bold]Message:[/bold] {message}\n"
+                                            f"[bold]Time:[/bold] {timestamp}",
+                                            title=f"[bold cyan]📊 Simulator Status[/bold cyan]",
+                                            border_style="cyan",
+                                        )
+                                        console.print(status_panel)
+                                        last_status = sim_status
+
+                                    if sim_status == "ready":
+                                        progress.update(
+                                            task, description="✅ Simulator ready!"
+                                        )
+                                        console.print(
+                                            f"[green]🎉 Simulator initialization completed![/green]"
+                                        )
+                                        return True
+                                    elif sim_status == "failed":
+                                        progress.update(
+                                            task, description="❌ Initialization failed"
+                                        )
+                                        console.print(
+                                            f"[red]❌ Simulator initialization failed: {message}[/red]"
+                                        )
+                                        return False
+                                    elif sim_status in ["pending", "initializing"]:
+                                        elapsed = int(time.time() - start_time)
+                                        if elapsed > 300:
+                                            console.print(
+                                                "[red]❌ Taking too long - likely database issue[/red]"
+                                            )
+                                            return False
+                                        else:
+                                            progress.update(
+                                                task,
+                                                description=f"⏳ {sim_status.title()}... ({elapsed}s)",
+                                            )
+                                except json.JSONDecodeError:
+                                    console.print(
+                                        "⚠️ Could not parse status - retrying..."
+                                    )
+                        else:
+                            console.print("⚠️ Status check failed - retrying...")
 
                     await asyncio.sleep(5)
                 else:
