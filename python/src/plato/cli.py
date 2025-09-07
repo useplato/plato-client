@@ -44,6 +44,7 @@ class EntrypointConfig(BaseModel):
     """Entrypoint configuration for the simulator."""
     type: Literal["docker"] = Field(default="docker", description="Entrypoint type")
     file: str = Field(default="docker-compose.yml", description="Entrypoint file path")
+    healthy_wait_timeout: int = Field(default=300, ge=30, le=1800, description="Timeout in seconds to wait for services to become healthy")
 
 
 class MutationListenerConfig(BaseModel):
@@ -808,7 +809,8 @@ async def _create_default_config(config_path: str):
             "base": DatasetConfig(
                 entrypoint=EntrypointConfig(
                     type="docker",
-                    file="datasets/base/docker-compose.yml"
+                    file="datasets/base/docker-compose.yml",
+                    healthy_wait_timeout=300
                 ),
                 mutation_listeners={
                     "container-1": MutationListenerConfig(
@@ -917,20 +919,52 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
         menu_table.add_column("Option", style="cyan", no_wrap=True)
         menu_table.add_column("Action", style="white")
         
-        menu_table.add_row("1", "Open VS Code connected to sandbox")
-        menu_table.add_row("2", "Open Cursor connected to sandbox") 
-        menu_table.add_row("3", "Show VM info")
-        menu_table.add_row("4", "Stop sandbox and cleanup")
+        menu_table.add_row("1", "Start simulator services")
+        menu_table.add_row("2", "Open VS Code connected to sandbox")
+        menu_table.add_row("3", "Open Cursor connected to sandbox") 
+        menu_table.add_row("4", "Show VM info")
+        menu_table.add_row("5", "Stop sandbox and cleanup")
         
         console.print("\n")
         console.print(menu_table)
 
         try:
-            choice = typer.prompt("Choose an action (1-4)", type=int)
+            choice = typer.prompt("Choose an action (1-5)", type=int)
         except (KeyboardInterrupt, EOFError):
             break
 
         if choice == 1:
+            # Start simulator services
+            console.print(f"🚀 [cyan]Starting simulator services...[/cyan]")
+            
+            try:
+                # Call the start-sim endpoint
+                start_response = await client.http_session.post(
+                    f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-sim",
+                    json={
+                        "dataset": sandbox_info.get("dataset", "base"),
+                        "plato_config": sandbox_info.get("plato_config", {}),
+                        "plato_worker_version": "latest",
+                        "timeout": 600,
+                    },
+                    headers={"X-API-Key": client.api_key},
+                )
+
+                if start_response.status == 200:
+                    response_data = await start_response.json()
+                    console.print("✅ [green]Simulator services started successfully[/green]")
+                    console.print(f"📊 Dataset: {response_data.get('dataset', 'unknown')}")
+                    console.print(f"🔧 Worker version: {response_data.get('plato_worker_version', 'unknown')}")
+                    messaging_port = sandbox_info.get("plato_config", {}).get("compute", {}).get("plato_messaging_port", 7000)
+                    console.print(f"🔗 Messaging port: {messaging_port}")
+                else:
+                    error = await start_response.text()
+                    console.print(f"❌ [red]Failed to start simulator: {error}[/red]")
+                    
+            except Exception as e:
+                console.print(f"❌ [red]Error starting simulator: {e}[/red]")
+
+        elif choice == 2:
             # VS Code via SSH tunnel
             console.print(f"🔧 [cyan]Opening VS Code connected to sandbox...[/cyan]")
             success = _open_editor_via_ssh("code", sandbox_info["ssh_host"], local_port)
@@ -942,7 +976,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             else:
                 console.print("❌ [red]Failed to open VS Code[/red]")
 
-        elif choice == 2:
+        elif choice == 3:
             # Cursor via SSH tunnel
             console.print(f"🔧 [cyan]Opening Cursor connected to sandbox...[/cyan]")
             success = _open_editor_via_ssh("cursor", sandbox_info["ssh_host"], local_port)
@@ -954,12 +988,12 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             else:
                 console.print("❌ [red]Failed to open Cursor[/red]")
 
-        elif choice == 3:
+        elif choice == 4:
             # Show VM info
             try:
-                status_response = await client.get_job_status(vm_job_uuid)
+                status_response = await client.get_job_status(sandbox_info['vm_job_uuid'])
                 console.print("📊 Sandbox VM Information:")
-                console.print(f"  🆔 Job UUID: {vm_job_uuid}")
+                console.print(f"  🆔 Job UUID: {sandbox_info['vm_job_uuid']}")
                 console.print(f"  📈 Status: {status_response.get('status', 'unknown')}")
                 console.print(f"  🔗 SSH: ssh {sandbox_info['ssh_host']}")
                 console.print(f"  🔑 SSH key authentication (passwordless)")
@@ -976,11 +1010,11 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             except Exception as e:
                 console.print(f"[red]❌ Failed to get VM status: {e}")
 
-        elif choice == 4:
+        elif choice == 5:
             # Stop and cleanup
             break
         else:
-            console.print("❌ Invalid choice. Please enter 1-4.")
+            console.print("❌ Invalid choice. Please enter 1-5.")
 
 
 async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
@@ -2163,6 +2197,8 @@ def sandbox(
                 "vm_url": vm_info["url"],
                 "ssh_url": ssh_url,
                 "chisel_port": chisel_port,
+                "dataset": dataset,
+                "plato_config": plato_config.model_dump(),
             }
             await _run_interactive_sandbox(sandbox_info, client, keep_vm)
 
