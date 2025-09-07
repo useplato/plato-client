@@ -1011,6 +1011,127 @@ async def _create_default_config(config_path: str):
         raise
 
 
+async def _monitor_status_check(client: "Plato", correlation_id: str, timeout: int = 30) -> Optional[Dict]:
+    """Monitor status check command via SSE and return parsed status."""
+    import aiohttp
+    import json
+    import base64
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        async with client.http_session.get(
+            f"{client.base_url}/public-build/events/{correlation_id}",
+            headers={"X-API-Key": client.api_key},
+        ) as response:
+            if response.status != 200:
+                return None
+                
+            async for line in response.content:
+                if time.time() - start_time > timeout:
+                    return None
+                    
+                line_str = line.decode("utf-8").strip()
+                if line_str.startswith("data: "):
+                    try:
+                        encoded_data = line_str[6:]  # Remove 'data: ' prefix
+                        decoded_data = base64.b64decode(encoded_data).decode("utf-8")
+                        event_data = json.loads(decoded_data)
+                        
+                        if event_data.get("event_type") == "completed":
+                            stdout = event_data.get("stdout", "")
+                            if stdout and stdout.strip():
+                                try:
+                                    # Parse the JSON status from stdout
+                                    status_data = json.loads(stdout.strip())
+                                    return status_data
+                                except json.JSONDecodeError:
+                                    pass
+                            return None
+                            
+                    except (json.JSONDecodeError, base64.binascii.Error):
+                        continue
+                        
+    except Exception:
+        pass
+        
+    return None
+
+
+async def _wait_for_sim_ready(client: "Plato", vm_job_uuid: str, timeout: int = 600) -> bool:
+    """Wait for simulator to be fully initialized by checking status file."""
+    import time
+    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+    
+    start_time = time.time()
+    last_status = "unknown"
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("⏳ Waiting for simulator initialization...", total=None)
+        
+        while time.time() - start_time < timeout:
+            try:
+                # Use the proper sim-status endpoint
+                status_response = await client.http_session.get(
+                    f"{client.base_url}/public-build/vm/{vm_job_uuid}/sim-status",
+                    headers={"X-API-Key": client.api_key},
+                )
+                
+                if status_response.status == 200:
+                    response_data = await status_response.json()
+                    correlation_id = response_data.get("correlation_id")
+                    
+                    if correlation_id:
+                        # Monitor the status check via SSE to get actual status
+                        status_result = await _monitor_status_check(client, correlation_id, timeout=30)
+                        
+                        if status_result:
+                            sim_status = status_result.get("status", "unknown")
+                            message = status_result.get("message", "")
+                            
+                            if sim_status == "ready":
+                                progress.update(task, description="✅ Simulator ready!")
+                                console.print(f"[green]✅ Simulator initialization completed successfully![/green]")
+                                if message:
+                                    console.print(f"📄 {message}")
+                                return True
+                            elif sim_status == "failed":
+                                progress.update(task, description="❌ Initialization failed")
+                                console.print(f"[red]❌ Simulator initialization failed[/red]")
+                                if message:
+                                    console.print(f"📄 Error: {message}")
+                                return False
+                            elif sim_status in ["pending", "initializing"]:
+                                elapsed = int(time.time() - start_time)
+                                if sim_status != last_status:
+                                    console.print(f"🔄 Status: {sim_status} - {message}")
+                                    last_status = sim_status
+                                
+                                if elapsed > 300:  # 5 minutes
+                                    progress.update(task, description="❌ Taking too long...")
+                                    console.print("[red]❌ Initialization taking too long[/red]")
+                                    console.print("🔍 [yellow]Database connection might be failing[/yellow]")
+                                    return False
+                                else:
+                                    progress.update(task, description=f"⏳ {sim_status.title()}... ({elapsed}s)")
+                
+                await asyncio.sleep(5)
+                
+            except Exception as e:
+                console.print(f"[yellow]⚠️  Error checking status: {e}[/yellow]")
+                await asyncio.sleep(5)
+    
+    console.print(f"[red]❌ Simulator initialization timed out after {timeout} seconds[/red]")
+    console.print("💡 [yellow]Check the simulator service logs: journalctl -u <service>-simulator -f[/yellow]")
+    return False
+
+
 async def _setup_sandbox(
     client: "Plato",
     vm_job_uuid: str,
@@ -1162,8 +1283,24 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
 
                         if success:
                             console.print(
-                                "🎉 [green]Simulator started successfully![/green]"
+                                "✅ [green]Simulator start script completed[/green]"
                             )
+                            
+                            # Now wait for actual simulator initialization to complete
+                            console.print("⏳ [cyan]Waiting for simulator initialization...[/cyan]")
+                            
+                            init_success = await _wait_for_sim_ready(
+                                client, sandbox_info['vm_job_uuid'], timeout=600
+                            )
+                            
+                            if init_success:
+                                console.print(
+                                    "🎉 [green]Simulator fully initialized and ready![/green]"
+                                )
+                            else:
+                                console.print(
+                                    "❌ [red]Simulator initialization failed[/red]"
+                                )
                         else:
                             console.print(
                                 "❌ [red]Simulator startup failed or timed out[/red]"
