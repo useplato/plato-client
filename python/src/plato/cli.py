@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 import tempfile
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any, Union
 
 import typer
 from rich.console import Console
@@ -25,7 +25,7 @@ from plato.sdk import Plato
 from plato.exceptions import PlatoClientError
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
-from typing import Literal
+from typing import Literal, Annotated
 
 # Initialize Rich console
 console = Console()
@@ -65,22 +65,39 @@ class EntrypointConfig(BaseModel):
         description="List of services to wait for (use ['*'] for all services)",
     )
 
-
-class MutationListenerConfig(BaseModel):
+class DatabaseMutationListenerConfig(BaseModel):
     """Mutation listener configuration for database monitoring."""
-
-    type: Literal["db"] = Field(default="db", description="Listener type")
-    db_type: Literal["postgresql", "mysql", "sqlite"] = Field(
-        description="Database type"
-    )
+    type: Literal["db"] = Field(description="Listener type")
+    db_type: Literal["postgresql", "mysql", "sqlite"] = Field(description="Database type")
     db_host: str = Field(description="Database host")
     db_port: int = Field(ge=1, le=65535, description="Database port")
     db_user: str = Field(description="Database user")
-    db_password: str = Field(
-        description="Database password (can use env vars like ${VAR})"
-    )
+    db_password: str = Field(description="Database password")
     db_database: str = Field(description="Database name")
 
+
+class ProxyMutationListenerConfig(BaseModel):
+    """Mutation listener configuration for proxy monitoring."""
+    type: Literal["proxy"] = Field(description="Listener type")
+    sim_name: Optional[str] = Field(default=None, description="Name of the simulation")
+    dataset: Optional[str] = Field(default=None, description="Dataset to use")
+    proxy_host: str = Field(default="localhost", description="Proxy server host")
+    proxy_port: int = Field(default=6969, ge=1024, le=65535, description="Proxy server port")
+    passthrough_all_ood_requests: bool = Field(
+        default=True, 
+        description="Whether to pass through out-of-domain requests"
+    )
+    replay_sessions: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Replay sessions configuration"
+    )
+
+
+# Union type for different mutation listener configurations (discriminated by 'type')
+MutationListenerConfig = Annotated[
+    Union[DatabaseMutationListenerConfig, ProxyMutationListenerConfig],
+    Field(discriminator="type"),
+]
 
 class DatasetConfig(BaseModel):
     """Dataset configuration with entrypoint and mutation listeners."""
@@ -996,7 +1013,7 @@ async def _create_default_config(config_path: str):
                     required_services=["*"],
                 ),
                 mutation_listeners={
-                    "container-1": MutationListenerConfig(
+                    "container-1": DatabaseMutationListenerConfig(
                         type="db",
                         db_type="postgresql",
                         db_host="base-db.internal",
@@ -1285,14 +1302,15 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
         menu_table.add_row("1", "Start simulator services")
         menu_table.add_row("2", "Open VS Code connected to sandbox")
         menu_table.add_row("3", "Open Cursor connected to sandbox")
-        menu_table.add_row("4", "Show VM info")
-        menu_table.add_row("5", "Stop sandbox and cleanup")
+        menu_table.add_row("4", "Create VM snapshot")
+        menu_table.add_row("5", "Show VM info")
+        menu_table.add_row("6", "Stop sandbox and cleanup")
 
         console.print("\n")
         console.print(menu_table)
 
         try:
-            choice = typer.prompt("Choose an action (1-5)", type=int)
+            choice = typer.prompt("Choose an action (1-6)", type=int)
         except (KeyboardInterrupt, EOFError):
             break
 
@@ -1438,6 +1456,92 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                 console.print("❌ [red]Failed to open Cursor[/red]")
 
         elif choice == 4:
+            # Create VM snapshot
+            console.print(f"📸 [cyan]Creating VM snapshot...[/cyan]")
+            
+            # Get current git commit hash for version
+            version = _get_git_commit_hash()
+            console.print(f"📝 Using git commit hash as version: {version}")
+            
+            # Ask user to confirm dataset
+            current_dataset = sandbox_info.get("dataset", "base")
+            dataset = typer.prompt(f"Dataset to snapshot", default=current_dataset)
+            
+            # Ask for optional snapshot name
+            snapshot_name = typer.prompt("Snapshot name (optional, press Enter to skip)", default="")
+            if not snapshot_name.strip():
+                snapshot_name = None
+            
+            try:
+                # Read hub config to get service name
+                import json
+                import os
+                
+                config_file = ".plato-hub.json"
+                if os.path.exists(config_file):
+                    with open(config_file, "r") as f:
+                        hub_config = json.load(f)
+                    service = hub_config["simulator_name"]
+                else:
+                    service = typer.prompt("Service name")
+                
+                # Prepare snapshot request
+                snapshot_request = {
+                    "service": service,
+                    "version": version,
+                    "dataset": dataset,
+                    "timeout": 1800,
+                }
+                
+                if snapshot_name:
+                    snapshot_request["snapshot_name"] = snapshot_name
+                
+                console.print(f"📋 [cyan]Snapshot details:[/cyan]")
+                console.print(f"  • Service: {service}")
+                console.print(f"  • Version: {version}")
+                console.print(f"  • Dataset: {dataset}")
+                if snapshot_name:
+                    console.print(f"  • Name: {snapshot_name}")
+                console.print(f"  • Timeout: 1800 seconds")
+                
+                if not Confirm.ask("Proceed with snapshot creation?", default=True):
+                    console.print("🚫 [yellow]Snapshot cancelled[/yellow]")
+                    continue
+                
+                # Send snapshot request
+                snapshot_response = await client.http_session.post(
+                    f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/snapshot",
+                    json=snapshot_request,
+                    headers={"X-API-Key": client.api_key},
+                )
+                
+                if snapshot_response.status == 200:
+                    response_data = await snapshot_response.json()
+                    console.print("✅ [green]Snapshot request submitted successfully[/green]")
+                    
+                    # Extract correlation_id for SSE monitoring
+                    correlation_id = response_data.get("correlation_id")
+                    if correlation_id:
+                        # Wait for completion using SSE monitoring
+                        success = await _wait_for_snapshot_completion(
+                            client, correlation_id, timeout=1800
+                        )
+                        
+                        if success:
+                            console.print("🎉 [green]Snapshot created successfully![/green]")
+                        else:
+                            console.print("❌ [red]Snapshot creation failed or timed out[/red]")
+                    else:
+                        console.print("❌ [red]No correlation_id received from snapshot response[/red]")
+                        
+                else:
+                    error = await snapshot_response.text()
+                    console.print(f"❌ [red]Failed to create snapshot: {error}[/red]")
+                    
+            except Exception as e:
+                console.print(f"❌ [red]Error creating snapshot: {e}[/red]")
+
+        elif choice == 5:
             # Show VM info
             try:
                 status_response = await client.get_job_status(
@@ -1463,11 +1567,41 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             except Exception as e:
                 console.print(f"[red]❌ Failed to get VM status: {e}")
 
-        elif choice == 5:
+        elif choice == 6:
             # Stop and cleanup
             break
         else:
-            console.print("❌ Invalid choice. Please enter 1-5.")
+            console.print("❌ Invalid choice. Please enter 1-6.")
+
+
+def _get_git_commit_hash() -> str:
+    """Get the current git commit hash."""
+    import subprocess
+    
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"], 
+            capture_output=True, 
+            text=True, 
+            check=True
+        )
+        return result.stdout.strip()  # Return full hash
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
+
+async def _wait_for_snapshot_completion(
+    client: "Plato", correlation_id: str, timeout: int = 1800
+) -> bool:
+    """Wait for VM snapshot to complete using SSE monitoring."""
+    console.print(f"🔗 Monitoring via SSE: {client.base_url}/public-build/events/{correlation_id}")
+    
+    # Use the existing SSE monitoring infrastructure
+    success = await _monitor_ssh_execution(
+        client, correlation_id, "VM snapshot creation", timeout=timeout
+    )
+    
+    return success
 
 
 async def _setup_chisel_client(ssh_url: str) -> Optional[int]:
