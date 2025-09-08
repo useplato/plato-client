@@ -65,39 +65,68 @@ class EntrypointConfig(BaseModel):
         description="List of services to wait for (use ['*'] for all services)",
     )
 
+
 class DatabaseMutationListenerConfig(BaseModel):
     """Mutation listener configuration for database monitoring."""
+
     type: Literal["db"] = Field(description="Listener type")
-    db_type: Literal["postgresql", "mysql", "sqlite"] = Field(description="Database type")
+    db_type: Literal["postgresql", "mysql", "sqlite"] = Field(
+        description="Database type"
+    )
     db_host: str = Field(description="Database host")
     db_port: int = Field(ge=1, le=65535, description="Database port")
     db_user: str = Field(description="Database user")
     db_password: str = Field(description="Database password")
     db_database: str = Field(description="Database name")
+    volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
 
 
 class ProxyMutationListenerConfig(BaseModel):
     """Mutation listener configuration for proxy monitoring."""
+
     type: Literal["proxy"] = Field(description="Listener type")
     sim_name: Optional[str] = Field(default=None, description="Name of the simulation")
     dataset: Optional[str] = Field(default=None, description="Dataset to use")
     proxy_host: str = Field(default="localhost", description="Proxy server host")
-    proxy_port: int = Field(default=6969, ge=1024, le=65535, description="Proxy server port")
+    proxy_port: int = Field(
+        default=8888, ge=1024, le=65535, description="Proxy server port"
+    )
     passthrough_all_ood_requests: bool = Field(
-        default=True, 
-        description="Whether to pass through out-of-domain requests"
+        default=True, description="Whether to pass through out-of-domain requests"
     )
     replay_sessions: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Replay sessions configuration"
+        default_factory=list, description="Replay sessions configuration"
     )
+
+
+class FileMutationListenerConfig(BaseModel):
+    """Mutation listener configuration for file monitoring."""
+
+    type: Literal["file"] = Field(description="Listener type")
+    target_dir: str = Field(description="Main directory for file monitoring")
+    watch_enabled: bool = Field(default=True, description="Enable mutation tracking")
+    watch_patterns: Optional[List[str]] = Field(
+        default_factory=lambda: ["*"], description="Glob patterns to watch"
+    )
+    ignore_patterns: Optional[List[str]] = Field(
+        default_factory=list, description="Glob patterns to ignore"
+    )
+    scan_frequency: int = Field(
+        default=5, description="State rescan frequency in seconds"
+    )
+    volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
 
 
 # Union type for different mutation listener configurations (discriminated by 'type')
 MutationListenerConfig = Annotated[
-    Union[DatabaseMutationListenerConfig, ProxyMutationListenerConfig],
+    Union[
+        DatabaseMutationListenerConfig,
+        ProxyMutationListenerConfig,
+        FileMutationListenerConfig,
+    ],
     Field(discriminator="type"),
 ]
+
 
 class DatasetConfig(BaseModel):
     """Dataset configuration with entrypoint and mutation listeners."""
@@ -724,7 +753,9 @@ async def _monitor_ssh_execution(
     client: "Plato", correlation_id: str, operation_name: str, timeout: int = 600
 ) -> bool:
     """Monitor SSH command execution via SSE and show output."""
-    result = await _monitor_ssh_execution_with_data(client, correlation_id, operation_name, timeout)
+    result = await _monitor_ssh_execution_with_data(
+        client, correlation_id, operation_name, timeout
+    )
     return result is not None and result.get("success", False)
 
 
@@ -783,7 +814,12 @@ async def _monitor_ssh_execution_with_data(
                                     for line in filtered_stderr.strip().split("\n"):
                                         console.print(f"   {line}")
 
-                            return {"success": True, "stdout": stdout, "stderr": stderr, "event_data": event_data}
+                            return {
+                                "success": True,
+                                "stdout": stdout,
+                                "stderr": stderr,
+                                "event_data": event_data,
+                            }
 
                         elif event_type == "failed":
                             error = event_data.get("error", "Unknown error")
@@ -807,7 +843,13 @@ async def _monitor_ssh_execution_with_data(
                                     for line in filtered_stderr.strip().split("\n"):
                                         console.print(f"   {line}")
 
-                            return {"success": False, "stdout": stdout, "stderr": stderr, "event_data": event_data, "error": error}
+                            return {
+                                "success": False,
+                                "stdout": stdout,
+                                "stderr": stderr,
+                                "event_data": event_data,
+                                "error": error,
+                            }
 
                     except (json.JSONDecodeError, base64.binascii.Error):
                         continue  # Skip malformed lines
@@ -1118,9 +1160,14 @@ async def _wait_for_sim_ready(
                                     cleaned_stdout = stdout.strip()
                                     # Replace problematic control characters that break JSON parsing
                                     import re
+
                                     # Remove or replace control characters except for \n, \r, \t
-                                    cleaned_stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', cleaned_stdout)
-                                    
+                                    cleaned_stdout = re.sub(
+                                        r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]",
+                                        "",
+                                        cleaned_stdout,
+                                    )
+
                                     status_data = json.loads(cleaned_stdout)
                                     sim_status = status_data.get("status", "unknown")
                                     message = status_data.get("message", "")
@@ -1132,7 +1179,7 @@ async def _wait_for_sim_ready(
                                         display_message = message
                                         if len(message) > 200:
                                             display_message = message[:200] + "..."
-                                        
+
                                         status_panel = Panel.fit(
                                             f"[bold]Status:[/bold] {sim_status}\n"
                                             f"[bold]Message:[/bold] {display_message}\n"
@@ -1159,7 +1206,9 @@ async def _wait_for_sim_ready(
                                         console.print(
                                             f"[red]❌ Simulator initialization failed![/red]"
                                         )
-                                        console.print(f"[yellow]Error details:[/yellow] {message}")
+                                        console.print(
+                                            f"[yellow]Error details:[/yellow] {message}"
+                                        )
                                         return False
                                     elif sim_status in ["pending", "initializing"]:
                                         elapsed = int(time.time() - start_time)
@@ -1176,17 +1225,21 @@ async def _wait_for_sim_ready(
                                     elif sim_status == "unknown":
                                         # Handle unknown status (like "Status file not found")
                                         elapsed = int(time.time() - start_time)
-                                        if elapsed > 60:  # Give more time for initial startup
+                                        if (
+                                            elapsed > 60
+                                        ):  # Give more time for initial startup
                                             progress.update(
                                                 task,
                                                 description=f"⏳ Starting up... ({elapsed}s)",
                                             )
-                                        
+
                                 except json.JSONDecodeError as e:
                                     console.print(
                                         f"⚠️ Could not parse status JSON: {e} - retrying..."
                                     )
-                                    console.print(f"Raw output: {stdout.strip()[:100]}...")
+                                    console.print(
+                                        f"Raw output: {stdout.strip()[:100]}..."
+                                    )
                         else:
                             console.print("⚠️ Status check failed - retrying...")
 
@@ -1458,25 +1511,27 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
         elif choice == 4:
             # Create VM snapshot
             console.print(f"📸 [cyan]Creating VM snapshot...[/cyan]")
-            
+
             # Get current git commit hash for version
             version = _get_git_commit_hash()
             console.print(f"📝 Using git commit hash as version: {version}")
-            
+
             # Ask user to confirm dataset
             current_dataset = sandbox_info.get("dataset", "base")
             dataset = typer.prompt(f"Dataset to snapshot", default=current_dataset)
-            
+
             # Ask for optional snapshot name
-            snapshot_name = typer.prompt("Snapshot name (optional, press Enter to skip)", default="")
+            snapshot_name = typer.prompt(
+                "Snapshot name (optional, press Enter to skip)", default=""
+            )
             if not snapshot_name.strip():
                 snapshot_name = None
-            
+
             try:
                 # Read hub config to get service name
                 import json
                 import os
-                
+
                 config_file = ".plato-hub.json"
                 if os.path.exists(config_file):
                     with open(config_file, "r") as f:
@@ -1484,7 +1539,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                     service = hub_config["simulator_name"]
                 else:
                     service = typer.prompt("Service name")
-                
+
                 # Prepare snapshot request
                 snapshot_request = {
                     "service": service,
@@ -1492,10 +1547,10 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                     "dataset": dataset,
                     "timeout": 1800,
                 }
-                
+
                 if snapshot_name:
                     snapshot_request["snapshot_name"] = snapshot_name
-                
+
                 console.print(f"📋 [cyan]Snapshot details:[/cyan]")
                 console.print(f"  • Service: {service}")
                 console.print(f"  • Version: {version}")
@@ -1503,22 +1558,24 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                 if snapshot_name:
                     console.print(f"  • Name: {snapshot_name}")
                 console.print(f"  • Timeout: 1800 seconds")
-                
+
                 if not Confirm.ask("Proceed with snapshot creation?", default=True):
                     console.print("🚫 [yellow]Snapshot cancelled[/yellow]")
                     continue
-                
+
                 # Send snapshot request
                 snapshot_response = await client.http_session.post(
                     f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/snapshot",
                     json=snapshot_request,
                     headers={"X-API-Key": client.api_key},
                 )
-                
+
                 if snapshot_response.status == 200:
                     response_data = await snapshot_response.json()
-                    console.print("✅ [green]Snapshot request submitted successfully[/green]")
-                    
+                    console.print(
+                        "✅ [green]Snapshot request submitted successfully[/green]"
+                    )
+
                     # Extract correlation_id for SSE monitoring
                     correlation_id = response_data.get("correlation_id")
                     if correlation_id:
@@ -1526,18 +1583,24 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                         success = await _wait_for_snapshot_completion(
                             client, correlation_id, timeout=1800
                         )
-                        
+
                         if success:
-                            console.print("🎉 [green]Snapshot created successfully![/green]")
+                            console.print(
+                                "🎉 [green]Snapshot created successfully![/green]"
+                            )
                         else:
-                            console.print("❌ [red]Snapshot creation failed or timed out[/red]")
+                            console.print(
+                                "❌ [red]Snapshot creation failed or timed out[/red]"
+                            )
                     else:
-                        console.print("❌ [red]No correlation_id received from snapshot response[/red]")
-                        
+                        console.print(
+                            "❌ [red]No correlation_id received from snapshot response[/red]"
+                        )
+
                 else:
                     error = await snapshot_response.text()
                     console.print(f"❌ [red]Failed to create snapshot: {error}[/red]")
-                    
+
             except Exception as e:
                 console.print(f"❌ [red]Error creating snapshot: {e}[/red]")
 
@@ -1577,13 +1640,10 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
 def _get_git_commit_hash() -> str:
     """Get the current git commit hash."""
     import subprocess
-    
+
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "HEAD"], 
-            capture_output=True, 
-            text=True, 
-            check=True
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
         )
         return result.stdout.strip()  # Return full hash
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -1594,13 +1654,15 @@ async def _wait_for_snapshot_completion(
     client: "Plato", correlation_id: str, timeout: int = 1800
 ) -> bool:
     """Wait for VM snapshot to complete using SSE monitoring."""
-    console.print(f"🔗 Monitoring via SSE: {client.base_url}/public-build/events/{correlation_id}")
-    
+    console.print(
+        f"🔗 Monitoring via SSE: {client.base_url}/public-build/events/{correlation_id}"
+    )
+
     # Use the existing SSE monitoring infrastructure
     success = await _monitor_ssh_execution(
         client, correlation_id, "VM snapshot creation", timeout=timeout
     )
-    
+
     return success
 
 
