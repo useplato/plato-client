@@ -179,6 +179,27 @@ class SyncPlato:
             raise PlatoClientError(data["error"])
         return data["data"]["cdp_url"]
 
+    def get_proxy_url(self, job_id: str) -> str:
+        """Get the proxy URL for a job.
+
+        Args:
+            job_id (str): The ID of the job to get the proxy URL for.
+
+        Returns:
+            str: The proxy URL for the job.
+
+        Raises:
+            PlatoClientError: If the API request fails or returns an error.
+            requests.RequestException: If the API request fails.
+        """
+        response = self.http_session.get(f"{self.base_url}/env/{job_id}/proxy_url")
+        data = response.json()
+        if data["error"] is not None:
+            raise PlatoClientError(data["error"])
+        return data["data"]["proxy_url"]
+
+
+
     def close_environment(self, job_id: str) -> Dict[str, Any]:
         """Close an environment.
 

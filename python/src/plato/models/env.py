@@ -473,23 +473,25 @@ class PlatoEnvironment:
             if not worker_status.get("ready"):
                 raise PlatoClientError("Worker is not ready yet")
 
-            # Extract the base domain from the base_url
-            if "localhost:8080" in self._client.base_url:
-                proxy_server = "http://localhost:8888"
-            elif "plato.so" in self._client.base_url:
-                # Extract domain from base_url to construct proxy server URL
-                parsed_url = urlparse(self._client.base_url)
-                domain_parts = parsed_url.netloc.split('.')
+            try:
+                proxy_server = await self._client.get_proxy_url(self.id)
+            except Exception as e:
+                logger.error(f"Error getting proxy URL: {e}")
+                # Extract the base domain from the base_url
+                if "localhost:8080" in self._client.base_url:
+                    proxy_server = "http://localhost:8888"
+                elif "plato.so" in self._client.base_url:
+                    # Extract domain from base_url to construct proxy server URL
+                    parsed_url = urlparse(self._client.base_url)
+                    domain_parts = parsed_url.netloc.split('.')
 
-                # Check if there's a subdomain before "plato.so"
-                if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
-                    subdomain = domain_parts[0]
-                    proxy_server = f"https://{subdomain}.proxy.plato.so"
-                else:
-                    # No subdomain, use just proxy.plato.so
-                    proxy_server = "https://proxy.plato.so"
-            else:
-                raise PlatoClientError("Unknown base URL")
+                    # Check if there's a subdomain before "plato.so"
+                    if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                        subdomain = domain_parts[0]
+                        proxy_server = f"https://{subdomain}.proxy.plato.so"
+                    else:
+                        # No subdomain, use just proxy.plato.so
+                        proxy_server = "https://proxy.plato.so"
 
             return {
                 "server": proxy_server,
