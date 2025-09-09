@@ -10,6 +10,7 @@ from plato.exceptions import PlatoClientError
 from playwright.async_api import Page
 import yaml
 from urllib.parse import urlparse
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class PlatoEnvironment:
         self._run_session_id = active_session
         self.fast = fast
 
-    async def login(self, page: Page, throw_on_login_error: bool = False) -> None:
+    async def login(self, page: Page, throw_on_login_error: bool = False, screenshots_dir: Optional[Path] = None) -> None:
         """Login to the environment using authentication config.
 
         Args:
@@ -97,7 +98,7 @@ class PlatoEnvironment:
         if not login_flow:
             raise PlatoClientError("No login flow found")
 
-        flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger)
+        flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger,screenshots_dir=screenshots_dir)
         success = await flow_executor.execute_flow()
         if not success:
             if throw_on_login_error:

@@ -45,13 +45,19 @@ flows:
     selector: button[type="submit"], input[type="submit"], .btn-primary
   - action: wait
     description: Wait for login to process
-    duration: 3000
+    duration: 10000
   - action: screenshot
     description: Screenshot after login attempt
     filename: 03_after_login.png
+  - action: navigate
+    description: Redirect to sims.plato.so
+    url: https://sims.plato.so
   - action: wait
-    description: Wait for possible redirection or loading
-    duration: 10000
+    description: Wait for redirect to complete6
+    duration: 5000
+  - action: screenshot
+    description: Screenshot after redirect to sims.plato.so
+    filename: 04_after_redirect.png
   - action: verify
     description: Verify successful login by checking for main application interface
     selector: nav, .sidebar, [data-testid*="shell"], [class*="navigation"], [class*="dashboard"], [class*="event"], .main-content
