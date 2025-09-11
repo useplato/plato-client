@@ -93,7 +93,7 @@ async def test_login_functionality(env:PlatoEnvironment, page, simulator_name: s
         try:
             # Use the environment's built-in login method
             login_attempted = True
-            await env.login(page, screenshots_dir=Path(SCREENSHOTS_DIR / f"{simulator_name}_{test_id}"))
+            await env.login(page, screenshots_dir=Path(SCREENSHOTS_DIR / f"{simulator_name}_{test_id}"), throw_on_login_error=True)
             login_successful = True
             print(f"Login completed successfully for {simulator_name}")
             

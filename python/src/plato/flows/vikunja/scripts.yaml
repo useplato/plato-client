@@ -15,9 +15,6 @@ flows:
 - name: login
   description: Complete login flow with verification
   steps:
-  - action: screenshot
-    description: Screenshot before login (initial page)
-    filename: 01_before_login.png
   - action: wait
     description: Wait for page to fully load
     duration: 5000
@@ -37,32 +34,36 @@ flows:
     description: Fill password field
     selector: 'input[name="password"], input[type="password"], #password'
     value: $password
-  - action: screenshot
-    description: Screenshot after credentials entered
-    filename: 02_credentials_entered.png
   - action: wait_for_selector
     description: Wait for login button to be ready
-    selector: button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button'
     timeout: 5000
   - action: click
     description: Click login button
-    selector: button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button'
   - action: wait
     description: Wait for login to process
     duration: 5000
-  - action: screenshot
-    description: Screenshot after login attempt
-    filename: 03_after_login_attempt.png
+  - action: verify_url
+    description: Verify redirected to tasks route
+    url: '/'
+    contains: true
   - action: verify
-    description: Verify main application interface is displayed
-    selector: .content-wrapper, .main-content, .dashboard, nav, .navbar, .sidebar, .tasks, .projects, [class*="navigation"], [class*="menu"]
+    description: Verify navigation frame is present
+    selector: 'nav, .navbar, .sidebar, [data-cy="navigation"], [class*="navigation"], [class*="sidebar"]'
     type: element_exists
+  - action: verify
+    description: Verify key nav links exist
+    selector: 'a[href*="/projects"], a[href*="/lists"], a[href*="/tasks"], [data-cy*="project"], [data-cy*="list"]'
+    type: element_exists
+  - action: verify
+    description: Verify page title indicates Vikunja
+    title: 'Vikunja'
+    contains: true
+    type: page_title
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  - action: screenshot
-    description: Screenshot before incorrect login attempt
-    filename: 01_before_incorrect_login.png
   - action: wait
     description: Wait for page to fully load
     duration: 5000
@@ -82,23 +83,17 @@ flows:
     description: Fill password field with incorrect password
     selector: 'input[name="password"], input[type="password"], #password'
     value: $wrong_password
-  - action: screenshot
-    description: Screenshot after entering incorrect credentials
-    filename: 02_incorrect_credentials_entered.png
   - action: wait_for_selector
     description: Wait for login button to be ready
-    selector: button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button'
     timeout: 5000
   - action: click
     description: Click login button
-    selector: button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary, .login-button, button:has-text("Login"), button:has-text("Sign in"), button.button'
   - action: wait
     description: Wait for login attempt to process
     duration: 3000
-  - action: screenshot
-    description: Screenshot after incorrect login attempt
-    filename: 03_after_incorrect_login.png
   - action: verify
     description: Verify error message is displayed
-    selector: .error, .alert-danger, .alert-error, [role="alert"], .message.negative, .notification.is-danger, .notification.is-error, [class*="error"], [class*="danger"]
+    selector: '.error, .alert-danger, .alert-error, [role="alert"], .message.negative, .notification.is-danger, .notification.is-error, [class*="error"], [class*="danger"]'
     type: element_exists

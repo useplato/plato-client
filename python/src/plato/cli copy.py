@@ -24,8 +24,9 @@ from rich.prompt import Confirm
 from plato.sdk import Plato
 from plato.exceptions import PlatoClientError
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, ValidationError
-from typing import Literal, Annotated
+from pydantic import BaseModel, Field
+from typing import Literal
+from core.util.adaptive_object import AdaptiveObject
 
 # Initialize Rich console
 console = Console()
@@ -49,24 +50,37 @@ class ComputeConfig(BaseModel):
     )
 
 
-class EntrypointConfig(BaseModel):
-    """Entrypoint configuration for the simulator."""
+class ServiceConfig(AdaptiveObject):
+    """Configuration for the CL service."""
 
-    type: Literal["docker"] = Field(default="docker", description="Entrypoint type")
+    type: Literal["docker-compose", "docker"] = Field(description="Service type")
+
+
+class DockerComposeServiceConfig(ServiceConfig):
+    """Configuration for the Docker Compose service."""
+
+    type: Literal["docker-compose"] = Field(description="Service type")
     file: str = Field(default="docker-compose.yml", description="Entrypoint file path")
+    required_healthy_containers: List[str] = Field(
+        default=["*"],
+        description="List of services to wait for (use ['*'] for all services)",
+    )
     healthy_wait_timeout: int = Field(
         default=300,
         ge=30,
         le=1800,
         description="Timeout in seconds to wait for services to become healthy",
     )
-    required_services: List[str] = Field(
-        default=["*"],
-        description="List of services to wait for (use ['*'] for all services)",
-    )
+    volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
 
 
-class DatabaseMutationListenerConfig(BaseModel):
+class ListenerConfig(AdaptiveObject):
+    """Configuration for the listener."""
+
+    type: Literal["db", "proxy", "file"] = Field(description="Listener type")
+
+
+class DatabaseMutationListenerConfig(ListenerConfig):
     """Mutation listener configuration for database monitoring."""
 
     type: Literal["db"] = Field(description="Listener type")
@@ -84,7 +98,6 @@ class DatabaseMutationListenerConfig(BaseModel):
     seed_data_paths: Optional[List[str]] = Field(
         default=None, description="Seed data paths"
     )
-    volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
     truncate_tables: Optional[bool] = Field(
         default=None, description="Truncate tables before seed restore"
     )
@@ -93,7 +106,7 @@ class DatabaseMutationListenerConfig(BaseModel):
     )
 
 
-class ProxyMutationListenerConfig(BaseModel):
+class ProxyMutationListenerConfig(ListenerConfig):
     """Mutation listener configuration for proxy monitoring."""
 
     type: Literal["proxy"] = Field(description="Listener type")
@@ -111,7 +124,7 @@ class ProxyMutationListenerConfig(BaseModel):
     )
 
 
-class FileMutationListenerConfig(BaseModel):
+class FileMutationListenerConfig(ListenerConfig):
     """Mutation listener configuration for file monitoring."""
 
     type: Literal["file"] = Field(description="Listener type")
@@ -127,26 +140,16 @@ class FileMutationListenerConfig(BaseModel):
     scan_frequency: int = Field(
         default=5, description="State rescan frequency in seconds"
     )
-    volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
-
-
-# Union type for different mutation listener configurations (discriminated by 'type')
-MutationListenerConfig = Annotated[
-    Union[
-        DatabaseMutationListenerConfig,
-        ProxyMutationListenerConfig,
-        FileMutationListenerConfig,
-    ],
-    Field(discriminator="type"),
-]
 
 
 class DatasetConfig(BaseModel):
-    """Dataset configuration with entrypoint and mutation listeners."""
+    """Dataset configuration with services and listeners."""
 
-    entrypoint: EntrypointConfig = Field(description="Entrypoint configuration")
-    mutation_listeners: Dict[str, MutationListenerConfig] = Field(
-        default={}, description="Container mutation listeners"
+    services: List[ServiceConfig] = Field(
+        default_factory=list, description="Services to run"
+    )
+    listeners: List[ListenerConfig] = Field(
+        default_factory=list, description="Listeners to use"
     )
 
 
@@ -1061,14 +1064,16 @@ async def _create_default_config(config_path: str):
         compute=ComputeConfig(),
         datasets={
             "base": DatasetConfig(
-                entrypoint=EntrypointConfig(
-                    type="docker",
-                    file="datasets/base/docker-compose.yml",
-                    healthy_wait_timeout=300,
-                    required_services=["*"],
-                ),
-                mutation_listeners={
-                    "container-1": DatabaseMutationListenerConfig(
+                services=[
+                    DockerComposeServiceConfig(
+                        type="docker-compose",
+                        file="datasets/base/docker-compose.yml",
+                        required_healthy_containers=["*"],
+                        healthy_wait_timeout=300,
+                    )
+                ],
+                listeners=[
+                    DatabaseMutationListenerConfig(
                         type="db",
                         db_type="postgresql",
                         db_host="base-db.internal",
@@ -1077,7 +1082,7 @@ async def _create_default_config(config_path: str):
                         db_password="${BASE_DB_PASSWORD}",
                         db_database="base_db",
                     )
-                },
+                ],
             )
         },
     )
@@ -1124,49 +1129,6 @@ def _filter_ssh_warnings(stderr: str) -> str:
     return "\n".join(filtered_lines)
 
 
-def _parse_json_object_from_text(raw_text):
-    """Attempt to parse a JSON object from possibly noisy text.
-
-    Strategy:
-    1) Remove control characters that break JSON parsing
-    2) Try parsing the whole string
-    3) If that fails, locate the first '{' and iteratively try substrings ending at each '}'
-    Returns a dict on success, or None if no valid JSON object is found.
-    """
-    if not raw_text:
-        return None
-
-    import json as _json
-    import re as _re
-
-    # Normalize and strip obvious noise
-    cleaned_text = str(raw_text).strip()
-    cleaned_text = _re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", cleaned_text)
-
-    # First try: parse entire text
-    try:
-        return _json.loads(cleaned_text)
-    except Exception:
-        pass
-
-    # Second try: find a JSON object within the text
-    start = cleaned_text.find("{")
-    if start == -1:
-        return None
-
-    # Iterate backwards over possible closing braces to find the smallest valid JSON object
-    for end in range(len(cleaned_text) - 1, start, -1):
-        if cleaned_text[end] != "}":
-            continue
-        candidate = cleaned_text[start : end + 1]
-        try:
-            return _json.loads(candidate)
-        except Exception:
-            continue
-
-    return None
-
-
 async def _wait_for_sim_ready(
     client: "Plato", vm_job_uuid: str, timeout: int = 600
 ) -> bool:
@@ -1176,7 +1138,6 @@ async def _wait_for_sim_ready(
 
     start_time = time.time()
     last_status = "unknown"
-    last_message = None
 
     with Progress(
         SpinnerColumn(),
@@ -1213,24 +1174,25 @@ async def _wait_for_sim_ready(
                             stdout = status_result.get("stdout", "")
                             if stdout and stdout.strip():
                                 try:
-                                    status_data = _parse_json_object_from_text(stdout)
-                                    if not status_data:
-                                        # Force the JSON error path for consistent handling below
-                                        raise json.JSONDecodeError(
-                                            "No JSON object found",
-                                            stdout,
-                                            0,
-                                        )
+                                    # Clean up the JSON string by removing invalid control characters
+                                    cleaned_stdout = stdout.strip()
+                                    # Replace problematic control characters that break JSON parsing
+                                    import re
+
+                                    # Remove or replace control characters except for \n, \r, \t
+                                    cleaned_stdout = re.sub(
+                                        r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]",
+                                        "",
+                                        cleaned_stdout,
+                                    )
+
+                                    status_data = json.loads(cleaned_stdout)
                                     sim_status = status_data.get("status", "unknown")
                                     message = status_data.get("message", "")
                                     timestamp = status_data.get("timestamp", "")
 
-                                    # Show if status changed, or if unknown status but message changed
-                                    if sim_status != last_status or (
-                                        sim_status == "unknown"
-                                        and message
-                                        and message != last_message
-                                    ):
+                                    # Only show if status changed
+                                    if sim_status != last_status:
                                         # Format status nicely - truncate long messages for display
                                         display_message = message
                                         if len(message) > 200:
@@ -1245,7 +1207,6 @@ async def _wait_for_sim_ready(
                                         )
                                         console.print(status_panel)
                                         last_status = sim_status
-                                        last_message = message
 
                                     if sim_status == "ready":
                                         progress.update(
@@ -1269,7 +1230,7 @@ async def _wait_for_sim_ready(
                                         return False
                                     elif sim_status in ["pending", "initializing"]:
                                         elapsed = int(time.time() - start_time)
-                                        if elapsed > 20*60:
+                                        if elapsed > 300:
                                             console.print(
                                                 "[red]❌ Taking too long - likely database issue[/red]"
                                             )
@@ -1294,33 +1255,9 @@ async def _wait_for_sim_ready(
                                     console.print(
                                         f"⚠️ Could not parse status JSON: {e} - retrying..."
                                     )
-                                    preview = repr(stdout)
-                                    if len(preview) > 400:
-                                        preview = preview[:400] + "..."
-                                    console.print(f"Raw output (truncated): {preview}")
-                                    # Also show a sanitized human-readable output so users can see the message
-                                    try:
-                                        import re as _re  # local import to avoid top-level noise
-
-                                        readable = stdout or ""
-                                        readable = _re.sub(
-                                            r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]",
-                                            "",
-                                            str(readable),
-                                        )
-                                        readable = readable.strip()
-                                        if len(readable) > 500:
-                                            readable = readable[:500] + "..."
-                                        if readable:
-                                            console.print(
-                                                Panel.fit(
-                                                    readable,
-                                                    title="[bold yellow]📄 Status Output[/bold yellow]",
-                                                    border_style="yellow",
-                                                )
-                                            )
-                                    except Exception:
-                                        pass
+                                    console.print(
+                                        f"Raw output: {stdout.strip()[:100]}..."
+                                    )
                         else:
                             console.print("⚠️ Status check failed - retrying...")
 
@@ -1413,8 +1350,8 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
 
     # Ask permission and set up SSH config with unique host name
     ssh_host = None
-    #if Confirm.ask("💡 Set up SSH config for easy connection?", default=True):
-    ssh_host = _setup_ssh_config_with_password(local_port, vm_job_uuid)
+    if Confirm.ask("💡 Set up SSH config for easy connection?", default=True):
+        ssh_host = _setup_ssh_config_with_password(local_port, vm_job_uuid)
 
     # Store ssh_host for use in commands
     sandbox_info["ssh_host"] = ssh_host or f"plato-sandbox-{vm_job_uuid[:8]}"
@@ -1433,34 +1370,34 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
         menu_table.add_column("Option", style="cyan", no_wrap=True)
         menu_table.add_column("Action", style="white")
 
-        menu_table.add_row("1", "Start simulator services")
-        menu_table.add_row("2", "Open VS Code connected to sandbox")
-        menu_table.add_row("3", "Open Cursor connected to sandbox")
-        menu_table.add_row("4", "Create VM snapshot")
-        menu_table.add_row("5", "Show VM info")
-        menu_table.add_row("6", "Stop sandbox and cleanup")
-        menu_table.add_row("7", "Sim Backup")
-        menu_table.add_row("8", "Sim Reset")
+        menu_table.add_row("1", "Start Listeners")
+        menu_table.add_row("2", "Stop Listeners")
+        menu_table.add_row("3", "Start Services")
+        menu_table.add_row("4", "Stop Services")
+        menu_table.add_row("5", "Listeners - Reset")
+        menu_table.add_row("6", "Listeners - Backup")
+        menu_table.add_row("7", "Open VS Code connected to sandbox")
+        menu_table.add_row("8", "Open Cursor connected to sandbox")
+        menu_table.add_row("9", "Create VM snapshot")
+        menu_table.add_row("10", "Show VM info")
+        menu_table.add_row("11", "Stop sandbox and cleanup")
+        menu_table.add_row("12", "Start All")
 
         console.print("\n")
         console.print(menu_table)
 
         try:
-            choice = typer.prompt("Choose an action (1-8)", type=int)
+            choice = typer.prompt("Choose an action (1-12)", type=int)
         except (KeyboardInterrupt, EOFError):
             break
 
         if choice == 1:
-            # Start simulator services
-            console.print(f"🚀 [cyan]Starting simulator services...[/cyan]")
-
+            # Start Listeners
+            console.print(f"🚀 [cyan]Starting listeners...[/cyan]")
             try:
-                with console.status(
-                    "[cyan]🚀 Starting simulator services...", spinner="dots"
-                ):
-                    # Call the start-sim endpoint
-                    start_response = await client.http_session.post(
-                        f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-sim",
+                with console.status("[cyan]🚀 Starting listeners...", spinner="dots"):
+                    resp = await client.http_session.post(
+                        f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-listeners",
                         json={
                             "dataset": sandbox_info.get("dataset", "base"),
                             "plato_config": sandbox_info.get("plato_config", {}),
@@ -1469,103 +1406,98 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                         },
                         headers={"X-API-Key": client.api_key},
                     )
-
-                if start_response.status == 200:
-                    response_data = await start_response.json()
-                    console.print(
-                        "✅ [green]Simulator start request submitted successfully[/green]"
-                    )
-                    console.print(
-                        f"📊 Dataset: {response_data.get('dataset', 'unknown')}"
-                    )
-                    console.print(
-                        f"🔧 Worker version: {response_data.get('plato_worker_version', 'unknown')}"
-                    )
-
-                    correlation_id = response_data.get("correlation_id")
+                if resp.status == 200:
+                    data = await resp.json()
+                    correlation_id = data.get("correlation_id")
                     if correlation_id:
-                        console.print("⏳ [cyan]Monitoring startup progress...[/cyan]")
-                        console.print(
-                            f"🔗 [dim]SSE URL: {client.base_url}/public-build/events/{correlation_id}[/dim]"
+                        console.print("⏳ [cyan]Monitoring listener startup...[/cyan]")
+                        await _monitor_ssh_execution(
+                            client, correlation_id, "Start listeners", timeout=180
                         )
-
-                        # Monitor the SSH command execution via SSE with shorter timeout for testing
-                        success = await _monitor_ssh_execution(
-                            client, correlation_id, "Simulator startup", timeout=90
-                        )
-
-                        if success:
-                            console.print(
-                                "✅ [green]Simulator start script completed[/green]"
-                            )
-
-                            # Now wait for actual simulator initialization to complete
-                            console.print(
-                                "⏳ [cyan]Waiting for simulator initialization...[/cyan]"
-                            )
-
-                            init_success = await _wait_for_sim_ready(
-                                client, sandbox_info["vm_job_uuid"], timeout=600
-                            )
-
-                            if init_success:
-                                console.print(
-                                    "🎉 [green]Simulator fully initialized and ready![/green]"
-                                )
-                            else:
-                                console.print(
-                                    "❌ [red]Simulator initialization failed[/red]"
-                                )
-                        else:
-                            console.print(
-                                "❌ [red]Simulator startup failed or timed out[/red]"
-                            )
-                            console.print(
-                                "💡 [yellow]Let's check what happened...[/yellow]"
-                            )
-
-                            # Quick debugging check
-                            console.print(
-                                "🔍 [yellow]Running quick debug check...[/yellow]"
-                            )
-                            debug_cmd = "ls -la /opt/internal/ && echo '---' && systemctl is-active espocrm-simulator 2>/dev/null || echo 'Service not found'"
-
-                            debug_response = await client.http_session.post(
-                                f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/execute",
-                                json={"command": debug_cmd, "timeout": 30},
-                                headers={"X-API-Key": client.api_key},
-                            )
-
-                            if debug_response.status == 200:
-                                console.print(
-                                    "💡 [yellow]Debug command submitted - check next execution for results[/yellow]"
-                                )
-                            else:
-                                console.print(
-                                    "❌ [red]Could not submit debug command[/red]"
-                                )
                 else:
-                    error = await start_response.text()
-                    console.print(f"❌ [red]Failed to start simulator[/red]")
-                    console.print(f"📄 [red]Error details: {error}[/red]")
-
-                    # Show debugging info
-                    console.print("🔍 [yellow]Debug info:[/yellow]")
-                    console.print(f"  • VM UUID: {sandbox_info['vm_job_uuid']}")
-                    console.print(
-                        f"  • Dataset: {sandbox_info.get('dataset', 'unknown')}"
-                    )
-                    console.print(
-                        f"  • API Key: {'✅ Present' if client.api_key else '❌ Missing'}"
-                    )
-
+                    err = await resp.text()
+                    console.print(f"❌ [red]Failed to start listeners: {err}")
             except Exception as e:
-                console.print(f"❌ [red]Error calling start simulator API: {e}[/red]")
-                console.print(
-                    "🔍 [yellow]This might be a network issue or API problem[/yellow]"
-                )
+                console.print(f"❌ [red]Error starting listeners: {e}[/red]")
 
         elif choice == 2:
+            # Stop Listeners
+            console.print(f"🛑 [cyan]Stopping listeners...[/cyan]")
+            try:
+                resp = await client.http_session.post(
+                    f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/stop-listeners",
+                    json={
+                        "dataset": sandbox_info.get("dataset", "base"),
+                        "timeout": 300,
+                    },
+                    headers={"X-API-Key": client.api_key},
+                )
+                if resp.status == 200:
+                    data = await resp.json()
+                    correlation_id = data.get("correlation_id")
+                    if correlation_id:
+                        await _monitor_ssh_execution(
+                            client, correlation_id, "Stop listeners", timeout=120
+                        )
+                else:
+                    err = await resp.text()
+                    console.print(f"❌ [red]Failed to stop listeners: {err}")
+            except Exception as e:
+                console.print(f"❌ [red]Error stopping listeners: {e}[/red]")
+
+        elif choice == 3:
+            # Start Services
+            console.print(f"🚀 [cyan]Starting services...[/cyan]")
+            try:
+                with console.status("[cyan]🚀 Starting services...", spinner="dots"):
+                    resp = await client.http_session.post(
+                        f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-services",
+                        json={
+                            "dataset": sandbox_info.get("dataset", "base"),
+                            "plato_config": sandbox_info.get("plato_config", {}),
+                            "timeout": 600,
+                        },
+                        headers={"X-API-Key": client.api_key},
+                    )
+                if resp.status == 200:
+                    data = await resp.json()
+                    correlation_id = data.get("correlation_id")
+                    if correlation_id:
+                        await _monitor_ssh_execution(
+                            client, correlation_id, "Start services", timeout=300
+                        )
+                else:
+                    err = await resp.text()
+                    console.print(f"❌ [red]Failed to start services: {err}")
+            except Exception as e:
+                console.print(f"❌ [red]Error starting services: {e}[/red]")
+
+        elif choice == 4:
+            # Stop Services
+            console.print(f"🛑 [cyan]Stopping services...[/cyan]")
+            try:
+                resp = await client.http_session.post(
+                    f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/stop-services",
+                    json={
+                        "dataset": sandbox_info.get("dataset", "base"),
+                        "timeout": 600,
+                    },
+                    headers={"X-API-Key": client.api_key},
+                )
+                if resp.status == 200:
+                    data = await resp.json()
+                    correlation_id = data.get("correlation_id")
+                    if correlation_id:
+                        await _monitor_ssh_execution(
+                            client, correlation_id, "Stop services", timeout=180
+                        )
+                else:
+                    err = await resp.text()
+                    console.print(f"❌ [red]Failed to stop services: {err}")
+            except Exception as e:
+                console.print(f"❌ [red]Error stopping services: {e}[/red]")
+
+        elif choice == 7:
             # VS Code via SSH tunnel
             console.print(f"🔧 [cyan]Opening VS Code connected to sandbox...[/cyan]")
             success = _open_editor_via_ssh("code", sandbox_info["ssh_host"], local_port)
@@ -1577,7 +1509,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             else:
                 console.print("❌ [red]Failed to open VS Code[/red]")
 
-        elif choice == 3:
+        elif choice == 8:
             # Cursor via SSH tunnel
             console.print(f"🔧 [cyan]Opening Cursor connected to sandbox...[/cyan]")
             success = _open_editor_via_ssh(
@@ -1591,7 +1523,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             else:
                 console.print("❌ [red]Failed to open Cursor[/red]")
 
-        elif choice == 4:
+        elif choice == 9:
             # Create VM snapshot
             console.print(f"📸 [cyan]Creating VM snapshot...[/cyan]")
 
@@ -1615,16 +1547,11 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                 import json
                 import os
 
-                default_service = None
                 config_file = ".plato-hub.json"
                 if os.path.exists(config_file):
                     with open(config_file, "r") as f:
                         hub_config = json.load(f)
-                    default_service = "plato-service/app_sims/" + hub_config["simulator_name"]
-
-
-                if default_service:
-                    service = typer.prompt("Service name", default=default_service)
+                    service = hub_config["simulator_name"]
                 else:
                     service = typer.prompt("Service name")
 
@@ -1661,7 +1588,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
                 if snapshot_response.status == 200:
                     response_data = await snapshot_response.json()
                     console.print(
-                        f"✅ [green]Snapshot request submitted successfully[/green] {response_data}"
+                        "✅ [green]Snapshot request submitted successfully[/green]"
                     )
 
                     # Extract correlation_id for SSE monitoring
@@ -1692,7 +1619,7 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             except Exception as e:
                 console.print(f"❌ [red]Error creating snapshot: {e}[/red]")
 
-        elif choice == 5:
+        elif choice == 10:
             # Show VM info
             try:
                 status_response = await client.get_job_status(
@@ -1718,11 +1645,11 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
             except Exception as e:
                 console.print(f"[red]❌ Failed to get VM status: {e}")
 
-        elif choice == 6:
+        elif choice == 11:
             # Stop and cleanup
             break
-        elif choice == 7:
-            # Backup environment
+        elif choice == 6:
+            # Listeners - Backup (maps to environment backup)
             console.print(f"📦 [cyan] Getting job group id for backup...[/cyan]")
             job_group_id = None
             try:
@@ -1757,8 +1684,8 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
 
             except Exception as e:
                 console.print(f"❌ [red]Error creating environment backup: {e}[/red]")
-        elif choice == 8:
-            # Backup environment
+        elif choice == 5:
+            # Listeners - Reset (maps to environment reset)
             console.print(f"📦 [cyan] Getting job group id for reset...[/cyan]")
             job_group_id = None
             try:
@@ -1792,8 +1719,50 @@ async def _run_interactive_sandbox(sandbox_info: dict, client: "Plato", keep_vm:
 
             except Exception as e:
                 console.print(f"❌ [red]Error creating environment reset: {e}[/red]")
+        elif choice == 12:
+            # Start All
+            console.print("🚀 [cyan]Starting listeners and services...[/cyan]")
+            try:
+                # Start listeners
+                resp1 = await client.http_session.post(
+                    f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-listeners",
+                    json={
+                        "dataset": sandbox_info.get("dataset", "base"),
+                        "plato_config": sandbox_info.get("plato_config", {}),
+                        "plato_worker_version": None,
+                        "timeout": 600,
+                    },
+                    headers={"X-API-Key": client.api_key},
+                )
+                if resp1.status == 200:
+                    data1 = await resp1.json()
+                    cid1 = data1.get("correlation_id")
+                    if cid1:
+                        await _monitor_ssh_execution(
+                            client, cid1, "Start listeners", timeout=180
+                        )
+                # Start services
+                resp2 = await client.http_session.post(
+                    f"{client.base_url}/public-build/vm/{sandbox_info['vm_job_uuid']}/start-services",
+                    json={
+                        "dataset": sandbox_info.get("dataset", "base"),
+                        "plato_config": sandbox_info.get("plato_config", {}),
+                        "timeout": 600,
+                    },
+                    headers={"X-API-Key": client.api_key},
+                )
+                if resp2.status == 200:
+                    data2 = await resp2.json()
+                    cid2 = data2.get("correlation_id")
+                    if cid2:
+                        await _monitor_ssh_execution(
+                            client, cid2, "Start services", timeout=300
+                        )
+                console.print("✅ [green]Start All completed[/green]")
+            except Exception as e:
+                console.print(f"❌ [red]Start All failed: {e}")
         else:
-            console.print("❌ Invalid choice. Please enter 1-8.")
+            console.print("❌ Invalid choice. Please enter 1-12.")
 
 
 def _get_git_commit_hash() -> str:
@@ -1817,28 +1786,10 @@ async def _wait_for_snapshot_completion(
         f"🔗 Monitoring via SSE: {client.base_url}/public-build/events/{correlation_id}"
     )
 
-    # Use the SSE monitoring with access to event data so we can surface the snapshot URI
-    result = await _monitor_ssh_execution_with_data(
+    # Use the existing SSE monitoring infrastructure
+    success = await _monitor_ssh_execution(
         client, correlation_id, "VM snapshot creation", timeout=timeout
     )
-
-    if not result:
-        return False
-
-    success = result.get("success", False)
-    event_data = result.get("event_data") or {}
-
-    # Prefer snapshot_s3_uri, but support snapshot_uri if backend uses that key
-    snapshot_uri = (
-        event_data.get("snapshot_s3_uri") or event_data.get("snapshot_uri") or None
-    )
-    snapshot_dir = event_data.get("snapshot_dir")
-
-    if success:
-        if snapshot_uri:
-            console.print(f"📦 [green]Snapshot URI:[/green] {snapshot_uri}")
-        if snapshot_dir:
-            console.print(f"📁 [cyan]Snapshot directory:[/cyan] {snapshot_dir}")
 
     return success
 
@@ -2686,147 +2637,6 @@ def login():
     handle_async(_login())
 
 
-@hub_app.command()
-def repo_info(
-    sim_name: str = typer.Argument(
-        ..., help="The name of the simulator to inspect (e.g., 'redmine')"
-    ),
-    verbose: bool = typer.Option(False, "--verbose", help="Show extra details"),
-):
-    """
-    [bold cyan]Show repository diagnostics for a simulator.[/bold cyan]
-
-    Displays DB link status (has_repo), repo details from API, and org repositories.
-    Helps debug cases where a repo exists but the simulator isn't linked.
-    """
-
-    async def _repo_info():
-        client = Plato()
-        try:
-            with console.status(
-                f"[bold cyan]Looking up simulator '{sim_name}'...", spinner="dots"
-            ):
-                simulators = await client.list_gitea_simulators()
-
-            # Find simulator by name (case-insensitive)
-            simulator = None
-            for sim in simulators:
-                if sim["name"].lower() == sim_name.lower():
-                    simulator = sim
-                    break
-
-            if not simulator:
-                console.print(f"[red]❌ Simulator '{sim_name}' not found.")
-                available = [s["name"] for s in simulators]
-                if available:
-                    console.print(f"💡 Available simulators: {', '.join(available)}")
-                return
-
-            # Summarize DB-level has_repo and identifiers
-            console.print("\n[bold]DB Link Status[/bold]")
-            console.print(f"• name: {simulator['name']}")
-            console.print(f"• id: {simulator['id']}")
-            console.print(f"• org: {simulator.get('organization_name')}")
-            console.print(f"• has_repo: {simulator.get('has_repo')}")
-            console.print(
-                f"• gitea owner/name: {simulator.get('gitea_repo_owner')} / {simulator.get('gitea_repo_name')}"
-            )
-
-            # Query detailed repo info
-            with console.status(
-                "[bold cyan]Fetching simulator repository details...", spinner="dots"
-            ):
-                repo_info = await client.get_simulator_repository(simulator["id"])
-
-            console.print("\n[bold]Repository Details (API)[/bold]")
-            if repo_info.get("has_repo"):
-                console.print(f"• full_name: {repo_info.get('full_name')}")
-                console.print(f"• clone_url: {repo_info.get('clone_url')}")
-                console.print(f"• ssh_url: {repo_info.get('ssh_url')}")
-                console.print(f"• private: {repo_info.get('private')}")
-            else:
-                console.print("• has_repo: False")
-                console.print(f"• message: {repo_info.get('message')}")
-
-            # Get org info and list repos visible for this org
-            headers = {"X-API-Key": client.api_key}
-            my_info = {}
-            my_repos = []
-            try:
-                async with client.http_session.get(
-                    f"{client.base_url}/gitea/my-info", headers=headers
-                ) as r:
-                    await client._handle_response_error(r)
-                    my_info = await r.json()
-            except Exception:
-                pass
-
-            try:
-                async with client.http_session.get(
-                    f"{client.base_url}/gitea/my-repositories", headers=headers
-                ) as r:
-                    await client._handle_response_error(r)
-                    my_repos = await r.json()
-            except Exception:
-                pass
-
-            console.print("\n[bold]Organization Repositories[/bold]")
-            if my_info:
-                console.print(
-                    f"• org_name: {my_info.get('org_name')} (is_admin={my_info.get('is_admin')})"
-                )
-            else:
-                console.print("• org_name: unknown (failed to fetch)")
-
-            # Show whether a likely repo exists in the org
-            normalized = sim_name.lower().replace(" ", "-").replace("_", "-")
-            candidates = []
-            for repo in my_repos or []:
-                name = (repo.get("name") or "").lower()
-                sim_repo_name = (simulator.get("gitea_repo_name") or "").lower()
-                if name in {normalized, sim_repo_name}:
-                    candidates.append(repo)
-
-            if candidates:
-                console.print("• matching repos found in org:")
-                for repo in candidates:
-                    console.print(
-                        f"  - {repo.get('full_name')} (clone_url={repo.get('clone_url')})"
-                    )
-            else:
-                console.print("• no matching repos found in org")
-
-            if verbose and my_repos:
-                console.print("\n[dim]All org repositories:[/dim]")
-                for repo in my_repos:
-                    console.print(f"  - {repo.get('full_name')}")
-
-            # Quick diagnosis
-            console.print("\n[bold]Diagnosis[/bold]")
-            if simulator.get("has_repo"):
-                console.print("• DB is linked to a repository ✅")
-            else:
-                if candidates:
-                    console.print(
-                        "• Repo exists in your org but simulator isn't linked in DB."
-                    )
-                    console.print(
-                        "  Suggestion: run 'uv run plato hub clone {sim_name}' to adopt and link."
-                    )
-                else:
-                    console.print(
-                        "• No matching repo found under your org. It may be in a different org or named differently."
-                    )
-                    console.print(
-                        "  Suggestion: ensure your PLATO_API_KEY belongs to the correct org; then run clone or contact admin."
-                    )
-
-        finally:
-            await client.close()
-
-    handle_async(_repo_info())
-
-
 @hub_app.command(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
 )
@@ -2938,12 +2748,11 @@ def sandbox(
 
         datasets:
           base:
-            entrypoint:
-              type: "docker"
-              file: "datasets/base/docker-compose.yml"
-            mutation_listeners:
-              container-1:
-                type: "db"
+            services:
+              - type: "docker-compose"
+                file: "datasets/base/docker-compose.yml"
+            listeners:
+              - type: "db"
                 db_type: "postgresql"
                 db_host: "base-db.internal"
                 db_port: 5432
@@ -3019,14 +2828,38 @@ def sandbox(
                     compute=ComputeConfig(),
                     datasets={
                         "base": DatasetConfig(
-                            entrypoint=EntrypointConfig(
-                                type="docker", file="datasets/base/docker-compose.yml"
-                            ),
-                            mutation_listeners={},
+                            services=[
+                                DockerComposeServiceConfig(
+                                    type="docker-compose",
+                                    file="datasets/base/docker-compose.yml",
+                                )
+                            ],
+                            listeners=[],
                         )
                     },
                 )
                 console.print("[yellow]📋 Using default configuration")
+
+            # Debug: Log outgoing DB listener for selected dataset (redacted)
+            try:
+                if dataset in plato_config.datasets:
+                    ds = plato_config.datasets[dataset]
+                    outgoing_db = None
+                    for listener in getattr(ds, "listeners", []) or []:
+                        if isinstance(listener, DatabaseMutationListenerConfig):
+                            ldict = listener.model_dump()
+                            if "db_password" in ldict:
+                                ldict["db_password"] = "***"
+                            outgoing_db = ldict
+                            break
+                    if outgoing_db:
+                        console.print(
+                            f"[dim]DEBUG outgoing DB listener for dataset '{dataset}': {outgoing_db}[/dim]"
+                        )
+            except Exception as e:
+                console.print(
+                    f"[dim]DEBUG failed to log outgoing DB listener: {e}[/dim]"
+                )
 
             # Show config summary
             compute = plato_config.compute
@@ -3038,8 +2871,24 @@ def sandbox(
             )
             console.print(f"📊 Dataset: {dataset}")
             if dataset in plato_config.datasets:
-                entrypoint = plato_config.datasets[dataset].entrypoint
-                console.print(f"🚀 Entrypoint: {entrypoint.type} - {entrypoint.file}")
+                ds = plato_config.datasets[dataset]
+                try:
+                    svc_summary = ", ".join(
+                        [
+                            getattr(s, "file", getattr(s, "type", "svc"))
+                            for s in getattr(ds, "services", [])
+                        ]
+                    )
+                    if svc_summary:
+                        console.print(f"🚀 Services: {svc_summary}")
+                except Exception:
+                    pass
+                try:
+                    lst_count = len(getattr(ds, "listeners", []) or [])
+                    if lst_count:
+                        console.print(f"👂 Listeners: {lst_count} configured")
+                except Exception:
+                    pass
             else:
                 console.print(
                     f"[yellow]⚠️  Dataset '{dataset}' not found, VM will use compute config only"
