@@ -167,8 +167,8 @@ async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
     )
     page = await agent.browser_context.get_current_page()
     # # page = await playwright_browser.new_page()
-    await page.goto(start_url)
-    await page.wait_for_load_state("networkidle")
+    # await page.goto(start_url)
+    # await page.wait_for_load_state("networkidle")
     try:
         await env.login(page)
     except Exception as e:
@@ -181,7 +181,7 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
         agent = OpenAIAgent(
             computer=computer,
         )
-        await computer.goto(start_url)
+        #await computer.goto(start_url)
         page = computer._page
         try:
           await env.login(page)
@@ -197,7 +197,7 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
             api_key=os.getenv("ANTHROPIC_API_KEY") or "",
         )
         page = computer._page
-        await computer.goto(start_url)
+        #await computer.goto(start_url)
         try:
           await env.login(page)
         except Exception as e:
@@ -387,7 +387,21 @@ async def main():
     concurrency_semaphores = await create_concurrency_controllers(concurrency)
 
     try:
-        # Create tasks
+        # Create the first environment synchronously to ensure agent artifact is created
+        if tests_to_run and num_runs > 0:
+            print(f"🔒 Creating first environment synchronously to create agent artifact: {agent_version}")
+            first_task = tests_to_run[0]
+            logger.info(f"[{first_task.name}] Creating New Environment For Task: ({selected_simulator_name.lower()})")
+            env = await client.make_environment(first_task.env_id, open_page_on_start=True, record_actions=True, fast=True)
+            await env.wait_for_ready(timeout=30)
+            logger.info(f"[{first_task.name}] Environment ready")
+            
+            # Reset environment with agent version (this creates the agent artifact)
+            await env.reset(first_task, agent_version=agent_version)
+            await env.close()
+            print(f"✅ Agent artifact created, now running all tasks concurrently")
+        
+        # Create all tasks to run concurrently
         async_tasks = []
         for i, task in enumerate(tests_to_run):
             for run_num in range(num_runs):
@@ -399,8 +413,8 @@ async def main():
                     )
                 )
 
-        # Run tasks
-        print(f"\nRunning {len(async_tasks)} tasks with agent: {agent_version}")
+        # Run all tasks concurrently
+        print(f"\nRunning {len(async_tasks)} tasks concurrently with agent: {agent_version}")
         await asyncio.gather(*async_tasks)
 
         print("\nAll tasks completed!")
