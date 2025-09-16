@@ -842,7 +842,7 @@ wheels = [
 
 [[package]]
 name = "plato-sdk"
-version = "1.0.74"
+version = "1.0.75"
 source = { editable = "." }
 dependencies = [
     { name = "aioboto3" },

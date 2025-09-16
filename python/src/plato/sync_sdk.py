@@ -489,6 +489,7 @@ class SyncPlato:
                 default_scoring_config=t.get("defaultScoringConfig", {}),
                 scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
                 output_schema=t.get("outputSchema"),
+                is_sample=t.get("isSample", False),
             )
             for t in test_cases
         ]

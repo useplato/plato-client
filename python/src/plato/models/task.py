@@ -114,6 +114,7 @@ class PlatoTask(BaseModel):
     default_scoring_config: Optional[Dict[str, Any]] = None
     scoring_type: List[ScoringType] = [ScoringType.MUTATIONS]
     output_schema: Optional[Dict[str, Any]] = None
+    is_sample: Optional[bool] = False
 
     @field_serializer('eval_config')
     def serialize_eval_config(self, eval_config: Optional[BasePlatoEvalConfig], _info):
