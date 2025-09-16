@@ -357,11 +357,12 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
-    def evaluate(self, session_id: str, agent_version: Optional[str] = None) -> Dict[str, Any]:
+    def evaluate(self, session_id: str, value: Optional[Any] = None, agent_version: Optional[str] = None) -> Dict[str, Any]:
         """Evaluate the environment.
 
         Args:
             session_id (str): The ID of the session to evaluate.
+            value (Optional[Any]): Optional value to include in the evaluation request.
             agent_version (Optional[str]): Optional agent version.
 
         Returns:
@@ -370,8 +371,13 @@ class SyncPlato:
         Raises:
             requests.RequestException: If the API request fails.
         """
+        body = {}
+        if value is not None:
+            body = {"value": value}
+
         response = self.http_session.post(
             f"{self.base_url}/env/session/{session_id}/evaluate",
+            json=body,
         )
         self._handle_response_error(response)
         res_data = response.json()

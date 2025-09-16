@@ -395,17 +395,24 @@ class Plato:
             return await response.json()
 
     async def evaluate(
-        self, session_id: str, agent_version: Optional[str] = None
+        self, session_id: str, value: Optional[Any] = None, agent_version: Optional[str] = None
     ) -> Dict[str, Any]:
         """Evaluate the environment.
 
         Args:
             session_id (str): The ID of the session to evaluate.
+            value (Optional[Any]): Optional value to include in the evaluation request.
+            agent_version (Optional[str]): Optional agent version.
         """
         headers = {"X-API-Key": self.api_key}
+        body = {}
+        if value is not None:
+            body = {"value": value}
+
         async with self.http_session.post(
             f"{self.base_url}/env/session/{session_id}/evaluate",
             headers=headers,
+            json=body,
         ) as response:
             await self._handle_response_error(response)
             res_data = await response.json()

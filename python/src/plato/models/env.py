@@ -396,7 +396,7 @@ class PlatoEnvironment:
                 success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
-    async def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
+    async def evaluate(self, value: Optional[Any] = None, agent_version: Optional[str] = None) -> EvaluationResult:
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
 
@@ -414,7 +414,7 @@ class PlatoEnvironment:
             return evaluation_result
         else:
             # call /evaluate endpoint
-            response = await self._client.evaluate(self._run_session_id, agent_version)
+            response = await self._client.evaluate(self._run_session_id, value, agent_version)
             if not response:
                 raise PlatoClientError("No evaluation result found")
             result = response["result"]

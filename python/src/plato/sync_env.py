@@ -394,10 +394,11 @@ class SyncPlatoEnvironment:
                 success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
-    def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
+    def evaluate(self, value: Optional[Any] = None, agent_version: Optional[str] = None) -> EvaluationResult:
         """Evaluate the current task.
 
         Args:
+            value (Optional[Any]): Optional value to include in the evaluation request.
             agent_version (Optional[str]): Optional agent version.
 
         Returns:
@@ -423,7 +424,7 @@ class SyncPlatoEnvironment:
             return evaluation_result
         else:
             # call /evaluate endpoint
-            response = self._client.evaluate(self._run_session_id, agent_version)
+            response = self._client.evaluate(self._run_session_id, value, agent_version)
             if not response:
                 raise PlatoClientError("No evaluation result found")
             result = response["result"]
