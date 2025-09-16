@@ -1,5 +1,12 @@
 from pydantic import BaseModel, ConfigDict, field_serializer
 from typing import Any, Dict, Optional, Literal, List, Callable
+from enum import Enum
+
+
+class ScoringType(str, Enum):
+    """Enum for different types of scoring in Plato tasks."""
+    OUTPUT = "output"
+    MUTATIONS = "mutations"
 
 
 class BasePlatoEvalConfig(BaseModel):
@@ -105,6 +112,8 @@ class PlatoTask(BaseModel):
     average_steps: Optional[int] = None
     num_validator_human_scores: Optional[int] = None
     default_scoring_config: Optional[Dict[str, Any]] = None
+    scoring_type: List[ScoringType] = [ScoringType.MUTATIONS]
+    output_schema: Optional[Dict[str, Any]] = None
 
     @field_serializer('eval_config')
     def serialize_eval_config(self, eval_config: Optional[BasePlatoEvalConfig], _info):

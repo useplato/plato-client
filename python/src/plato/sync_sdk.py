@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
 from plato.config import get_config
 from plato.models import PlatoTask
+from plato.models.task import ScoringType
 from plato.exceptions import PlatoClientError
 from plato.models.task import EvaluationResult
 from plato.sync_env import SyncPlatoEnvironment
@@ -486,6 +487,8 @@ class SyncPlato:
                 average_steps=t.get("averageStepsTaken"),
                 num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
                 default_scoring_config=t.get("defaultScoringConfig", {}),
+                scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
+                output_schema=t.get("outputSchema"),
             )
             for t in test_cases
         ]
