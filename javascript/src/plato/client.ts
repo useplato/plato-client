@@ -53,11 +53,11 @@ export class PlatoEnvironment {
     return this.client.closeEnvironment(this.id);
   }
 
-  async evaluate() {
+  async evaluate(value?: any) {
     if (!this.runSessionId) {
       throw new PlatoClientError('No run session ID found');
     }
-    return this.client.evaluate(this.runSessionId);
+    return this.client.evaluate(this.runSessionId, value);
   }
 
   /**
@@ -175,12 +175,12 @@ export class PlatoEnvironment {
 
   /**
    * Get the public URL for accessing this environment.
-   * 
+   *
    * @returns The public URL for this environment based on the deployment environment.
    *          Uses alias if available, otherwise uses environment ID.
    *          - Dev: https://{alias|env.id}.dev.sims.plato.so
    *          - Staging: https://{alias|env.id}.staging.sims.plato.so
-   *          - Production: https://{alias|env.id}.sims.plato.so  
+   *          - Production: https://{alias|env.id}.sims.plato.so
    *          - Local: http://localhost:8081/{alias|env.id}
    * @throws PlatoClientError If unable to determine the environment type.
    */
@@ -188,7 +188,7 @@ export class PlatoEnvironment {
     try {
       // Use alias if available, otherwise use environment ID
       const identifier = this.alias || this.id;
-      
+
       // Determine environment based on base_url
       if (this.client.baseUrl.includes('localhost:8080')) {
         return `http://localhost:8081/${identifier}`;
@@ -242,7 +242,7 @@ export class Plato {
    * @throws PlatoClientError If the API request fails
    */
   async makeEnvironment(
-    envId: string, 
+    envId: string,
     openPageOnStart: boolean = false,
     recordActions: boolean = false,
     keepalive: boolean = false,
@@ -315,9 +315,15 @@ export class Plato {
     }
   }
 
-  async evaluate(sessionId: string) {
+  async evaluate(sessionId: string, value?: any) {
     try {
-      const response = await this.http.post(`/env/session/${sessionId}/evaluate`);
+      let body = {};
+      if (value) {
+        body = {
+          value: value,
+        };
+      }
+      const response = await this.http.post(`/env/session/${sessionId}/evaluate`, body);
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
