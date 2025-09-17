@@ -10,6 +10,7 @@ from plato.exceptions import PlatoClientError
 from playwright.async_api import Page
 import yaml
 from urllib.parse import urlparse
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class PlatoEnvironment:
         self._run_session_id = active_session
         self.fast = fast
 
-    async def login(self, page: Page, throw_on_login_error: bool = False) -> None:
+    async def login(self, page: Page, throw_on_login_error: bool = False, screenshots_dir: Optional[Path] = None) -> None:
         """Login to the environment using authentication config.
 
         Args:
@@ -97,7 +98,7 @@ class PlatoEnvironment:
         if not login_flow:
             raise PlatoClientError("No login flow found")
 
-        flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger)
+        flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger,screenshots_dir=screenshots_dir)
         success = await flow_executor.execute_flow()
         if not success:
             if throw_on_login_error:
@@ -395,7 +396,7 @@ class PlatoEnvironment:
                 success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
-    async def evaluate(self, agent_version: Optional[str] = None) -> EvaluationResult:
+    async def evaluate(self, value: Optional[Any] = None, agent_version: Optional[str] = None) -> EvaluationResult:
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
 
@@ -413,7 +414,7 @@ class PlatoEnvironment:
             return evaluation_result
         else:
             # call /evaluate endpoint
-            response = await self._client.evaluate(self._run_session_id, agent_version)
+            response = await self._client.evaluate(self._run_session_id, value, agent_version)
             if not response:
                 raise PlatoClientError("No evaluation result found")
             result = response["result"]
@@ -472,23 +473,25 @@ class PlatoEnvironment:
             if not worker_status.get("ready"):
                 raise PlatoClientError("Worker is not ready yet")
 
-            # Extract the base domain from the base_url
-            if "localhost:8080" in self._client.base_url:
-                proxy_server = "http://localhost:8888"
-            elif "plato.so" in self._client.base_url:
-                # Extract domain from base_url to construct proxy server URL
-                parsed_url = urlparse(self._client.base_url)
-                domain_parts = parsed_url.netloc.split('.')
+            try:
+                proxy_server = await self._client.get_proxy_url(self.id)
+            except Exception as e:
+                logger.error(f"Error getting proxy URL: {e}")
+                # Extract the base domain from the base_url
+                if "localhost:8080" in self._client.base_url:
+                    proxy_server = "http://localhost:8888"
+                elif "plato.so" in self._client.base_url:
+                    # Extract domain from base_url to construct proxy server URL
+                    parsed_url = urlparse(self._client.base_url)
+                    domain_parts = parsed_url.netloc.split('.')
 
-                # Check if there's a subdomain before "plato.so"
-                if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
-                    subdomain = domain_parts[0]
-                    proxy_server = f"https://{subdomain}.proxy.plato.so"
-                else:
-                    # No subdomain, use just proxy.plato.so
-                    proxy_server = "https://proxy.plato.so"
-            else:
-                raise PlatoClientError("Unknown base URL")
+                    # Check if there's a subdomain before "plato.so"
+                    if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                        subdomain = domain_parts[0]
+                        proxy_server = f"https://{subdomain}.proxy.plato.so"
+                    else:
+                        # No subdomain, use just proxy.plato.so
+                        proxy_server = "https://proxy.plato.so"
 
             return {
                 "server": proxy_server,

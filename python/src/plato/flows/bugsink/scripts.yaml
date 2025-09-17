@@ -15,40 +15,34 @@ flows:
 - name: login
   description: Complete login flow for Bugsink with verification
   steps:
-  - action: screenshot
-    description: Screenshot before login (initial page)
-    filename: 01_before_login.png
+  - action: navigate
+    url: '/accounts/login/'
+    description: Go to login page explicitly
   - action: wait
-    description: Wait for page to fully load
     duration: 5000
+    description: Wait for page to fully load
   - action: wait_for_selector
-    description: Wait for username field to be ready
     selector: input[name="username"]
     timeout: 10000
+    description: Wait for username field to be ready
   - action: fill
-    description: Fill username field
     selector: input[name="username"]
     value: $username
+    description: Fill username field
   - action: wait_for_selector
-    description: Wait for password field to be ready
     selector: input[name="password"]
     timeout: 5000
+    description: Wait for password field to be ready
   - action: fill
-    description: Fill password field
     selector: input[name="password"]
     value: $password
-  - action: screenshot
-    description: Screenshot after credentials entered, before submission
-    filename: 02_credentials_entered.png
+    description: Fill password field
   - action: click
+    selector: 'form[action="/accounts/login/"] button, button.bg-slate-800'
     description: Click login submit button
-    selector: button.bg-slate-800
   - action: wait
-    description: Wait for login to process
     duration: 5000
-  - action: screenshot
-    description: Screenshot after login attempt
-    filename: 03_after_login.png
+    description: Wait for login to process
   - action: verify_no_errors
     description: Verify no login errors are displayed
     error_selectors:
@@ -60,49 +54,43 @@ flows:
     - .auth-error
     - .error
     - .alert
-    - .o_error_detail
+  - action: verify_url
+    url: '/projects'
+    contains: true
+    description: Verify redirected to projects area
   - action: verify
-    description: Verify successful login by checking for main Odoo interface elements and Events specific elements
-    selector: .o_main_navbar, .o_action_manager, .o_control_panel, .o_kanban_view, .o_list_view, .o_form_view, .o_menu_sections, .o_event_menu
     type: element_exists
+    selector: 'form#logout-form button[type="submit"], a[href="/projects/"], h1:has-text("Projects")'
+    description: Verify successful login by checking for Projects page elements
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  - action: screenshot
-    description: Screenshot before incorrect login attempt
-    filename: 01_before_incorrect_login.png
   - action: wait
-    description: Wait for page to fully load
     duration: 3000
+    description: Wait for page to fully load
   - action: wait_for_selector
-    description: Wait for username/email field
     selector: input[name="username"]
     timeout: 15000
+    description: Wait for username/email field
   - action: fill
-    description: Fill username/email field with valid username
     selector: input[name="username"]
     value: $username
+    description: Fill username/email field with valid username
   - action: wait_for_selector
-    description: Wait for password field
     selector: input[name="password"]
     timeout: 5000
+    description: Wait for password field
   - action: fill
-    description: Fill password field with incorrect password
     selector: input[name="password"]
     value: $wrong_password
-  - action: screenshot
-    description: Screenshot after entering incorrect credentials
-    filename: 02_incorrect_credentials_entered.png
+    description: Fill password field with incorrect password
   - action: click
-    description: Click login submit button
     selector: button.bg-slate-800
+    description: Click login submit button
   - action: wait
-    description: Wait for login attempt to process
     duration: 3000
-  - action: screenshot
-    description: Screenshot after incorrect login attempt
-    filename: 03_after_incorrect_login.png
+    description: Wait for login attempt to process
   - action: verify
-    description: Verify error message is displayed
-    selector: .alert-danger, .error-message, .invalid-feedback
     type: element_exists
+    selector: .alert-danger, .error-message, .invalid-feedback
+    description: Verify error message is displayed

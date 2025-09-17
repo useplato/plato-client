@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
 from plato.config import get_config
 from plato.models import PlatoTask
+from plato.models.task import ScoringType
 from plato.exceptions import PlatoClientError
 from plato.models.task import EvaluationResult
 from plato.sync_env import SyncPlatoEnvironment
@@ -179,6 +180,27 @@ class SyncPlato:
             raise PlatoClientError(data["error"])
         return data["data"]["cdp_url"]
 
+    def get_proxy_url(self, job_id: str) -> str:
+        """Get the proxy URL for a job.
+
+        Args:
+            job_id (str): The ID of the job to get the proxy URL for.
+
+        Returns:
+            str: The proxy URL for the job.
+
+        Raises:
+            PlatoClientError: If the API request fails or returns an error.
+            requests.RequestException: If the API request fails.
+        """
+        response = self.http_session.get(f"{self.base_url}/env/{job_id}/proxy_url")
+        data = response.json()
+        if data["error"] is not None:
+            raise PlatoClientError(data["error"])
+        return data["data"]["proxy_url"]
+
+
+
     def close_environment(self, job_id: str) -> Dict[str, Any]:
         """Close an environment.
 
@@ -336,11 +358,12 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
-    def evaluate(self, session_id: str, agent_version: Optional[str] = None) -> Dict[str, Any]:
+    def evaluate(self, session_id: str, value: Optional[Any] = None, agent_version: Optional[str] = None) -> Dict[str, Any]:
         """Evaluate the environment.
 
         Args:
             session_id (str): The ID of the session to evaluate.
+            value (Optional[Any]): Optional value to include in the evaluation request.
             agent_version (Optional[str]): Optional agent version.
 
         Returns:
@@ -349,8 +372,13 @@ class SyncPlato:
         Raises:
             requests.RequestException: If the API request fails.
         """
+        body = {}
+        if value is not None:
+            body = {"value": value}
+
         response = self.http_session.post(
             f"{self.base_url}/env/session/{session_id}/evaluate",
+            json=body,
         )
         self._handle_response_error(response)
         res_data = response.json()
@@ -459,6 +487,9 @@ class SyncPlato:
                 average_steps=t.get("averageStepsTaken"),
                 num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
                 default_scoring_config=t.get("defaultScoringConfig", {}),
+                scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
+                output_schema=t.get("outputSchema"),
+                is_sample=t.get("isSample", False),
             )
             for t in test_cases
         ]

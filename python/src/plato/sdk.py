@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoEnvironment
+from plato.models.task import ScoringType
 from plato.exceptions import PlatoClientError
 from plato.models.task import EvaluationResult
 
@@ -195,6 +196,21 @@ class Plato:
                 raise PlatoClientError(data["error"])
             return data["data"]["cdp_url"]
 
+    async def get_proxy_url(self, job_id: str) -> str:
+        """Get the proxy URL for a job.
+
+        Args:
+            job_id (str): The ID of the job to get the proxy URL for.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/env/{job_id}/proxy_url", headers=headers
+        ) as response:
+            data = await response.json()
+            if data["error"] is not None:
+                raise PlatoClientError(data["error"])
+            return data["data"]["proxy_url"]
+
     async def close_environment(self, job_id: str) -> Dict[str, Any]:
         """Close an environment.
 
@@ -380,17 +396,24 @@ class Plato:
             return await response.json()
 
     async def evaluate(
-        self, session_id: str, agent_version: Optional[str] = None
+        self, session_id: str, value: Optional[Any] = None, agent_version: Optional[str] = None
     ) -> Dict[str, Any]:
         """Evaluate the environment.
 
         Args:
             session_id (str): The ID of the session to evaluate.
+            value (Optional[Any]): Optional value to include in the evaluation request.
+            agent_version (Optional[str]): Optional agent version.
         """
         headers = {"X-API-Key": self.api_key}
+        body = {}
+        if value is not None:
+            body = {"value": value}
+
         async with self.http_session.post(
             f"{self.base_url}/env/session/{session_id}/evaluate",
             headers=headers,
+            json=body,
         ) as response:
             await self._handle_response_error(response)
             res_data = await response.json()
@@ -487,6 +510,9 @@ class Plato:
                     average_steps=t.get("averageStepsTaken"),
                     num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
                     default_scoring_config=t.get("defaultScoringConfig", {}),
+                    scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
+                    output_schema=t.get("outputSchema"),
+                    is_sample=t.get("isSample", False),
                 )
                 for t in test_cases
             ]
@@ -549,6 +575,137 @@ class Plato:
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
             f"{self.base_url}/user/organization/running-sessions", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+
+    # Gitea-related methods for hub commands
+
+    async def get_gitea_info(self) -> Dict[str, Any]:
+        """Get the current user's Gitea info (auto-provisions if needed).
+
+        Returns:
+            Dict[str, Any]: User's Gitea information including username and org_name.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If user doesn't have admin access.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/gitea/my-info", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+
+    async def list_gitea_simulators(self) -> List[Dict[str, Any]]:
+        """Get simulators that user has access to view repos for.
+
+        Returns:
+            List[Dict[str, Any]]: List of simulators with repository info.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/gitea/simulators", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+
+    async def get_simulator_repository(self, simulator_id: int) -> Dict[str, Any]:
+        """Get repository details for a specific simulator.
+
+        Args:
+            simulator_id (int): The ID of the simulator to get repository info for.
+
+        Returns:
+            Dict[str, Any]: Repository information for the simulator.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If simulator not found or access denied.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/gitea/simulators/{simulator_id}/repo", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+
+    async def get_gitea_credentials(self) -> Dict[str, Any]:
+        """Get Gitea admin credentials for the organization.
+
+        Returns:
+            Dict[str, Any]: Gitea credentials including username and password.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If user doesn't have access.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.get(
+            f"{self.base_url}/gitea/credentials", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+
+    async def create_simulator(self, name: str, description: str = None, sim_type: str = "docker_app") -> Dict[str, Any]:
+        """Create a new simulator.
+
+        Args:
+            name (str): The name of the simulator
+            description (str, optional): Description of the simulator
+            sim_type (str, optional): Type of simulator (default: docker_app)
+
+        Returns:
+            Dict[str, Any]: Created simulator information.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If creation fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+
+        # Basic simulator configuration
+        simulator_data = {
+            "name": name,
+            "description": description or f"Simulator for {name}",
+            "simType": sim_type,
+            "enabled": True,
+            "config": {
+                "image_name": f"plato-{name}:latest",
+                "internal_app_port": 80,
+                "supported_providers": ["ecs_service", "ecs_task"]
+            }
+        }
+
+        async with self.http_session.post(
+            f"{self.base_url}/env/simulators",
+            json=simulator_data,
+            headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+
+    async def create_simulator_repository(self, simulator_id: int) -> Dict[str, Any]:
+        """Create a repository for a simulator.
+
+        Args:
+            simulator_id (int): The ID of the simulator to create repository for.
+
+        Returns:
+            Dict[str, Any]: Created repository information.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If creation fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/gitea/simulators/{simulator_id}/repo",
+            headers=headers
         ) as response:
             await self._handle_response_error(response)
             return await response.json()

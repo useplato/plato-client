@@ -13,87 +13,79 @@ datasets:
   - incorrect_login
 flows:
 - name: login
-  description: Login flow for Cal.com
+  description: Complete login flow for Cal.com with verification
   steps:
-  - action: screenshot
-    description: Screenshot before login (initial page)
-    filename: 01_before_login.png
+  - action: navigate
+    url: '/auth/login'
+    description: Navigate directly to login page
   - action: wait
+    duration: 3000
     description: Wait for page to fully load
-    duration: 5000
   - action: wait_for_selector
-    description: Wait for email/username field
-    selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
+    selector: 'input[name="email"], input[type="email"], #email'
     timeout: 15000
+    description: Wait for email field
   - action: fill
-    description: Fill email/username field
-    selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
+    selector: 'input[name="email"], input[type="email"], #email'
     value: $username
+    description: Fill email field
   - action: wait_for_selector
-    description: Wait for password field
     selector: 'input[name="password"], input[type="password"], #password'
-    timeout: 5000
+    timeout: 10000
+    description: Wait for password field
   - action: fill
-    description: Fill password field
     selector: 'input[name="password"], input[type="password"], #password'
     value: $password
-  - action: screenshot
-    description: Screenshot after credentials entered, before submission
-    filename: 02_credentials_entered.png
+    description: Fill password field
+  - action: wait_for_selector
+    selector: 'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Login")'
+    timeout: 10000
+    description: Wait for submit button
   - action: click
+    selector: 'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Login")'
     description: Click login submit button
-    selector: button[type="submit"], input[type="submit"], .btn-primary
   - action: wait
-    description: Wait for login to process
-    duration: 3000
-  - action: screenshot
-    description: Screenshot after login attempt
-    filename: 03_after_login.png
+    duration: 5000
+    description: Wait for login to process and redirect
+  - action: navigate
+    url: https://sims.plato.so
+    description: Redirect to sims.plato.so
   - action: wait
-    description: Wait for possible redirection or loading
-    duration: 10000
+    duration: 5000
+    description: Wait for redirect to complete
   - action: verify
-    description: Verify successful login by checking for main application interface
-    selector: nav, .sidebar, [data-testid*="shell"], [class*="navigation"], [class*="dashboard"], [class*="event"], .main-content
     type: element_exists
+    selector: '[data-testid="dashboard-shell"], [data-test-id="event_types_page_title"], #view_public_page, h3:has-text("Event Types")'
+    description: Verify Event Types dashboard loaded after redirect
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  - action: screenshot
-    description: Screenshot before incorrect login attempt
-    filename: 01_before_incorrect_login.png
   - action: wait
-    description: Wait for page to fully load
     duration: 3000
+    description: Wait for page to fully load
   - action: wait_for_selector
-    description: Wait for username/email field
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
     timeout: 15000
+    description: Wait for username/email field
   - action: fill
-    description: Fill username/email field with valid username
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
     value: $username
+    description: Fill username/email field with valid username
   - action: wait_for_selector
-    description: Wait for password field
     selector: 'input[name="password"], input[type="password"], #password'
     timeout: 5000
+    description: Wait for password field
   - action: fill
-    description: Fill password field with incorrect password
     selector: 'input[name="password"], input[type="password"], #password'
     value: $wrong_password
-  - action: screenshot
-    description: Screenshot after entering incorrect credentials
-    filename: 02_incorrect_credentials_entered.png
+    description: Fill password field with incorrect password
   - action: click
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary'
     description: Click login submit button
-    selector: button[type="submit"], input[type="submit"], .btn-primary
   - action: wait
-    description: Wait for login attempt to process
     duration: 3000
-  - action: screenshot
-    description: Screenshot after incorrect login attempt
-    filename: 03_after_incorrect_login.png
+    description: Wait for login attempt to process
   - action: verify
-    description: Verify error message is displayed
-    selector: '[data-testid="error-message"], [role="alert"], .text-red-500, .text-error, [class*="error"], .alert'
     type: element_exists
+    selector: '[data-testid="error-message"], [role="alert"], .text-red-500, .text-error, [class*="error"], .alert'
+    description: Verify error message is displayed

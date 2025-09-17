@@ -73,7 +73,7 @@ class SimulatorTestMetrics:
             "error": self.error
         }
 
-async def test_login_functionality(env, page, simulator_name: str, test_id: str) -> tuple[bool, bool]:
+async def test_login_functionality(env:PlatoEnvironment, page, simulator_name: str, test_id: str) -> tuple[bool, bool]:
     """
     Test login functionality using the environment's built-in login method.
     Returns (login_attempted, login_successful)
@@ -93,7 +93,7 @@ async def test_login_functionality(env, page, simulator_name: str, test_id: str)
         try:
             # Use the environment's built-in login method
             login_attempted = True
-            await env.login(page)
+            await env.login(page, screenshots_dir=Path(SCREENSHOTS_DIR / f"{simulator_name}_{test_id}"), throw_on_login_error=True)
             login_successful = True
             print(f"Login completed successfully for {simulator_name}")
             
