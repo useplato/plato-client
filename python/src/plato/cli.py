@@ -325,6 +325,110 @@ def git(ctx: typer.Context):
 
 
 @hub_app.command()
+def guide():
+    """Complete guide to Plato sandboxing and development workflow."""
+
+    guide_content = """
+[bold blue]🚀 Plato Sandbox Development Guide[/bold blue]
+
+[bold cyan]═══ What is Plato Sandboxing? ═══[/bold cyan]
+
+Plato sandboxes let you create [bold]simulations[/bold] of your applications. The goal is to:
+1. Get your app running in a cloud environment
+2. Start Plato listeners to track mutations (database changes, file changes)
+3. Create snapshots that capture your app's behavior
+4. [bold green]Voilà! You have a simulation[/bold green] that can replay interactions
+
+[bold cyan]═══ The Simulation Creation Process ═══[/bold cyan]
+
+[bold yellow]Step 1: Get Your App Running[/bold yellow]
+   Option A: [dim]ssh plato-sandbox-<vm-id>[/dim] → Connect directly and start manually
+   Option B: Use menu [bold]1[/bold] → Start Services (launches docker-compose.yml)
+
+[bold yellow]Step 2: Start Mutation Tracking[/bold yellow]
+   Use menu [bold]2[/bold] → Start Listeners (Plato worker monitors your app)
+
+[bold yellow]Step 3: Create Your Simulation[/bold yellow]
+   Use menu [bold]4[/bold] → Create VM snapshot
+   [bold green]🎉 Your simulation is ready![/bold green]
+
+[bold cyan]═══ Quick Start Workflow ═══[/bold cyan]
+
+[bold yellow]1. Setup[/bold yellow]
+   plato hub link <simulator-name>
+   plato hub login
+   plato hub sandbox
+
+[bold yellow]2. Interactive Menu[/bold yellow]
+   ┌────────────────────────────────────────┐
+   │ 1 → Start Services     (your app)     │
+   │ 2 → Start Listeners    (track changes)│
+   │ 3 → Check Services Health             │
+   │ 5 → Check Listeners Health            │
+   │ 4 → Create Snapshot    (make sim!)    │
+   │ 7 → Backup state      8 → Reset state │
+   └────────────────────────────────────────┘
+
+[bold cyan]═══ Understanding the Components ═══[/bold cyan]
+
+[bold green]🔧 Your Application Environment[/bold green]
+  • Cloud VM with your code at /opt/plato
+  • Services can be Docker Compose, standalone apps, or anything else
+  • Start via Services menu OR direct SSH access
+
+[bold green]🎧 Plato Listeners (The Magic)[/bold green]
+  • Monitors database mutations (INSERT, UPDATE, DELETE)
+  • Tracks file system changes
+  • [bold]This mutation data becomes your simulation![/bold]
+
+[bold green]📸 Snapshots = Simulations[/bold green]
+  • Captures current state + recorded mutations
+  • Can be deployed and replayed elsewhere
+  • Your app's behavior becomes reusable
+
+[bold cyan]═══ Two Ways to Start Your App ═══[/bold cyan]
+
+[bold yellow]Method 1: Services Menu (Easy)[/bold yellow]
+   Choose [bold]1[/bold] → Runs your configured services (Docker Compose, etc.)
+
+[bold yellow]Method 2: Direct SSH (Manual)[/bold yellow]
+   [dim]ssh plato-sandbox-<vm-id>[/dim] → Connect directly
+   [dim]cd /opt/plato && docker compose up[/dim] → Start manually
+   [dim]npm start, python app.py, etc.[/dim] → Start any way you want
+
+[bold cyan]═══ Health Checks ═══[/bold cyan]
+
+Verify everything is working before snapshotting:
+• [bold]3[/bold] → Check Services Health (is your app running?)
+• [bold]5[/bold] → Check Listeners Health (is Plato tracking mutations?)
+
+Status meanings:
+• [bold green]healthy[/bold green] - Ready to create simulation!
+• [bold yellow]starting[/bold yellow] - Still booting up
+• [bold red]unhealthy/failed[/bold red] - Fix issues before snapshotting
+
+[bold cyan]═══ The End Result ═══[/bold cyan]
+
+After snapshotting, you have:
+✅ A [bold]simulation[/bold] that captures your app's behavior
+✅ Can be deployed to reproduce interactions
+✅ Database changes and file mutations are recorded
+✅ Ready for testing, demos, or production use
+
+[bold cyan]═══ Pro Tips ═══[/bold cyan]
+
+• Test your app thoroughly [bold]before[/bold] snapshotting
+• Use health checks to ensure listeners are recording
+• Snapshots capture the [bold]current moment[/bold] - make it count!
+• You can create multiple snapshots of different states
+
+[bold green]🎯 Goal: App Running → Listeners Recording → Snapshot → Simulation Ready![/bold green]
+"""
+
+    console.print(guide_content)
+
+
+@hub_app.command()
 def sandbox(
     config: str = typer.Option(
         "plato-config.yml", "--config", help="VM configuration file"
@@ -450,7 +554,7 @@ async def run_interactive_sandbox_menu(sandbox: Sandbox):
         elif choice == 8:
             await handle_sim_reset(sandbox)
         else:
-            console.print("[red]❌ Invalid choice. Please enter 0/1/2/4/7/8.[/red]")
+            console.print("[red]❌ Invalid choice. Please enter 0/1/2/3/4/5/7/8.[/red]")
 
 
 async def handle_create_snapshot(sandbox: Sandbox):
@@ -536,7 +640,25 @@ async def handle_start_services(sandbox: Sandbox):
         raise
 
     try:
-        await sandbox.start_services(dataset=dataset)
+        # Get timeout from service configuration, defaulting to a reasonable value
+        service_timeout = 900  # Default 15 minutes
+        if (sandbox.sandbox_info and
+            hasattr(sandbox.sandbox_info, 'dataset_config') and
+            sandbox.sandbox_info.dataset_config.services):
+            # Get the timeout from the main service (typically main_app)
+            main_service = None
+            for service_name, service_config in sandbox.sandbox_info.dataset_config.services.items():
+                if 'main' in service_name.lower() or service_name == 'main_app':
+                    main_service = service_config
+                    break
+            if not main_service and sandbox.sandbox_info.dataset_config.services:
+                # Fall back to first service if no main service found
+                main_service = next(iter(sandbox.sandbox_info.dataset_config.services.values()))
+
+            if main_service and hasattr(main_service, 'healthy_wait_timeout'):
+                service_timeout = main_service.healthy_wait_timeout
+
+        await sandbox.start_services(dataset=dataset, timeout=service_timeout)
     except Exception as e:
         console.print(f"[red]❌ Error starting services: {e}[/red]")
 

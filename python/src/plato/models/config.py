@@ -13,7 +13,6 @@ from pydantic import (
     ValidationError,
     model_validator,
     model_serializer,
-    ConfigDict,
 )
 from pydantic_core import PydanticCustomError
 
@@ -104,10 +103,10 @@ class SimConfigCompute(BaseModel):
     memory: int = Field(description="Memory in MB", ge=512, le=16384, default=2048)
     disk: int = Field(description="Disk space in MB", ge=1024, le=102400, default=10240)
     app_port: int = Field(
-        description="Application port", ge=1024, le=65535, default=8080
+        description="Application port", ge=0, le=65535, default=8080
     )
     plato_messaging_port: int = Field(
-        description="Plato messaging port", ge=1024, le=65535, default=7000
+        description="Plato messaging port", ge=0, le=65535, default=7000
     )
 
 
@@ -133,7 +132,7 @@ class SimConfigMetadata(BaseModel):
     flows_path: Optional[str] = Field(default=None, description="Flows path")
 
 
-class SimConfigService(AdaptiveObject):
+class SimConfigService(AdaptiveObject, ABC):
     """Base class for simulator service configurations."""
 
     type: Literal["docker-compose", "docker"] = Field(description="Service type")
@@ -157,7 +156,8 @@ class DockerComposeServiceConfig(SimConfigService):
         description="Timeout in seconds to wait for services to become healthy",
     )
 
-class SimConfigListener(AdaptiveObject):
+
+class SimConfigListener(AdaptiveObject, ABC):
     """Base class for mutation listener configurations."""
 
     type: Literal["db", "proxy", "file"] = Field(description="Listener type")

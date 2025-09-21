@@ -112,7 +112,7 @@ class Sandbox:
         vm_job_uuid = None
 
         try:
-            # Step 1: Load hub configuration
+            ## Step 1: Load hub configuration ##
             hub_config_file = ".plato-hub.json"
             if not os.path.exists(hub_config_file):
                 self.console.print(
@@ -139,18 +139,22 @@ class Sandbox:
             )
             self.console.print(sim_panel)
 
-            # Step 2: Load simulator configuration
-            sim_config_file = "plato-config.yml"
+            ## Step 2: Load simulator configuration ##
+            sim_config_file = "./plato-config.yml"
+            print(f"Sim config file: {sim_config_file}")
             if os.path.exists(sim_config_file):
                 try:
                     with open(sim_config_file, "r") as f:
                         raw_cfg = yaml.safe_load(f)
+                        print(f"Raw config: {raw_cfg}")
                     # Validate into SimConfig model to ensure attribute access like .datasets
                     sim_config = SimConfig.model_validate(raw_cfg)
+                    print(f"Sim config: {sim_config}")
                 except Exception as e:
                     self.console.print(
                         f"[yellow]⚠️  Could not load {sim_config_file}: {e}"
                     )
+
             else:
                 self.console.print(
                     f"[yellow]⚠️  No {sim_config_file} found in current directory"
@@ -191,7 +195,7 @@ class Sandbox:
             )
             self.console.print(cfg_panel)
 
-            # Step 3: Extract the dataset configuration
+            ## Step 3: Extract the dataset configuration ##
             dataset_config = sim_config.datasets[self.dataset]
             resources_panel = Panel.fit(
                 f"💻 CPUs: {dataset_config.compute.cpus}, Memory: {dataset_config.compute.memory}MB, Disk: {dataset_config.compute.disk}MB\n"
@@ -202,7 +206,7 @@ class Sandbox:
             )
             self.console.print(resources_panel)
 
-            # Step 4: Create development branch
+            ## Step 4: Create development branch ##
             branch_uuid = str(uuid.uuid4())[:8]
             dev_branch = f"dev-{branch_uuid}"
 
@@ -259,7 +263,7 @@ class Sandbox:
             )
             self.console.print(branch_panel)
 
-            # Step 5: Start VM with progress tracking
+            ## Step 5: Start VM with progress tracking ##
             vm_info = await self._init_vm(sim_name, dataset_config)
             vm_job_uuid = vm_info.vm_job_uuid
             self._vm_job_uuid = vm_job_uuid
@@ -272,8 +276,7 @@ class Sandbox:
             )
             self.console.print(vm_panel)
 
-            # Step 6: Setup Local SSH Key
-
+            ## Step 6: Setup Local SSH Key ##
             local_key_path, local_public_key = await self._setup_local_ssh_key()
             ssh_panel = Panel.fit(
                 f"[green]SSH key pair generated successfully![/green]\n"
@@ -283,7 +286,7 @@ class Sandbox:
             )
             self.console.print(ssh_panel)
 
-            # Step 7: Setup sandbox environment
+            ## Step 7: Setup sandbox environment ##
             ssh_url = await self._init_vm_sandbox(
                 vm_job_uuid,
                 dev_branch,
@@ -301,7 +304,7 @@ class Sandbox:
             )
             self.console.print(sandbox_panel)
 
-            # Step 8: Setup local chisel client
+            ##  Step 8: Setup local chisel client ##
             local_port = await self._setup_chisel_client(ssh_url)
             tunnel_panel = Panel.fit(
                 f"[green]Secure tunnel established successfully![/green]\n"
@@ -312,7 +315,7 @@ class Sandbox:
             )
             self.console.print(tunnel_panel)
 
-            # Step 9: Setup SSH config with password
+            ## Step 9: Setup SSH config with password ##
             ssh_host = await self._setup_ssh_config_with_password(
                 local_port, vm_job_uuid
             )
@@ -372,54 +375,87 @@ class Sandbox:
         try:
             if not self.sandbox_info:
                 raise Exception("Sandbox not initialized")
-            snapshot_request = {
-                "service": service,
-                "version": version,
-                "dataset": dataset,
-                "timeout": 1800,
-            }
-            if snapshot_name:
-                snapshot_request["snapshot_name"] = snapshot_name
-            self.console.print("📋 [cyan]Snapshot details:[/cyan]")
-            self.console.print(f"  • Service: {service}")
-            self.console.print(f"  • Version: {version}")
-            self.console.print(f"  • Dataset: {dataset}")
-            if snapshot_name:
-                self.console.print(f"  • Name: {snapshot_name}")
-            self.console.print("  • Timeout: 1800 seconds")
 
-            snapshot_response = await self.client.http_session.post(
-                f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/snapshot",
-                json=snapshot_request,
-                headers={"X-API-Key": self.client.api_key},
-            )
-            if snapshot_response.status == 200:
-                response_data = await snapshot_response.json()
-                self.console.print(
-                    f"✅ [green]Snapshot request submitted successfully[/green] {response_data}"
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+                transient=False,
+            ) as progress:
+                overall_task = progress.add_task(
+                    "[bold blue]📸 Creating VM snapshot...", total=100
                 )
-                correlation_id = response_data.get("correlation_id")
-                if correlation_id:
-                    self.console.print(
-                        f"🔗 Monitoring via SSE: {self.client.base_url}/public-build/events/{correlation_id}"
+
+                # Build request and submit
+                progress.update(
+                    overall_task,
+                    advance=0,
+                    description="[bold blue]📸 Submitting snapshot request...",
+                )
+
+                snapshot_request = {
+                    "service": service,
+                    "version": version,
+                    "dataset": dataset,
+                    "timeout": 1800,
+                }
+                snapshot_request["snapshot_name"] = snapshot_name
+
+                snapshot_response = await self.client.http_session.post(
+                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/snapshot",
+                    json=snapshot_request,
+                    headers={"X-API-Key": self.client.api_key},
+                )
+
+                if snapshot_response.status == 200:
+                    response_data = await snapshot_response.json()
+                    progress.update(
+                        overall_task,
+                        advance=10,
+                        description="[bold green] Snapshot request submitted...",
                     )
-                    success = await self._monitor_ssh_execution(
-                        self.client,
-                        correlation_id,
-                        "VM snapshot creation",
-                        timeout=1800,
-                    )
-                    if success:
+
+                    correlation_id = response_data.get("correlation_id")
+                    if correlation_id:
                         self.console.print(
-                            "🎉 [green]Snapshot created successfully![/green]"
+                            f"🔗 Monitoring via SSE: {self.client.base_url}/public-build/events/{correlation_id}"
                         )
+                        success = await self._monitor_ssh_execution(
+                            self.client,
+                            correlation_id,
+                            "VM snapshot creation",
+                            timeout=1800,
+                        )
+                        if success:
+                            progress.update(
+                                overall_task,
+                                advance=90,
+                                description="[bold green]✅ Snapshot created successfully![/bold green]",
+                            )
+                        else:
+                            progress.update(
+                                overall_task,
+                                completed=100,
+                                description="[bold red]❌ Snapshot creation failed or timed out[/bold red]",
+                            )
+                            raise Exception("Snapshot creation failed or timed out")
                     else:
-                        raise Exception("Snapshot creation failed or timed out")
+                        progress.update(
+                            overall_task,
+                            completed=100,
+                            description="[bold red]❌ No correlation_id received from snapshot response[/bold red]",
+                        )
+                        raise Exception(
+                            "No correlation_id received from snapshot response"
+                        )
                 else:
-                    raise Exception("No correlation_id received from snapshot response")
-            else:
-                error = await snapshot_response.text()
-                raise Exception(f"API Error: Failed to create snapshot: {error}")
+                    error = await snapshot_response.text()
+                    progress.update(
+                        overall_task,
+                        completed=100,
+                        description=f"[bold red]❌ API Error: Failed to create snapshot: {error}[/bold red]",
+                    )
+                    raise Exception(f"API Error: Failed to create snapshot: {error}")
         except Exception as e:
             raise Exception(f"Error creating snapshot: {e}")
 
@@ -488,7 +524,7 @@ class Sandbox:
         except Exception as e:
             raise Exception(f"Error creating environment reset: {e}")
 
-    async def start_services(self, dataset: str, timeout: int = 900) -> None:
+    async def start_services(self, dataset: str, timeout: int) -> None:
         """Start simulator services using the existing docker-compose in the repository."""
         try:
             if not self.sandbox_info:
@@ -517,6 +553,7 @@ class Sandbox:
                     json={
                         "dataset": dataset,
                         "plato_dataset_config": self.sandbox_info.dataset_config.model_dump(),
+                        "timeout": timeout,
                     },
                     headers={"X-API-Key": self.client.api_key},
                 )
@@ -555,7 +592,9 @@ class Sandbox:
                             advance=100,
                             description="[bold red]❌ No correlation_id received from services response[/bold red]",
                         )
-                        raise Exception("No correlation_id received from services response")
+                        raise Exception(
+                            "No correlation_id received from services response"
+                        )
                 else:
                     error = await services_response.text()
                     progress.update(
@@ -567,7 +606,7 @@ class Sandbox:
         except Exception as e:
             raise Exception(f"Unknown error starting services: {e}")
 
-    async def start_listeners( self,dataset: str, timeout: int = 600) -> None:
+    async def start_listeners(self, dataset: str, timeout: int = 600) -> None:
         """Start listeners and plato worker with the dataset configuration."""
         try:
             if not self.sandbox_info:
@@ -590,18 +629,19 @@ class Sandbox:
                     description="[bold blue]🚀 Starting listeners...",
                 )
 
-                # Build request payload using stored dataset config
+                # start listeners request
                 listeners_request = {
+                    "plato_worker_version": "prod-latest",
                     "dataset": dataset,
                     "plato_dataset_config": self.sandbox_info.dataset_config.model_dump(),
                 }
-                # Call the start-listeners endpoint
                 listeners_response = await self.client.http_session.post(
                     f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/start-listeners",
                     json=listeners_request,
                     headers={"X-API-Key": self.client.api_key},
                 )
 
+                # check if listeners started successfully
                 if listeners_response.status == 200:
                     response_data = await listeners_response.json()
                     progress.update(
@@ -845,6 +885,10 @@ class Sandbox:
                         raise Exception("Failed to setup sandbox environment")
 
                     ssh_url = setup_response_data["ssh_url"]
+                    # if running the api locally, replace the localhost:8080 with staging.plato.so
+                    ssh_url = ssh_url.replace(
+                        "http://localhost:8080", "https://staging.plato.so"
+                    )
                     correlation_id = setup_response_data["correlation_id"]
 
                 except Exception as e:
@@ -1036,20 +1080,22 @@ class Sandbox:
                             if event_type == "completed":
                                 stdout = event_data.get("stdout", "")
                                 stderr = event_data.get("stderr", "")
-                                if stdout and stdout.strip():
-                                    self.console.print(
-                                        "📤 [green]Command Output:[/green]"
-                                    )
-                                    for line in stdout.strip().split("\n"):
-                                        self.console.print(f"   {line}")
-                                if stderr and stderr.strip():
+
+                                # Show only the final success line from stdout if available
+                                if stdout and "✅" in stdout:
+                                    success_lines = [line for line in stdout.strip().split("\n") if "✅" in line]
+                                    if success_lines:
+                                        self.console.print(f"   {success_lines[-1]}")
+
+                                # Show only important errors (filtered)
+                                if stderr:
                                     filtered_stderr = _filter_ssh_warnings(stderr)
                                     if filtered_stderr and filtered_stderr.strip():
-                                        self.console.print(
-                                            "📤 [red]Error Output:[/red]"
-                                        )
-                                        for line in filtered_stderr.strip().split("\n"):
-                                            self.console.print(f"   {line}")
+                                        error_lines = [line for line in filtered_stderr.strip().split("\n") if line.strip() and not line.startswith("Warning:")]
+                                        if error_lines:
+                                            self.console.print("📤 [yellow]Errors:[/yellow]")
+                                            for line in error_lines:
+                                                self.console.print(f"   {line}")
 
                                 return SSHExecutionResult(
                                     success=True,
