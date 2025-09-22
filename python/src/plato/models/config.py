@@ -232,8 +232,8 @@ class SimConfigDataset(BaseModel):
 
     compute: SimConfigCompute = Field(description="Compute configuration")
     metadata: SimConfigMetadata = Field(description="Metadata configuration")
-    services: dict[str, SimConfigService] = Field(description="Services")
-    listeners: dict[str, SimConfigListener] = Field(description="Listeners")
+    services: Optional[dict[str, SimConfigService]] = Field(description="Services")
+    listeners: Optional[dict[str, SimConfigListener]] = Field(description="Listeners")
 
 
 class SimConfig(BaseModel):

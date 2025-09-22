@@ -588,7 +588,7 @@ async def handle_create_snapshot(sandbox: Sandbox):
 
     # Execute snapshot
     await sandbox.snapshot(
-        service=service,
+        service=f"{service}",
         version=version,
         dataset=dataset,
         snapshot_name=snapshot_name or "",
@@ -601,11 +601,7 @@ async def handle_sim_backup(sandbox: Sandbox):
     console.print("[cyan]💾 Creating simulator backup...[/cyan]")
 
     try:
-        result = await sandbox.backup()
-        if result.success:
-            console.print("[green]✅ Backup created successfully[/green]")
-        else:
-            console.print(f"[red]❌ Backup failed: {result.error}[/red]")
+        await sandbox.backup()
     except Exception as e:
         console.print(f"[red]❌ Error creating backup: {e}[/red]")
 
@@ -615,11 +611,7 @@ async def handle_sim_reset(sandbox: Sandbox):
     console.print("[cyan]🔄 Resetting simulator environment...[/cyan]")
 
     try:
-        result = await sandbox.reset()
-        if result.success:
-            console.print("[green]✅ Simulator reset successfully[/green]")
-        else:
-            console.print(f"[red]❌ Reset failed: {result.error}[/red]")
+        await sandbox.reset()
     except Exception as e:
         console.print(f"[red]❌ Error resetting simulator: {e}[/red]")
 

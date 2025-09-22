@@ -399,7 +399,16 @@ class Sandbox:
                     "dataset": dataset,
                     "timeout": 1800,
                 }
-                snapshot_request["snapshot_name"] = snapshot_name
+                if snapshot_name:
+                    snapshot_request["snapshot_name"] = snapshot_name
+
+                self.console.print(f"📋 [cyan]Snapshot details:[/cyan]")
+                self.console.print(f"  • Service: {service}")
+                self.console.print(f"  • Version: {version}")
+                self.console.print(f"  • Dataset: {dataset}")
+                if snapshot_name:
+                    self.console.print(f"  • Name: {snapshot_name}")
+                self.console.print(f"  • Timeout: 1800 seconds")
 
                 snapshot_response = await self.client.http_session.post(
                     f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/snapshot",
@@ -414,6 +423,8 @@ class Sandbox:
                         advance=10,
                         description="[bold green] Snapshot request submitted...",
                     )
+
+                    self.console.print(f"🔗 [cyan]Snapshot request submitted:[/cyan] {response_data}")  
 
                     correlation_id = response_data.get("correlation_id")
                     if correlation_id:
@@ -514,10 +525,20 @@ class Sandbox:
             )
             if reset_response.status == 200:
                 reset_response_json = await reset_response.json()
-                self.console.print(
-                    f"✅ [green]Environment reset completed successfully[/green] {reset_response_json}"
-                )
-                return reset_response_json
+                # Handle both dict and object responses - sorry for being an idiot and not handling this properly
+                if isinstance(reset_response_json, dict):
+                    success = reset_response_json.get('success', False)
+                    error = reset_response_json.get('error')
+                else:
+                    success = getattr(reset_response_json, 'success', False)
+                    error = getattr(reset_response_json, 'error', None)
+                
+                if success:
+                    self.console.print(
+                        f"✅ [green]Environment reset completed successfully[/green] {reset_response_json}"
+                    )
+                else:
+                    raise Exception(f"Failed to reset environment: {error or 'Unknown error'}")
             else:
                 error = await reset_response.text()
                 raise Exception(f"Failed to reset environment: {error}")
@@ -946,8 +967,9 @@ class Sandbox:
                                     elif event_data.get("event_type") == "failed":
                                         error = event_data.get("error", "Unknown error")
                                         message = event_data.get("message", "")
-                                        stdout = event_data.get("stdout", "")
-                                        stderr = event_data.get("stderr", "")
+                                        # Handle null values
+                                        stdout = event_data.get("stdout") or ""
+                                        stderr = event_data.get("stderr") or ""
 
                                         error_details = f"Sandbox setup failed: {error}"
                                         if message:
@@ -1018,7 +1040,8 @@ class Sandbox:
                 client, correlation_id, operation_name, timeout
             )
             return result.success
-        except Exception:
+        except Exception as e:
+            raise Exception(f"Error monitoring {operation_name}: {e}")
             return False
 
     async def _monitor_ssh_execution_with_data(
@@ -1062,11 +1085,13 @@ class Sandbox:
                     raise Exception(
                         f"Failed to connect to event stream: {response.status}"
                     )
+                
 
                 async for line in response.content:
                     if time.time() - start_time > timeout:
                         raise Exception(f"Operation timed out after {timeout} seconds")
-
+                    
+               
                     line_str = line.decode("utf-8").strip()
                     if line_str.startswith("data: "):
                         try:
@@ -1074,12 +1099,14 @@ class Sandbox:
                             decoded_data = base64.b64decode(encoded_data).decode(
                                 "utf-8"
                             )
+                            self.console.print(f"🔗 Decoded data: {decoded_data}")
                             event_data = __import__("json").loads(decoded_data)
                             event_type = event_data.get("event_type", "unknown")
 
                             if event_type == "completed":
-                                stdout = event_data.get("stdout", "")
-                                stderr = event_data.get("stderr", "")
+                                # Handle null values from snapshot operations
+                                stdout = event_data.get("stdout") or ""
+                                stderr = event_data.get("stderr") or ""
 
                                 # Show only the final success line from stdout if available
                                 if stdout and "✅" in stdout:
@@ -1106,8 +1133,9 @@ class Sandbox:
 
                             elif event_type == "failed":
                                 error = event_data.get("error", "Unknown error")
-                                stdout = event_data.get("stdout", "")
-                                stderr = event_data.get("stderr", "")
+                                # Handle null values from snapshot operations
+                                stdout = event_data.get("stdout") or ""
+                                stderr = event_data.get("stderr") or ""
                                 self.console.print(
                                     f"❌ [red]{operation_name} failed: {error}[/red]"
                                 )
@@ -1133,7 +1161,8 @@ class Sandbox:
                                     event_data=event_data,
                                     error=error,
                                 )
-                        except Exception:
+                        except Exception as e:
+                            raise Exception(f"Error monitoring {operation_name}: {e}")
                             continue
 
         except Exception as e:
