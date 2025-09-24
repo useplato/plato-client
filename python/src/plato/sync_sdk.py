@@ -92,6 +92,8 @@ class SyncPlato:
         alias: Optional[str] = None,
         fast: bool = False,
         version: Optional[str] = None,
+        tag: Optional[str] = None,
+        dataset: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -131,6 +133,8 @@ class SyncPlato:
                 "alias": alias,
                 "fast": fast,
                 "version": version,
+                "tag": tag,
+                "dataset": dataset,
             },
         )
         self._handle_response_error(response)
