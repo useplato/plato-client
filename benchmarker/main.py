@@ -3,6 +3,7 @@ import os
 import argparse
 import traceback
 import logging
+import aiohttp
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -38,6 +39,80 @@ PLATO_BASE_URL = os.environ.get("PLATO_BASE_URL", "https://plato.so/api")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please set it in your .env file."
+
+
+def will_autoscore(task: PlatoTask) -> bool:
+    """
+    Determine if a testcase will autoscore based on its scoring configuration.
+    
+    Args:
+        task: The PlatoTask to check
+        
+    Returns:
+        bool: True if the task will autoscore, False if it requires human validation
+    """
+    if not task.default_scoring_config:
+        # No scoring config means likely human scoring
+        return False
+    
+    scoring_type = task.default_scoring_config.get("type")
+    
+    # Automatic scoring types
+    autoscoring_types = {
+        "system_scoring",
+        "state_mutation_match", 
+        "json_schema",
+        "api",
+        "offline_exact_action_match",
+        "offline_exact_state_match", 
+        "offline_exact_output_match",
+        "offline_step",
+        "page_action_sequence",
+        "real_evals_state_check",
+        "real_evals_response_check",
+        "custom",  # Usually automatic
+        "composite"  # Depends on constituent scorers, assume auto for now
+    }
+    
+    # Human validation required types
+    human_scoring_types = {
+        "human_in_the_loop",
+        "criteria"  # Usually requires human evaluation
+    }
+    
+    if scoring_type in autoscoring_types:
+        return True
+    elif scoring_type in human_scoring_types:
+        return False
+    else:
+        # Unknown scoring type - check if it has human validation scores
+        # If num_validator_human_scores > 0, it likely requires human validation
+        if task.num_validator_human_scores and task.num_validator_human_scores > 0:
+            return False
+        # Default to assuming autoscoring for unknown types
+        return True
+
+
+def get_scoring_info(task: PlatoTask) -> str:
+    """
+    Get a human-readable description of the scoring method for a task.
+    
+    Args:
+        task: The PlatoTask to describe
+        
+    Returns:
+        str: Description of scoring method
+    """
+    if not task.default_scoring_config:
+        return "No scoring config (likely human)"
+    
+    scoring_type = task.default_scoring_config.get("type", "unknown")
+    will_auto = will_autoscore(task)
+    
+    human_scores = task.num_validator_human_scores or 0
+    
+    return f"{scoring_type} ({'auto' if will_auto else 'human'}) [human_scores: {human_scores}]"
+
 
 # Task set configuration
 TASK_SETS = {
@@ -319,6 +394,11 @@ async def main():
         type=int,
         help="Filter tasks to only include those where num_validator_human_scores <= this value",
     )
+    parser.add_argument(
+        "--autoscore-only", 
+        action="store_true",
+        help="Only run tasks that will autoscore (no human validation required)"
+    )
     args = parser.parse_args()
 
     client = Plato(api_key=PLATO_API_KEY, base_url=PLATO_BASE_URL)
@@ -339,29 +419,130 @@ async def main():
           simulator_choice = input("Select simulator (name): ")
           selected_simulator = next(s for s in simulators if s["name"] == simulator_choice)
           selected_simulator_name = selected_simulator["name"]
+    
+    headers = {
+        "X-API-Key": PLATO_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    request_url = f"{PLATO_BASE_URL}/testcases?simulator_id={selected_simulator["id"]}&page_size=1000"
+    
+    print(f"DEBUG: Making request to: {request_url}")
+    print(f"DEBUG: Headers: {headers}")
+    print(f"DEBUG: PLATO_BASE_URL: {PLATO_BASE_URL}")
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(request_url, headers=headers) as response:
+            print(f"DEBUG: Response status: {response.status}")
+            print(f"DEBUG: Response headers: {dict(response.headers)}")
+            
+            if response.status >= 400:
+                error_text = await response.text()
+                print(f"DEBUG: Error response body: {error_text}")
+                raise Exception(f"API request failed with status {response.status}: {error_text}")
+                
+            res = await response.json()
+            test_cases = res["testcases"]
+            print(f"DEBUG: Got {len(test_cases)} test cases from API")
+            print(f"DEBUG: First few test case names: {[tc.get('name', 'NO_NAME') for tc in test_cases[:5]]}")
+            
+            # Check for pagination or other response metadata
+            print(f"DEBUG: Full response keys: {list(res.keys())}")
+            if "pagination" in res:
+                print(f"DEBUG: Pagination info: {res['pagination']}")
+                
+            simulator_tasks = [
+                PlatoTask(
+                    public_id=t["publicId"],
+                    name=t["name"],
+                    prompt=t["prompt"],
+                    start_url=t["startUrl"],
+                    env_id=t["simulator"]["name"],
+                    average_time=t.get("averageTimeTaken"),
+                    average_steps=t.get("averageStepsTaken"),
+                    num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
+                    default_scoring_config=t.get("defaultScoringConfig", {}),
+                    scoring_type=[],  # We don't need this for benchmarking
+                    output_schema=t.get("outputSchema"),
+                    is_sample=t.get("isSample", False),
+                )
+                for t in test_cases
+            ]
 
-    # Get tasks for the selected simulator
-    simulator_tasks = await client.load_tasks(selected_simulator_name)
+    # Debug: Print all tasks and their is_sample values
+    print(f"\nDebugging is_sample values for {len(simulator_tasks)} tasks:")
+    for i, task in enumerate(simulator_tasks[:10]):  # Show first 10 tasks
+        is_sample_val = getattr(task, 'is_sample', 'NOT_SET')
+        print(f"  Task {i+1}: {task.name} -> is_sample = {is_sample_val} (type: {type(is_sample_val)})")
+    if len(simulator_tasks) > 10:
+        print(f"  ... and {len(simulator_tasks) - 10} more tasks")
+
+    # Filter out sample tasks (only exclude tasks where is_sample is explicitly True)
+    original_count = len(simulator_tasks)
+    simulator_tasks = [
+        task for task in simulator_tasks
+        if getattr(task, 'is_sample', None) is not True
+    ]
+    sample_filtered_count = len(simulator_tasks)
+    if sample_filtered_count < original_count:
+        print(f"Filtered out sample tasks: {original_count} -> {sample_filtered_count}")
+    else:
+        print(f"No sample tasks found to filter out")
 
     # Filter tasks based on max_num_validator_human_scores if specified
     if args.max_num_validator_human_scores is not None:
-        original_count = len(simulator_tasks)
+        score_original_count = len(simulator_tasks)
         simulator_tasks = [
             task for task in simulator_tasks
             if task.num_validator_human_scores is None or (task.num_validator_human_scores > 0 and task.num_validator_human_scores <= args.max_num_validator_human_scores)
         ]
-        filtered_count = len(simulator_tasks)
-        print(f"Filtered tasks: {original_count} -> {filtered_count} (max_num_validator_human_scores <= {args.max_num_validator_human_scores})")
+        score_filtered_count = len(simulator_tasks)
+        print(f"Filtered tasks by validator scores: {score_original_count} -> {score_filtered_count} (max_num_validator_human_scores <= {args.max_num_validator_human_scores})")
+
+    # Filter tasks based on scoring type if specified
+    if args.autoscore_only:
+        autoscore_original_count = len(simulator_tasks)
+        simulator_tasks = [task for task in simulator_tasks if will_autoscore(task)]
+        autoscore_filtered_count = len(simulator_tasks)
+        print(f"Filtered to autoscore-only tasks: {autoscore_original_count} -> {autoscore_filtered_count}")
+    else:
+        # Interactive filtering if no command line args provided
+        if not args.task_name:
+            # Show scoring statistics
+            autoscore_count = sum(1 for task in simulator_tasks if will_autoscore(task))
+            manual_count = len(simulator_tasks) - autoscore_count
+            
+            print(f"\n📊 Scoring Statistics for {selected_simulator_name}:")
+            print(f"  🤖 Autoscore tasks: {autoscore_count}")
+            print(f"  👥 Manual scoring tasks: {manual_count}")
+            print(f"  📈 Autoscore rate: {autoscore_count/len(simulator_tasks)*100:.1f}%" if simulator_tasks else "0%")
+            
+            # Ask if user wants only autoscore tasks
+            autoscore_only = input(f"\nRun only autoscore tasks ({autoscore_count} available)? (y/n): ").lower().strip()
+            
+            if autoscore_only == 'y' or autoscore_only == 'yes':
+                simulator_tasks = [task for task in simulator_tasks if will_autoscore(task)]
+                print(f"✅ Filtered to {len(simulator_tasks)} autoscore-only tasks")
+            else:
+                print("✅ Running all tasks (autoscore + manual)")
 
     for task in simulator_tasks:
         print(f"{task.name}")
 
-    task_choice = args.task_name or input("Input comma separated task names or 'all' for all tasks: ")
+    task_choice = args.task_name or input("\nInput comma separated task names or 'all' for all tasks: ")
     if task_choice.lower() == 'all':
         tests_to_run = simulator_tasks
     else:
-        task_names = task_choice.split(",")
+        task_names = [name.strip() for name in task_choice.split(",")]
         tests_to_run = [t for t in simulator_tasks if t.name in task_names]
+        
+        # Debug: Show which tasks were found and which weren't
+        found_tasks = [t.name for t in tests_to_run]
+        missing_tasks = [name for name in task_names if name not in found_tasks]
+        if missing_tasks:
+            print(f"Warning: The following tasks were not found: {missing_tasks}")
+        if found_tasks:
+            print(f"Found {len(found_tasks)} tasks to run: {found_tasks}")
 
     if args.agent:
         agent_version = args.agent
