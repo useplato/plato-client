@@ -3,7 +3,6 @@ import os
 import argparse
 import traceback
 import logging
-import aiohttp
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -420,62 +419,8 @@ async def main():
           selected_simulator = next(s for s in simulators if s["name"] == simulator_choice)
           selected_simulator_name = selected_simulator["name"]
     
-    headers = {
-        "X-API-Key": PLATO_API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    request_url = f"{PLATO_BASE_URL}/testcases?simulator_id={selected_simulator["id"]}&page_size=1000"
-    
-    print(f"DEBUG: Making request to: {request_url}")
-    print(f"DEBUG: Headers: {headers}")
-    print(f"DEBUG: PLATO_BASE_URL: {PLATO_BASE_URL}")
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.get(request_url, headers=headers) as response:
-            print(f"DEBUG: Response status: {response.status}")
-            print(f"DEBUG: Response headers: {dict(response.headers)}")
-            
-            if response.status >= 400:
-                error_text = await response.text()
-                print(f"DEBUG: Error response body: {error_text}")
-                raise Exception(f"API request failed with status {response.status}: {error_text}")
-                
-            res = await response.json()
-            test_cases = res["testcases"]
-            print(f"DEBUG: Got {len(test_cases)} test cases from API")
-            print(f"DEBUG: First few test case names: {[tc.get('name', 'NO_NAME') for tc in test_cases[:5]]}")
-            
-            # Check for pagination or other response metadata
-            print(f"DEBUG: Full response keys: {list(res.keys())}")
-            if "pagination" in res:
-                print(f"DEBUG: Pagination info: {res['pagination']}")
-                
-            simulator_tasks = [
-                PlatoTask(
-                    public_id=t["publicId"],
-                    name=t["name"],
-                    prompt=t["prompt"],
-                    start_url=t["startUrl"],
-                    env_id=t["simulator"]["name"],
-                    average_time=t.get("averageTimeTaken"),
-                    average_steps=t.get("averageStepsTaken"),
-                    num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
-                    default_scoring_config=t.get("defaultScoringConfig", {}),
-                    scoring_type=[],  # We don't need this for benchmarking
-                    output_schema=t.get("outputSchema"),
-                    is_sample=t.get("isSample", False),
-                )
-                for t in test_cases
-            ]
-
-    # Debug: Print all tasks and their is_sample values
-    print(f"\nDebugging is_sample values for {len(simulator_tasks)} tasks:")
-    for i, task in enumerate(simulator_tasks[:10]):  # Show first 10 tasks
-        is_sample_val = getattr(task, 'is_sample', 'NOT_SET')
-        print(f"  Task {i+1}: {task.name} -> is_sample = {is_sample_val} (type: {type(is_sample_val)})")
-    if len(simulator_tasks) > 10:
-        print(f"  ... and {len(simulator_tasks) - 10} more tasks")
+    # Load tasks using the SDK method (much cleaner!)
+    simulator_tasks = await client.load_tasks(selected_simulator_name)
 
     # Filter out sample tasks (only exclude tasks where is_sample is explicitly True)
     original_count = len(simulator_tasks)
