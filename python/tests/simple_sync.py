@@ -14,13 +14,15 @@ def main():
     client = SyncPlato(base_url=BASE_URL, api_key=API_KEY)
     running_sessions_count = client.get_running_sessions_count()
     env = client.make_environment(
-        "mattermost",
+        "espocrm",
         fast=True,
         interface_type=None,
         # version="latest"
     )
+    tasks = client.load_tasks("espocrm")
+    task = tasks[0]
     env.wait_for_ready()
-    env.reset()
+    env.reset(task=task)
     public_url = env.get_public_url()
     print(public_url)
     input("Press Enter to continue...")
