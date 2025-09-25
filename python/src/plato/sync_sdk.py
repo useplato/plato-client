@@ -94,6 +94,7 @@ class SyncPlato:
         version: Optional[str] = None,
         tag: Optional[str] = None,
         dataset: Optional[str] = None,
+        artifact_id: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -135,6 +136,7 @@ class SyncPlato:
                 "version": version,
                 "tag": tag,
                 "dataset": dataset,
+                "artifact_id": artifact_id,
             },
         )
         self._handle_response_error(response)

@@ -103,6 +103,7 @@ class Plato:
         version: Optional[str] = None,
         tag: Optional[str] = None,
         dataset: Optional[str] = None,
+        artifact_id: Optional[str] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -138,6 +139,7 @@ class Plato:
                 "env_id": env_id,
                 "tag": tag,
                 "dataset": dataset,
+                "artifact_id": artifact_id,
                 "env_config": env_config or {},
                 "record_network_requests": record_network_requests,
                 "record_actions": record_actions,
