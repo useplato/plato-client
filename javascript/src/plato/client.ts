@@ -65,11 +65,17 @@ export class PlatoEnvironment {
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
    * @param testCasePublicId The public ID of the test case
    * @param loadAuthenticated Whether to load authenticated browser state
+   * @param agentVersion Optional agent version identifier
    * @returns The response from the server
    */
-  async reset(task?: PlatoTask | { name: string; prompt: string; start_url: string }, testCasePublicId?: string, loadAuthenticated: boolean = false) {
+  async reset(
+    task?: PlatoTask | { name: string; prompt: string; start_url: string },
+    testCasePublicId?: string,
+    loadAuthenticated: boolean = false,
+    agentVersion?: string
+  ) {
     try {
-      const result = await this.client.resetEnvironment(this.id, task, testCasePublicId, loadAuthenticated);
+      const result = await this.client.resetEnvironment(this.id, task, testCasePublicId, loadAuthenticated, agentVersion);
       // Ensure heartbeat is running after reset
       this.startHeartbeat();
       this.runSessionId = result?.data?.run_session_id || result?.run_session_id;
@@ -339,14 +345,22 @@ export class Plato {
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
    * @param testCasePublicId The public ID of the test case
    * @param loadAuthenticated Whether to load authenticated browser state
+   * @param agentVersion Optional agent version identifier
    * @returns The response from the server
    */
-  async resetEnvironment(jobId: string, task?: PlatoTask | { name: string; prompt: string; start_url: string }, testCasePublicId?: string, loadAuthenticated: boolean = false) {
+  async resetEnvironment(
+    jobId: string,
+    task?: PlatoTask | { name: string; prompt: string; start_url: string },
+    testCasePublicId?: string,
+    loadAuthenticated: boolean = false,
+    agentVersion?: string
+  ) {
     try {
       const response = await this.http.post(`/env/${jobId}/reset`, {
         task: task || null,
         test_case_public_id: testCasePublicId || null,
         load_browser_state: loadAuthenticated,
+        agent_version: agentVersion || null,
       });
       return response.data;
     } catch (error) {
