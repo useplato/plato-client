@@ -519,6 +519,7 @@ class Plato:
                     scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
                     output_schema=t.get("outputSchema"),
                     is_sample=t.get("isSample", False),
+                    simulator_artifact_id=t.get("simulatorArtifactId"),
                 )
                 for t in test_cases
             ]
