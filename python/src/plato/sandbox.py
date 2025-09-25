@@ -651,20 +651,20 @@ class Sandbox:
                 )
 
                 # start listeners request
-                listeners_request = {
+                worker_request = {
                     "plato_worker_version": "prod-latest",
                     "dataset": dataset,
                     "plato_dataset_config": self.sandbox_info.dataset_config.model_dump(),
                 }
-                listeners_response = await self.client.http_session.post(
-                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/start-listeners",
-                    json=listeners_request,
+                worker_response = await self.client.http_session.post(
+                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/start-worker",
+                    json=worker_request,
                     headers={"X-API-Key": self.client.api_key},
                 )
 
                 # check if listeners started successfully
-                if listeners_response.status == 200:
-                    response_data = await listeners_response.json()
+                if worker_response.status == 200:
+                    response_data = await worker_response.json()
                     progress.update(
                         overall_task,
                         advance=10,
@@ -701,7 +701,7 @@ class Sandbox:
                             "No correlation_id received from listeners response"
                         )
                 else:
-                    error = await listeners_response.text()
+                    error = await worker_response.text()
                     progress.update(
                         overall_task,
                         advance=100,
@@ -710,6 +710,158 @@ class Sandbox:
                 return
         except Exception as e:
             raise Exception(f"Unknown error starting listeners: {e}")
+
+    async def healthy_worker(self, timeout: int = 30) -> Dict[str, Any]:
+        """Check the health status of the plato-worker service."""
+        try:
+            if not self.sandbox_info:
+                raise Exception("Sandbox not initialized")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+                transient=False,
+            ) as progress:
+                overall_task = progress.add_task(
+                    "[bold blue]🔍 Checking worker health...", total=100
+                )
+                progress.update(
+                    overall_task,
+                    advance=0,
+                    description="[bold blue]🔍 Checking worker health...",
+                )
+
+                # Call the healthy-worker endpoint
+                health_response = await self.client.http_session.get(
+                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/healthy-worker",
+                    headers={"X-API-Key": self.client.api_key},
+                )
+
+                if health_response.status == 200:
+                    response_data = await health_response.json()
+                    progress.update(
+                        overall_task,
+                        advance=10,
+                        description="[bold green] Health check submitted...",
+                    )
+                    correlation_id = response_data.get("correlation_id")
+                    if correlation_id:
+                        result = await self._monitor_ssh_execution_with_data(
+                            self.client,
+                            correlation_id,
+                            "Worker health check",
+                            timeout=timeout,
+                        )
+                        if result.success:
+                            progress.update(
+                                overall_task,
+                                advance=100,
+                                description="[bold green]✅ Worker health check completed![/bold green]",
+                            )
+                            return result.event_data
+                        else:
+                            progress.update(
+                                overall_task,
+                                advance=100,
+                                description="[bold red]❌ Worker health check failed[/bold red]",
+                            )
+                            raise Exception("Worker health check failed")
+                    else:
+                        progress.update(
+                            overall_task,
+                            advance=100,
+                            description="[bold red]❌ No correlation_id received from health response[/bold red]",
+                        )
+                        raise Exception(
+                            "No correlation_id received from health response"
+                        )
+                else:
+                    error = await health_response.text()
+                    progress.update(
+                        overall_task,
+                        advance=100,
+                        description=f"[bold red]❌ API Error: Failed to check worker health: {error}[/bold red]",
+                    )
+                    raise Exception(f"API Error: Failed to check worker health: {error}")
+        except Exception as e:
+            raise Exception(f"Unknown error checking worker health: {e}")
+
+    async def healthy_services(self, timeout: int = 60) -> Dict[str, Any]:
+        """Check the health status of the simulator services."""
+        try:
+            if not self.sandbox_info:
+                raise Exception("Sandbox not initialized")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+                transient=False,
+            ) as progress:
+                overall_task = progress.add_task(
+                    "[bold blue]🔍 Checking services health...", total=100
+                )
+                progress.update(
+                    overall_task,
+                    advance=0,
+                    description="[bold blue]🔍 Checking services health...",
+                )
+
+                # Call the healthy-services endpoint
+                health_response = await self.client.http_session.get(
+                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/healthy-services",
+                    headers={"X-API-Key": self.client.api_key},
+                )
+
+                if health_response.status == 200:
+                    response_data = await health_response.json()
+                    progress.update(
+                        overall_task,
+                        advance=10,
+                        description="[bold green] Health check submitted...",
+                    )
+                    correlation_id = response_data.get("correlation_id")
+                    if correlation_id:
+                        result = await self._monitor_ssh_execution_with_data(
+                            self.client,
+                            correlation_id,
+                            "Services health check",
+                            timeout=timeout,
+                        )
+                        if result.success:
+                            progress.update(
+                                overall_task,
+                                advance=100,
+                                description="[bold green]✅ Services health check completed![/bold green]",
+                            )
+                            return result.event_data
+                        else:
+                            progress.update(
+                                overall_task,
+                                advance=100,
+                                description="[bold red]❌ Services health check failed[/bold red]",
+                            )
+                            raise Exception("Services health check failed")
+                    else:
+                        progress.update(
+                            overall_task,
+                            advance=100,
+                            description="[bold red]❌ No correlation_id received from health response[/bold red]",
+                        )
+                        raise Exception(
+                            "No correlation_id received from health response"
+                        )
+                else:
+                    error = await health_response.text()
+                    progress.update(
+                        overall_task,
+                        advance=100,
+                        description=f"[bold red]❌ API Error: Failed to check services health: {error}[/bold red]",
+                    )
+                    raise Exception(f"API Error: Failed to check services health: {error}")
+        except Exception as e:
+            raise Exception(f"Unknown error checking services health: {e}")
 
     async def _init_vm(
         self, sim_name: str, dataset_config: SimConfigDataset
