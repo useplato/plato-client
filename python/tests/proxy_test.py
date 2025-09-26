@@ -34,6 +34,7 @@ async def main():
                 "--ignore-certificate-errors",
                 "--ignore-ssl-errors",
                 "--disable-http2",
+                "--disable-quic"
             ],
         )
         page = await browser.new_page()
