@@ -244,6 +244,7 @@ export class Plato {
    * @param keepalive If true, jobs will not be killed due to heartbeat failures
    * @param alias Optional alias for the job group
    * @param fast Fast mode flag
+   * @param artifactId Optional artifact ID to use for the environment
    * @returns The created environment instance
    * @throws PlatoClientError If the API request fails
    */
@@ -253,13 +254,14 @@ export class Plato {
     recordActions: boolean = false,
     keepalive: boolean = false,
     alias?: string,
-    fast: boolean = false
+    fast: boolean = false,
+    artifactId?: string
   ): Promise<PlatoEnvironment> {
     if (fast) {
       console.log('Running in fast mode');
     }
     try {
-      const response = await this.http.post('/env/make2', {
+      const requestBody: any = {
         interface_type: "browser",
         interface_width: 1280,
         interface_height: 720,
@@ -271,7 +273,14 @@ export class Plato {
         keepalive: keepalive,
         alias: alias,
         fast: fast,
-      });
+      };
+
+      // Only include artifact_id if it's provided for backward compatibility
+      if (artifactId) {
+        requestBody.artifact_id = artifactId;
+      }
+
+      const response = await this.http.post('/env/make2', requestBody);
 
       return new PlatoEnvironment(this, response.data.job_id, response.data.alias, fast);
     } catch (error) {
