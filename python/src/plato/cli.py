@@ -25,6 +25,7 @@ from rich.prompt import Confirm
 from plato.sdk import Plato
 from plato.hub import Hub
 from plato.sandbox import Sandbox
+from plato.sandbox_sdk import PlatoSandboxSDK
 from dotenv import load_dotenv
 
 
@@ -440,11 +441,11 @@ def sandbox(
 
     async def _sandbox():
         sdk = Plato()
-
+        sandbox_sdk = PlatoSandboxSDK()
         try:
             # Initialize sandbox service (async init)
             sandbox_service = Sandbox()
-            await sandbox_service.init(console, dataset, sdk, chisel_port)
+            await sandbox_service.init(console, dataset, sdk, chisel_port, sandbox_sdk)
 
             # Run interactive sandbox menu
             try:
@@ -553,7 +554,7 @@ async def run_interactive_sandbox_menu(sandbox: Sandbox):
         elif choice == 3:
             await handle_healthy_services(sandbox)
         elif choice == 4:
-            await handle_start_listeners(sandbox)
+            await handle_start_worker(sandbox)
         elif choice == 5:
             await handle_healthy_worker(sandbox)
         elif choice == 6:
@@ -740,64 +741,35 @@ async def handle_run_all(sandbox: Sandbox):
     console.print("[cyan]Your simulation setup is complete.[/cyan]")
 
 
-async def handle_create_snapshot(sandbox: Sandbox):
+
+async def handle_sim_backup(sandbox: Sandbox):
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
         return
-    """Handle snapshot creation."""
-    console.print("[cyan]📸 Creating VM snapshot...[/cyan]")
 
-    # Get snapshot details from user matching service API
-    try:
-        service = typer.prompt(
-            "Service name (e.g., plato-service/app_sims/<name>)"
-        )
-        version = typer.prompt(
-            "Version (branch)", default=sandbox.sandbox_info.dev_branch
-        )
-        dataset = typer.prompt(
-            "Dataset to snapshot", default=sandbox.sandbox_info.dataset
-        )
-        snapshot_name = typer.prompt(
-            "Snapshot name (optional, press Enter to skip)", default=""
-        )
-    except (KeyboardInterrupt, typer.Abort, EOFError):
-        # Bubble up to caller to exit entire sandbox
-        raise
-
-    if not snapshot_name.strip():
-        snapshot_name = None
-
-    # Execute snapshot
-    await sandbox.snapshot(
-        service=f"{service}",
-        version=version,
-        dataset=dataset,
-        snapshot_name=snapshot_name or "",
-    )
-    console.print("[green]✅ Snapshot request submitted[/green]")
-
-
-async def handle_sim_backup(sandbox: Sandbox):
-    """Handle simulator backup."""
     console.print("[cyan]💾 Creating simulator backup...[/cyan]")
 
     try:
-        await sandbox.backup()
+        await sandbox.client.backup_environment(sandbox.sandbox_info.public_id)
     except Exception as e:
         console.print(f"[red]❌ Error creating backup: {e}[/red]")
-
+    
 
 async def handle_sim_reset(sandbox: Sandbox):
-    """Handle simulator reset."""
+    if not sandbox.sandbox_info:
+        console.print("[red]❌ Sandbox not properly initialized[/red]")
+        return
+
     console.print("[cyan]🔄 Resetting simulator environment...[/cyan]")
 
     try:
-        await sandbox.reset()
+        await sandbox.client.reset_environment(
+            sandbox.sandbox_info.public_id
+        )
     except Exception as e:
         console.print(f"[red]❌ Error resetting simulator: {e}[/red]")
 
-
+  
 async def handle_start_services(sandbox: Sandbox):
     """Handle starting simulator services."""
     if not sandbox.sandbox_info:
@@ -806,60 +778,35 @@ async def handle_start_services(sandbox: Sandbox):
 
     console.print("[cyan]🚀 Starting simulator services...[/cyan]")
 
-    # Get dataset from user (default to the one used in sandbox)
     try:
-        dataset = typer.prompt("Dataset to use", default=sandbox.sandbox_info.dataset)
-    except (KeyboardInterrupt, typer.Abort, EOFError):
-        # Bubble up to caller to exit entire sandbox
-        raise
-
-    try:
-        # Get timeout from service configuration, defaulting to a reasonable value
-        service_timeout = 900  # Default 15 minutes
-        if (sandbox.sandbox_info and
-            hasattr(sandbox.sandbox_info, 'dataset_config') and
-            sandbox.sandbox_info.dataset_config.services):
-            # Get the timeout from the main service (typically main_app)
-            main_service = None
-            for service_name, service_config in sandbox.sandbox_info.dataset_config.services.items():
-                if 'main' in service_name.lower() or service_name == 'main_app':
-                    main_service = service_config
-                    break
-            if not main_service and sandbox.sandbox_info.dataset_config.services:
-                # Fall back to first service if no main service found
-                main_service = next(iter(sandbox.sandbox_info.dataset_config.services.values()))
-
-            if main_service and hasattr(main_service, 'healthy_wait_timeout'):
-                service_timeout = main_service.healthy_wait_timeout
-
-        await sandbox.start_services(dataset=dataset, timeout=service_timeout)
+        await sandbox.sandbox_sdk.start_services(
+            public_id=sandbox.sandbox_info.public_id,
+            dataset=sandbox.sandbox_info.dataset,
+            dataset_config=sandbox.sandbox_info.dataset_config
+        )
     except Exception as e:
         console.print(f"[red]❌ Error starting services: {e}[/red]")
 
 
-async def handle_start_listeners(sandbox: Sandbox):
-    """Handle starting listeners and worker."""
+async def handle_start_worker(sandbox: Sandbox):
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
         return
 
-    console.print("[cyan]🎧 Starting listeners and worker...[/cyan]")
-
-    # Get configuration from user
-    try:
-        dataset = typer.prompt("Dataset to use", default=sandbox.sandbox_info.dataset)
-    except (KeyboardInterrupt, typer.Abort, EOFError):
-        # Bubble up to caller to exit entire sandbox
-        raise
+    console.print("[cyan]🎧 Starting worker[/cyan]")
 
     try:
-        await sandbox.start_listeners(dataset=dataset)
+        await sandbox.sandbox_sdk.start_worker(
+            public_id=sandbox.sandbox_info.public_id,
+            dataset=sandbox.sandbox_info.dataset,
+            dataset_config=sandbox.sandbox_info.dataset_config
+        )
     except Exception as e:
         console.print(f"[red]❌ Error starting listeners: {e}[/red]")
 
 
+
 async def handle_healthy_worker(sandbox: Sandbox):
-    """Handle checking worker health."""
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
         return
@@ -867,14 +814,15 @@ async def handle_healthy_worker(sandbox: Sandbox):
     console.print("[cyan]🔍 Checking worker health...[/cyan]")
 
     try:
-        health_data = await sandbox.healthy_worker()
+        await sandbox.sandbox_sdk.healthy_worker(
+            public_id=sandbox.sandbox_info.public_id
+        )
         console.print("[green]✅ Worker health check completed successfully![/green]")
     except Exception as e:
         console.print(f"[red]❌ Error checking worker health: {e}[/red]")
-
+   
 
 async def handle_healthy_services(sandbox: Sandbox):
-    """Handle checking services health."""
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
         return
@@ -882,11 +830,29 @@ async def handle_healthy_services(sandbox: Sandbox):
     console.print("[cyan]🔍 Checking services health...[/cyan]")
 
     try:
-        health_data = await sandbox.healthy_services()
+        await sandbox.sandbox_sdk.healthy_services(
+            public_id=sandbox.sandbox_info.public_id,
+            dataset=sandbox.sandbox_info.dataset,
+            dataset_config=sandbox.sandbox_info.dataset_config
+        )
         console.print("[green]✅ Services health check completed successfully![/green]")
     except Exception as e:
         console.print(f"[red]❌ Error checking services health: {e}[/red]")
 
+
+async def handle_create_snapshot(sandbox: Sandbox):
+    if not sandbox.sandbox_info:
+        console.print("[red]❌ Sandbox not properly initialized[/red]")
+        return
+
+    console.print("[cyan]🔄 Creating snapshot...[/cyan]")
+
+    try:
+        await sandbox.sandbox_sdk.snapshot(sandbox.sandbox_info.public_id)
+    except Exception as e:
+        console.print(f"[red]❌ Error creating snapshot: {e}[/red]")
+
+   
 
 def main():
     """Main entry point for the Plato CLI."""

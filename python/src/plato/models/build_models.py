@@ -1,20 +1,8 @@
-"""
-Configuration models for Plato simulators.
-
-This module contains Pydantic models that define the structure of simulator
-configuration files (plato-config.yml) and related configuration objects.
-"""
-
-from typing import Optional, Dict, List, Any, Union, Literal
+from pydantic import BaseModel, Field
+from typing import List, Optional, Union, Dict, Any, Literal
 from abc import ABC
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-    model_validator,
-    model_serializer,
-)
-from pydantic_core import PydanticCustomError
+from pydantic import BaseModel, model_validator, model_serializer
+from pydantic_core import PydanticCustomError, ValidationError
 
 
 class AdaptiveObject(BaseModel, ABC):
@@ -51,7 +39,7 @@ class AdaptiveObject(BaseModel, ABC):
         message += ", ".join([subcls.__name__ for subcls in possible_types])
         raise PydanticCustomError(
             "adaptive-object",
-            message,  # type: ignore
+            message,
         )
 
     @classmethod
@@ -76,7 +64,7 @@ class AdaptiveObject(BaseModel, ABC):
         from hydra.utils import instantiate
 
         cfg = self.model_dump(mode="json")
-        cfg["_target_"] = self._target_  # type: ignore
+        cfg["_target_"] = self._target_
         return instantiate(cfg)
 
     @model_serializer
@@ -96,6 +84,7 @@ class AdaptiveObject(BaseModel, ABC):
         return data
 
 
+
 class SimConfigCompute(BaseModel):
     """Compute resource configuration for a simulator."""
 
@@ -108,7 +97,6 @@ class SimConfigCompute(BaseModel):
     plato_messaging_port: int = Field(
         description="Plato messaging port", ge=0, le=65535, default=7000
     )
-
 
 class SimConfigMetadata(BaseModel):
     """Metadata configuration for a simulator."""
@@ -131,12 +119,10 @@ class SimConfigMetadata(BaseModel):
     )
     flows_path: Optional[str] = Field(default=None, description="Flows path")
 
-
 class SimConfigService(AdaptiveObject, ABC):
     """Base class for simulator service configurations."""
 
     type: Literal["docker-compose", "docker"] = Field(description="Service type")
-
 
 class DockerComposeServiceConfig(SimConfigService):
     """Configuration for Docker Compose based services."""
@@ -146,8 +132,8 @@ class DockerComposeServiceConfig(SimConfigService):
     )
     file: str = Field(default="docker-compose.yml", description="Entrypoint file path")
     required_healthy_containers: List[str] = Field(
-        default=["*"],
-        description="List of services to wait for (use ['*'] for all services)",
+        default=["all"],
+        description="List of services to wait for (use ['all'] for all services)",
     )
     healthy_wait_timeout: int = Field(
         default=300,
@@ -156,12 +142,10 @@ class DockerComposeServiceConfig(SimConfigService):
         description="Timeout in seconds to wait for services to become healthy",
     )
 
-
 class SimConfigListener(AdaptiveObject, ABC):
     """Base class for mutation listener configurations."""
 
     type: Literal["db", "proxy", "file"] = Field(description="Listener type")
-
 
 class DatabaseMutationListenerConfig(SimConfigListener):
     """Configuration for database mutation listeners."""
@@ -189,7 +173,6 @@ class DatabaseMutationListenerConfig(SimConfigListener):
     )
     volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
 
-
 class ProxyMutationListenerConfig(SimConfigListener):
     """Configuration for proxy mutation listeners."""
 
@@ -206,7 +189,6 @@ class ProxyMutationListenerConfig(SimConfigListener):
     replay_sessions: List[Dict[str, Any]] = Field(
         default_factory=list, description="Replay sessions configuration"
     )
-
 
 class SimConfigFileMutationListener(SimConfigListener):
     """Configuration for file mutation listeners."""
@@ -226,7 +208,6 @@ class SimConfigFileMutationListener(SimConfigListener):
     )
     volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
 
-
 class SimConfigDataset(BaseModel):
     """Configuration for a simulator dataset."""
 
@@ -235,8 +216,53 @@ class SimConfigDataset(BaseModel):
     services: Optional[dict[str, SimConfigService]] = Field(description="Services")
     listeners: Optional[dict[str, SimConfigListener]] = Field(description="Listeners")
 
-
 class SimConfig(BaseModel):
     """Root configuration model for simulators."""
 
     datasets: dict[str, SimConfigDataset] = Field(description="Datasets")
+
+class VMManagementRequest(BaseModel):
+    dataset: str = Field(..., description="Dataset name")
+    plato_dataset_config: SimConfigDataset = Field(
+        ..., description="Dataset config for templating"
+    )
+    timeout: int = Field(
+        default=600, ge=60, le=1800, description="SSH command timeout in seconds"
+    )
+
+class VMManagementResponse(BaseModel):
+    status: str = Field(..., description="Status")
+    timestamp: str = Field(..., description="Timestamp")
+    correlation_id: str = Field(..., description="Correlation ID for tracking")
+
+
+class CreateVMRequest(VMManagementRequest):
+    service: str = Field(..., description="Service name for the VM")
+    git_hash: str = Field(description="Git hash of the service")
+    wait_time: int = Field(
+        default=120,
+        ge=30,
+        le=300,
+        description="Wait time in seconds (limited for public usage)",
+    )
+    alias: Optional[str] = Field(None, description="Optional alias for the VM")
+    
+class CreateVMResponse(VMManagementResponse):
+
+    url: str = Field(..., description="Public URL for the VM")
+    public_id: str = Field(..., description="Public job ID")
+    job_group_id: str = Field(..., description="Job group ID")
+
+
+class SetupSandboxRequest(VMManagementRequest):
+    clone_url: str = Field(..., description="Authenticated clone URL")
+    client_ssh_public_key: Optional[str] = Field(
+        None, description="Client's SSH public key for passwordless access"
+    )
+    chisel_port: int = Field(
+        default=6000, ge=1024, le=65535, description="Port for chisel server"
+    )
+
+class SetupSandboxResponse(VMManagementResponse):
+    ssh_url: str = Field(..., description="SSH URL for connecting to sandbox")
+ 
