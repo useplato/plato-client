@@ -567,8 +567,8 @@ async def handle_create_snapshot(sandbox: Sandbox):
     # Get snapshot details from user matching service API
     try:
         service = typer.prompt(
-            "Service name (e.g., plato-service/app_sims/<name>)",
-            default=sandbox.sandbox_info.service,
+            f"Service name (default: plato-service/app_sims/{sandbox.sandbox_info.service})",
+            default=f"plato-service/app_sims/{sandbox.sandbox_info.service}",
         )
         version = typer.prompt(
             "Version (branch)", default=sandbox.sandbox_info.dev_branch
