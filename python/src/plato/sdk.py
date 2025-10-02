@@ -101,6 +101,9 @@ class Plato:
         alias: Optional[str] = None,
         fast: bool = False,
         version: Optional[str] = None,
+        tag: Optional[str] = None,
+        dataset: Optional[str] = None,
+        artifact_id: Optional[str] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -134,6 +137,9 @@ class Plato:
                 "source": "SDK",
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
+                "tag": tag,
+                "dataset": dataset,
+                "artifact_id": artifact_id,
                 "env_config": env_config or {},
                 "record_network_requests": record_network_requests,
                 "record_actions": record_actions,
@@ -513,6 +519,7 @@ class Plato:
                     scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
                     output_schema=t.get("outputSchema"),
                     is_sample=t.get("isSample", False),
+                    simulator_artifact_id=t.get("simulatorArtifactId"),
                 )
                 for t in test_cases
             ]

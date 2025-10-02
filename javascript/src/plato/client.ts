@@ -65,17 +65,17 @@ export class PlatoEnvironment {
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
    * @param testCasePublicId The public ID of the test case
    * @param loadAuthenticated Whether to load authenticated browser state
-   * @param agentVersion Optional agent version identifier
+   * @param userId Optional user ID to associate with the reset
    * @returns The response from the server
    */
   async reset(
     task?: PlatoTask | { name: string; prompt: string; start_url: string },
     testCasePublicId?: string,
     loadAuthenticated: boolean = false,
-    agentVersion?: string
+    userId?: number
   ) {
     try {
-      const result = await this.client.resetEnvironment(this.id, task, testCasePublicId, loadAuthenticated, agentVersion);
+      const result = await this.client.resetEnvironment(this.id, task, testCasePublicId, loadAuthenticated, userId);
       // Ensure heartbeat is running after reset
       this.startHeartbeat();
       this.runSessionId = result?.data?.run_session_id || result?.run_session_id;
@@ -244,6 +244,7 @@ export class Plato {
    * @param keepalive If true, jobs will not be killed due to heartbeat failures
    * @param alias Optional alias for the job group
    * @param fast Fast mode flag
+   * @param artifactId Optional artifact ID to use for the environment
    * @returns The created environment instance
    * @throws PlatoClientError If the API request fails
    */
@@ -253,13 +254,14 @@ export class Plato {
     recordActions: boolean = false,
     keepalive: boolean = false,
     alias?: string,
-    fast: boolean = false
+    fast: boolean = false,
+    artifactId?: string
   ): Promise<PlatoEnvironment> {
     if (fast) {
       console.log('Running in fast mode');
     }
     try {
-      const response = await this.http.post('/env/make2', {
+      const requestBody: any = {
         interface_type: "browser",
         interface_width: 1280,
         interface_height: 720,
@@ -271,7 +273,14 @@ export class Plato {
         keepalive: keepalive,
         alias: alias,
         fast: fast,
-      });
+      };
+
+      // Only include artifact_id if it's provided for backward compatibility
+      if (artifactId) {
+        requestBody.artifact_id = artifactId;
+      }
+
+      const response = await this.http.post('/env/make2', requestBody);
 
       return new PlatoEnvironment(this, response.data.job_id, response.data.alias, fast);
     } catch (error) {
@@ -345,7 +354,7 @@ export class Plato {
    * @param task The task to run in the environment, or a simplified object with just name, prompt, and start_url
    * @param testCasePublicId The public ID of the test case
    * @param loadAuthenticated Whether to load authenticated browser state
-   * @param agentVersion Optional agent version identifier
+   * @param userId Optional user ID to associate with the reset
    * @returns The response from the server
    */
   async resetEnvironment(
@@ -353,14 +362,14 @@ export class Plato {
     task?: PlatoTask | { name: string; prompt: string; start_url: string },
     testCasePublicId?: string,
     loadAuthenticated: boolean = false,
-    agentVersion?: string
+    userId?: number
   ) {
     try {
       const response = await this.http.post(`/env/${jobId}/reset`, {
         task: task || null,
         test_case_public_id: testCasePublicId || null,
         load_browser_state: loadAuthenticated,
-        agent_version: agentVersion || null,
+        user_id: userId || null,
       });
       return response.data;
     } catch (error) {
