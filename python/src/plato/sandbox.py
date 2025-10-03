@@ -26,6 +26,7 @@ from plato.models.config import (
     SimConfigMetadata,
     SimConfigService,
 )
+from plato.hub import copy_files_respecting_gitignore
 
 
 class Repository(BaseModel):
@@ -53,6 +54,7 @@ class SandboxInfo(BaseModel):
     ssh_host: str
     dataset: str
     dataset_config: SimConfigDataset
+    clone_url: str  # For cleanup: deleting the dev branch
 
 
 class InitVMInfo(BaseModel):
@@ -94,6 +96,92 @@ def get_authenticated_url(hub_config: PlatoHubConfig) -> str:
         raise Exception(
             f"Error getting authenticated url, try running 'uv run plato hub login' first: {e}"
         )
+
+
+# =============================================================================
+# SSH Config Utilities
+# =============================================================================
+
+def read_ssh_config() -> str:
+    """Read SSH config file, return empty string if doesn't exist."""
+    ssh_config_path = os.path.join(os.path.expanduser("~/.ssh"), "config")
+    if os.path.exists(ssh_config_path):
+        with open(ssh_config_path, "r") as f:
+            return f.read()
+    return ""
+
+
+def host_exists_in_config(hostname: str, config_content: str) -> bool:
+    """Check if a hostname exists in SSH config."""
+    return f"Host {hostname}" in config_content
+
+
+def find_available_hostname(base_hostname: str, config_content: str) -> str:
+    """Find next available hostname by appending numbers if needed."""
+    hostname = base_hostname
+    counter = 1
+    
+    while host_exists_in_config(hostname, config_content):
+        hostname = f"{base_hostname}-{counter}"
+        counter += 1
+    
+    return hostname
+
+
+def remove_ssh_host_from_config(hostname: str, config_content: str) -> str:
+    """Remove a host entry from SSH config content."""
+    lines = config_content.split("\n")
+    new_lines = []
+    skip_block = False
+    
+    for line in lines:
+        if line.strip() == f"Host {hostname}":
+            skip_block = True
+            continue
+        elif line.startswith("Host ") and skip_block:
+            skip_block = False
+            new_lines.append(line)
+        elif not skip_block:
+            new_lines.append(line)
+    
+    return "\n".join(new_lines).rstrip()
+
+
+def write_ssh_config(config_content: str) -> None:
+    """Write SSH config content to file."""
+    ssh_config_dir = os.path.expanduser("~/.ssh")
+    os.makedirs(ssh_config_dir, exist_ok=True)
+    ssh_config_path = os.path.join(ssh_config_dir, "config")
+    
+    with open(ssh_config_path, "w") as f:
+        if config_content:
+            f.write(config_content)
+            if not config_content.endswith("\n"):
+                f.write("\n")
+
+
+def append_ssh_host_entry(hostname: str, port: int, key_path: str) -> None:
+    """Append a new SSH host entry to config."""
+    config_content = read_ssh_config()
+    
+    config_entry = (
+        f"Host {hostname}\n"
+        f"\tHostName localhost\n"
+        f"\tPort {port}\n"
+        f"\tUser root\n"
+        f"\tIdentityFile {key_path}\n"
+        f"\tIdentitiesOnly yes\n"
+        f"\tStrictHostKeyChecking no\n"
+        f"\tUserKnownHostsFile /dev/null\n"
+        f"\tConnectTimeout 10\n"
+    )
+    
+    if config_content:
+        config_content = config_content.rstrip() + "\n\n" + config_entry
+    else:
+        config_content = config_entry
+    
+    write_ssh_config(config_content)
 
 
 class Sandbox:
@@ -227,17 +315,10 @@ class Sandbox:
                     capture_output=True,
                     check=True,
                 )
-                for item in os.listdir(current_dir):
-                    if item.startswith(".git") or item == ".plato-hub.json":
-                        continue
-                    src = os.path.join(current_dir, item)
-                    dst = os.path.join(".", item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-                    elif os.path.isdir(src):
-                        if os.path.exists(dst):
-                            shutil.rmtree(dst)
-                        shutil.copytree(src, dst)
+                # Copy files respecting .gitignore
+                copy_files_respecting_gitignore(
+                    current_dir, ".", exclude_files=[".plato-hub.json"]
+                )
                 subprocess.run(["git", "add", "."], capture_output=True)
                 subprocess.run(
                     [
@@ -339,6 +420,7 @@ class Sandbox:
                 ssh_host=ssh_host,
                 dataset=dataset,
                 dataset_config=dataset_config,
+                clone_url=clone_url,
             )
 
         except Exception as e:
@@ -1211,40 +1293,9 @@ class Sandbox:
         import subprocess
         import random
         import time
+        import platform
 
         try:
-            chisel_path = shutil.which("chisel")
-            if not chisel_path:
-                self.console.print("📦 Installing chisel client...")
-                try:
-                    subprocess.run(
-                        [
-                            "curl",
-                            "-L",
-                            "https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz",
-                            "-o",
-                            "/tmp/chisel.gz",
-                        ],
-                        check=True,
-                        capture_output=True,
-                    )
-                    subprocess.run(
-                        ["gunzip", "/tmp/chisel.gz"], check=True, capture_output=True
-                    )
-                    subprocess.run(
-                        ["chmod", "+x", "/tmp/chisel"], check=True, capture_output=True
-                    )
-                    subprocess.run(
-                        ["sudo", "mv", "/tmp/chisel", "/usr/local/bin/chisel"],
-                        check=False,
-                        capture_output=True,
-                    )
-                except subprocess.CalledProcessError:
-                    raise Exception(
-                        "Failed to install chisel. Please install manually."
-                    )
-                except FileNotFoundError:
-                    raise Exception("curl not found. Please install chisel manually.")
             if "/connect-job/" not in ssh_url:
                 raise Exception(f"Invalid SSH URL format: {ssh_url}")
             url_parts = ssh_url.split("/connect-job/")
@@ -1253,8 +1304,73 @@ class Sandbox:
             if "localhost" in base_url:
                 server_url = server_url.replace("localhost", "127.0.0.1")
             local_ssh_port = random.randint(2200, 2299)
-            chisel_cmd = ["chisel", "client", ssh_url, f"{local_ssh_port}:127.0.0.1:22"]
-            # No panels printed here; panels are printed by caller after completion
+            
+            # Check if we're on macOS and can use Docker
+            is_macos = platform.system() == "Darwin"
+            use_docker = False
+            
+            if is_macos:
+                # Check if Docker is available
+                docker_path = shutil.which("docker")
+                if docker_path:
+                    try:
+                        # Verify docker is running
+                        docker_check = subprocess.run(
+                            ["docker", "info"],
+                            capture_output=True,
+                            timeout=5
+                        )
+                        if docker_check.returncode == 0:
+                            use_docker = True
+                            self.console.print("📦 Using Docker for chisel client...")
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                        pass
+            
+            if use_docker:
+                # Use Docker to run chisel (macOS)
+                chisel_cmd = [
+                    "docker", "run", "--rm",
+                    "--network", "host",
+                    "jpillora/chisel",
+                    "client", ssh_url, f"{local_ssh_port}:127.0.0.1:22"
+                ]
+            else:
+                # Use native chisel binary (Linux or fallback)
+                chisel_path = shutil.which("chisel")
+                if not chisel_path:
+                    self.console.print("📦 Installing chisel client...")
+                    try:
+                        subprocess.run(
+                            [
+                                "curl",
+                                "-L",
+                                "https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz",
+                                "-o",
+                                "/tmp/chisel.gz",
+                            ],
+                            check=True,
+                            capture_output=True,
+                        )
+                        subprocess.run(
+                            ["gunzip", "/tmp/chisel.gz"], check=True, capture_output=True
+                        )
+                        subprocess.run(
+                            ["chmod", "+x", "/tmp/chisel"], check=True, capture_output=True
+                        )
+                        subprocess.run(
+                            ["sudo", "mv", "/tmp/chisel", "/usr/local/bin/chisel"],
+                            check=False,
+                            capture_output=True,
+                        )
+                    except subprocess.CalledProcessError:
+                        raise Exception(
+                            "Failed to install chisel. Please install manually or ensure Docker is running."
+                        )
+                    except FileNotFoundError:
+                        raise Exception("curl not found. Please install chisel manually or use Docker.")
+                chisel_cmd = ["chisel", "client", ssh_url, f"{local_ssh_port}:127.0.0.1:22"]
+            
+            # Start chisel process
             chisel_process = subprocess.Popen(
                 chisel_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
@@ -1276,42 +1392,14 @@ class Sandbox:
             ssh_config_dir = os.path.expanduser("~/.ssh")
             os.makedirs(ssh_config_dir, exist_ok=True)
             key_path = os.path.join(ssh_config_dir, "plato_sandbox_key")
-            ssh_host = f"plato-sandbox-{vm_job_uuid[:8]}"
-            config_entry = (
-                f"Host {ssh_host}\n"
-                f"\tHostName localhost\n"
-                f"\tPort {local_port}\n"
-                f"\tUser root\n"
-                f"\tIdentityFile {key_path}\n"
-                f"\tIdentitiesOnly yes\n"
-                f"\tStrictHostKeyChecking no\n"
-                f"\tUserKnownHostsFile /dev/null\n"
-                f"\tConnectTimeout 10\n\n"
-            )
-            ssh_config_path = os.path.join(ssh_config_dir, "config")
-            existing_config = ""
-            if os.path.exists(ssh_config_path):
-                with open(ssh_config_path, "r") as f:
-                    existing_config = f.read()
-            if f"Host {ssh_host}" in existing_config:
-                lines = existing_config.split("\n")
-                new_lines = []
-                skip_block = False
-                for line in lines:
-                    if line.strip() == f"Host {ssh_host}":
-                        skip_block = True
-                        continue
-                    elif line.startswith("Host ") and skip_block:
-                        skip_block = False
-                        new_lines.append(line)
-                    elif not skip_block:
-                        new_lines.append(line)
-                existing_config = "\n".join(new_lines)
-            with open(ssh_config_path, "w") as f:
-                if existing_config:
-                    f.write(existing_config.rstrip())
-                    f.write("\n\n")  # Ensure proper spacing between entries
-                f.write(config_entry)
+            
+            # Find next available sandbox hostname using utility
+            existing_config = read_ssh_config()
+            ssh_host = find_available_hostname("sandbox", existing_config)
+            
+            # Add SSH host entry using utility
+            append_ssh_host_entry(ssh_host, local_port, key_path)
+            
             # No panels printed here; panels are printed by caller after completion
             return ssh_host
         except Exception as e:
@@ -1330,6 +1418,46 @@ class Sandbox:
             except Exception:
                 pass
         self._chisel_process = None
+
+        # Delete SSH config entry if exists
+        if self.sandbox_info and hasattr(self.sandbox_info, 'ssh_host'):
+            try:
+                self.console.print(f"🧹 Removing SSH config entry '{self.sandbox_info.ssh_host}'...")
+                
+                # Read, remove host, and write back using utilities
+                existing_config = read_ssh_config()
+                if existing_config:
+                    updated_config = remove_ssh_host_from_config(
+                        self.sandbox_info.ssh_host, existing_config
+                    )
+                    write_ssh_config(updated_config)
+                    self.console.print(f"✅ SSH config entry '{self.sandbox_info.ssh_host}' removed")
+            except Exception as e:
+                # Non-fatal: log but continue with other cleanup
+                self.console.print(f"[yellow]⚠️  Failed to remove SSH config: {e}[/yellow]")
+
+        # Delete development branch if exists
+        if self.sandbox_info and hasattr(self.sandbox_info, 'dev_branch') and hasattr(self.sandbox_info, 'clone_url'):
+            try:
+                self.console.print(f"🧹 Deleting development branch '{self.sandbox_info.dev_branch}'...")
+                import subprocess
+                # Delete the remote branch using git push with delete flag
+                delete_result = subprocess.run(
+                    ["git", "push", self.sandbox_info.clone_url, "--delete", self.sandbox_info.dev_branch],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if delete_result.returncode == 0:
+                    self.console.print(f"✅ Development branch '{self.sandbox_info.dev_branch}' deleted")
+                else:
+                    # Non-fatal: branch might not exist or already deleted
+                    self.console.print(f"[yellow]⚠️  Could not delete branch (may have been already deleted)[/yellow]")
+            except subprocess.TimeoutExpired:
+                self.console.print("[yellow]⚠️  Branch deletion timed out[/yellow]")
+            except Exception as e:
+                # Non-fatal: log but continue with other cleanup
+                self.console.print(f"[yellow]⚠️  Failed to delete branch: {e}[/yellow]")
 
         # Delete VM if exists
         vm_id = None
