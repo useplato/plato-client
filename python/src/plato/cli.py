@@ -513,7 +513,7 @@ async def run_interactive_sandbox_menu(sandbox: Sandbox):
         menu_table = Table(title="[bold cyan]📋 Sandbox Menu[/bold cyan]")
         menu_table.add_column("Option", style="cyan", no_wrap=True)
         menu_table.add_column("Action", style="white")
-        menu_table.add_row("0", "Exit and cleanup")
+        menu_table.add_row("0", "Display Sandbox Info")
         menu_table.add_row("1", "Start Services")
         menu_table.add_row("2", "Start Listeners")
         menu_table.add_row("4", "Create VM snapshot")
@@ -542,7 +542,7 @@ async def run_interactive_sandbox_menu(sandbox: Sandbox):
             continue
 
         if choice == 0:
-            break
+            await handle_display_sandbox_info(sandbox)
         elif choice == 1:
             await handle_start_services(sandbox)
         elif choice == 2:
@@ -614,6 +614,34 @@ async def handle_sim_reset(sandbox: Sandbox):
         await sandbox.reset()
     except Exception as e:
         console.print(f"[red]❌ Error resetting simulator: {e}[/red]")
+
+
+async def handle_display_sandbox_info(sandbox: Sandbox):
+    """Handle displaying sandbox information."""
+    if not sandbox.sandbox_info:
+        console.print("[red]❌ Sandbox not properly initialized[/red]")
+        return
+    
+    info = sandbox.sandbox_info
+    
+    # Create formatted info panel
+    info_content = (
+        f"[cyan]🌐 VM URL:[/cyan]\n"
+        f"  [blue]{info.vm_url}[/blue]\n\n"
+        f"[cyan]🔗 SSH Connection:[/cyan]\n"
+        f"  [bold green]ssh {info.ssh_host}[/bold green]\n\n"
+        f"[cyan]🔧 Service:[/cyan]\n"
+        f"  [bold]{info.service}[/bold]\n\n"
+        f"[cyan]📊 Dataset:[/cyan]\n"
+        f"  [bold]{info.dataset}[/bold]"
+    )
+    
+    info_panel = Panel.fit(
+        info_content,
+        title="[bold blue]📋 Sandbox Information[/bold blue]",
+        border_style="blue",
+    )
+    console.print(info_panel)
 
 
 async def handle_start_services(sandbox: Sandbox):
