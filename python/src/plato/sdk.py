@@ -58,7 +58,7 @@ class Plato:
                 sock_read=600,  # 10 minutes
                 sock_connect=60,
             )
-            self._http_session = aiohttp.ClientSession(timeout=timeout)
+            self._http_session = aiohttp.ClientSession(timeout=timeout, cookie_jar=aiohttp.CookieJar())
         return self._http_session
 
     async def close(self):
