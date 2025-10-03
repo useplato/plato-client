@@ -28,6 +28,9 @@ from plato.sandbox import Sandbox
 from plato.sandbox_sdk import PlatoSandboxSDK
 from dotenv import load_dotenv
 
+import json
+import time
+
 
 # Initialize Rich console
 console = Console()
@@ -589,10 +592,14 @@ async def handle_run_all(sandbox: Sandbox):
     try:
         # Get timeout from service configuration, defaulting to a reasonable value
         service_timeout = 900  # Default 15 minutes
-        if (sandbox.sandbox_info and
-            hasattr(sandbox.sandbox_info, 'dataset_config') and
-            sandbox.sandbox_info.dataset_config.services):
-            service_timeout = sandbox.sandbox_info.dataset_config.services.get('healthy_wait_timeout', service_timeout)
+        if (
+            sandbox.sandbox_info
+            and hasattr(sandbox.sandbox_info, "dataset_config")
+            and sandbox.sandbox_info.dataset_config.services
+        ):
+            service_timeout = sandbox.sandbox_info.dataset_config.services.get(
+                "healthy_wait_timeout", service_timeout
+            )
 
         result = await sandbox.start_services(dataset=dataset, timeout=service_timeout)
         console.print("[green]✅ Services started successfully![/green]")
@@ -608,50 +615,68 @@ async def handle_run_all(sandbox: Sandbox):
     services_healthy = False
     for attempt in range(max_retries):
         try:
-            console.print(f"[cyan]🔍 Health check attempt {attempt + 1}/{max_retries}...[/cyan]")
+            console.print(
+                f"[cyan]🔍 Health check attempt {attempt + 1}/{max_retries}...[/cyan]"
+            )
             health_data = await sandbox.healthy_services()
 
             # Parse the health check results from stdout
-            if health_data and 'stdout' in health_data:
+            if health_data and "stdout" in health_data:
                 # The stdout contains JSON lines, parse the last one which has the final status
-                stdout_lines = health_data['stdout'].strip().split('\n')
+                stdout_lines = health_data["stdout"].strip().split("\n")
                 final_status = None
                 for line in reversed(stdout_lines):
                     try:
                         status_data = json.loads(line)
-                        if 'status' in status_data:
+                        if "status" in status_data:
                             final_status = status_data
                             break
                     except:
                         continue
 
                 if final_status:
-                    total_containers = final_status.get('data', {}).get('total_containers', 0)
-                    healthy_containers = final_status.get('data', {}).get('healthy_containers', 0)
-                    status = final_status.get('status', 'unknown')
+                    total_containers = final_status.get("data", {}).get(
+                        "total_containers", 0
+                    )
+                    healthy_containers = final_status.get("data", {}).get(
+                        "healthy_containers", 0
+                    )
+                    status = final_status.get("status", "unknown")
 
-                    console.print(f"[cyan]📊 Status: {status}, Containers: {healthy_containers}/{total_containers} healthy[/cyan]")
+                    console.print(
+                        f"[cyan]📊 Status: {status}, Containers: {healthy_containers}/{total_containers} healthy[/cyan]"
+                    )
 
                     # Handle both old format (healthy/unhealthy) and new format (success/error)
-                    if status == 'healthy' or status == 'success':
+                    if status == "healthy" or status == "success":
                         # For old format, check container counts; for new format, trust the health script
-                        if status == 'healthy' and total_containers > 0:
+                        if status == "healthy" and total_containers > 0:
                             if healthy_containers == total_containers:
-                                console.print("[green]✅ All services are healthy![/green]")
+                                console.print(
+                                    "[green]✅ All services are healthy![/green]"
+                                )
                                 services_healthy = True
                                 break
                             else:
-                                console.print(f"[yellow]⚠️ Not all services healthy yet: {healthy_containers}/{total_containers}[/yellow]")
-                        elif status == 'success':
+                                console.print(
+                                    f"[yellow]⚠️ Not all services healthy yet: {healthy_containers}/{total_containers}[/yellow]"
+                                )
+                        elif status == "success":
                             console.print("[green]✅ All services are healthy![/green]")
                             services_healthy = True
                             break
                         else:
-                            console.print(f"[yellow]⚠️ Services not ready yet: {status}[/yellow]")
+                            console.print(
+                                f"[yellow]⚠️ Services not ready yet: {status}[/yellow]"
+                            )
                     else:
-                        console.print(f"[yellow]⚠️ Services not ready yet: {status}[/yellow]")
+                        console.print(
+                            f"[yellow]⚠️ Services not ready yet: {status}[/yellow]"
+                        )
                 else:
-                    console.print("[yellow]⚠️ Could not parse health status from response[/yellow]")
+                    console.print(
+                        "[yellow]⚠️ Could not parse health status from response[/yellow]"
+                    )
             else:
                 console.print("[yellow]⚠️ No health data received[/yellow]")
 
@@ -663,8 +688,12 @@ async def handle_run_all(sandbox: Sandbox):
             await asyncio.sleep(retry_delay)
 
     if not services_healthy:
-        console.print(f"[red]❌ Services not fully healthy after {max_retries} attempts[/red]")
-        console.print("[yellow]⚠️ Continuing anyway, you may need to check services manually.[/yellow]")
+        console.print(
+            f"[red]❌ Services not fully healthy after {max_retries} attempts[/red]"
+        )
+        console.print(
+            "[yellow]⚠️ Continuing anyway, you may need to check services manually.[/yellow]"
+        )
 
     # Step 3: Start Listeners
     console.print("\n[bold cyan]Step 3/4: Starting Listeners[/bold cyan]")
@@ -680,38 +709,46 @@ async def handle_run_all(sandbox: Sandbox):
     worker_healthy = False
     for attempt in range(max_retries):
         try:
-            console.print(f"[cyan]🔍 Worker health check attempt {attempt + 1}/{max_retries}...[/cyan]")
+            console.print(
+                f"[cyan]🔍 Worker health check attempt {attempt + 1}/{max_retries}...[/cyan]"
+            )
             health_data = await sandbox.healthy_worker()
 
             # Parse the worker health check results from stdout
-            if health_data and 'stdout' in health_data:
+            if health_data and "stdout" in health_data:
                 # The stdout contains JSON lines, parse the last one which has the final status
-                stdout_lines = health_data['stdout'].strip().split('\n')
+                stdout_lines = health_data["stdout"].strip().split("\n")
                 final_status = None
                 for line in reversed(stdout_lines):
                     try:
                         status_data = json.loads(line)
-                        if 'status' in status_data:
+                        if "status" in status_data:
                             final_status = status_data
                             break
                     except:
                         continue
 
                 if final_status:
-                    status = final_status.get('status', 'unknown')
-                    message = final_status.get('message', 'No message')
+                    status = final_status.get("status", "unknown")
+                    message = final_status.get("message", "No message")
 
-                    console.print(f"[cyan]📊 Worker Status: {status} - {message}[/cyan]")
+                    console.print(
+                        f"[cyan]📊 Worker Status: {status} - {message}[/cyan]"
+                    )
 
                     # Handle both old format (healthy) and new format (success)
-                    if status == 'healthy' or status == 'success':
+                    if status == "healthy" or status == "success":
                         console.print("[green]✅ Worker is healthy![/green]")
                         worker_healthy = True
                         break
                     else:
-                        console.print(f"[yellow]⚠️ Worker not ready yet: {status}[/yellow]")
+                        console.print(
+                            f"[yellow]⚠️ Worker not ready yet: {status}[/yellow]"
+                        )
                 else:
-                    console.print("[yellow]⚠️ Could not parse worker health status from response[/yellow]")
+                    console.print(
+                        "[yellow]⚠️ Could not parse worker health status from response[/yellow]"
+                    )
             else:
                 console.print("[yellow]⚠️ No worker health data received[/yellow]")
 
@@ -730,16 +767,23 @@ async def handle_run_all(sandbox: Sandbox):
 
     # Summary of health status
     if services_healthy and worker_healthy:
-        console.print("[green]✅ All services and worker are healthy - simulation fully ready![/green]")
+        console.print(
+            "[green]✅ All services and worker are healthy - simulation fully ready![/green]"
+        )
     elif services_healthy:
-        console.print("[yellow]⚠️ Services are healthy, but worker status unknown - please verify manually.[/yellow]")
+        console.print(
+            "[yellow]⚠️ Services are healthy, but worker status unknown - please verify manually.[/yellow]"
+        )
     elif worker_healthy:
-        console.print("[yellow]⚠️ Worker is healthy, but some services may not be fully ready.[/yellow]")
+        console.print(
+            "[yellow]⚠️ Worker is healthy, but some services may not be fully ready.[/yellow]"
+        )
     else:
-        console.print("[red]⚠️ Some components may not be fully healthy - please check manually.[/red]")
+        console.print(
+            "[red]⚠️ Some components may not be fully healthy - please check manually.[/red]"
+        )
 
     console.print("[cyan]Your simulation setup is complete.[/cyan]")
-
 
 
 async def handle_sim_backup(sandbox: Sandbox):
@@ -753,7 +797,7 @@ async def handle_sim_backup(sandbox: Sandbox):
         await sandbox.client.backup_environment(sandbox.sandbox_info.public_id)
     except Exception as e:
         console.print(f"[red]❌ Error creating backup: {e}[/red]")
-    
+
 
 async def handle_sim_reset(sandbox: Sandbox):
     if not sandbox.sandbox_info:
@@ -763,13 +807,11 @@ async def handle_sim_reset(sandbox: Sandbox):
     console.print("[cyan]🔄 Resetting simulator environment...[/cyan]")
 
     try:
-        await sandbox.client.reset_environment(
-            sandbox.sandbox_info.public_id
-        )
+        await sandbox.client.reset_environment(sandbox.sandbox_info.public_id)
     except Exception as e:
         console.print(f"[red]❌ Error resetting simulator: {e}[/red]")
 
-  
+
 async def handle_start_services(sandbox: Sandbox):
     """Handle starting simulator services."""
     if not sandbox.sandbox_info:
@@ -779,11 +821,48 @@ async def handle_start_services(sandbox: Sandbox):
     console.print("[cyan]🚀 Starting simulator services...[/cyan]")
 
     try:
-        await sandbox.sandbox_sdk.start_services(
+        initial_health = await sandbox.sandbox_sdk.start_services(
             public_id=sandbox.sandbox_info.public_id,
             dataset=sandbox.sandbox_info.dataset,
-            dataset_config=sandbox.sandbox_info.dataset_config
+            dataset_config=sandbox.sandbox_info.dataset_config,
         )
+        console.print(json.dumps(initial_health.model_dump()))
+
+        status = initial_health.status
+        if status == "success":
+            console.print("[green]✅ Services started and healthy![/green]")
+            return
+
+        # Poll until success or timeout
+        service_timeout = 900
+        if (
+            sandbox.sandbox_info
+            and hasattr(sandbox.sandbox_info, "dataset_config")
+            and sandbox.sandbox_info.dataset_config.services
+        ):
+            service_timeout = sandbox.sandbox_info.dataset_config.services.get(
+                "healthy_wait_timeout", service_timeout
+            )
+
+        start_time = time.time()
+        while True:
+            health = await sandbox.sandbox_sdk.healthy_services(
+                public_id=sandbox.sandbox_info.public_id,
+                dataset=sandbox.sandbox_info.dataset,
+                dataset_config=sandbox.sandbox_info.dataset_config,
+            )
+            console.print(json.dumps(health.model_dump()))
+            if health.status == "success":
+                console.print("[green]✅ Services healthy![/green]")
+                break
+
+            if time.time() - start_time > service_timeout:
+                console.print(
+                    f"[red]❌ Services not healthy within timeout ({service_timeout}s)[/red]"
+                )
+                break
+            await asyncio.sleep(5)
+
     except Exception as e:
         console.print(f"[red]❌ Error starting services: {e}[/red]")
 
@@ -799,11 +878,10 @@ async def handle_start_worker(sandbox: Sandbox):
         await sandbox.sandbox_sdk.start_worker(
             public_id=sandbox.sandbox_info.public_id,
             dataset=sandbox.sandbox_info.dataset,
-            dataset_config=sandbox.sandbox_info.dataset_config
+            dataset_config=sandbox.sandbox_info.dataset_config,
         )
     except Exception as e:
         console.print(f"[red]❌ Error starting listeners: {e}[/red]")
-
 
 
 async def handle_healthy_worker(sandbox: Sandbox):
@@ -820,7 +898,7 @@ async def handle_healthy_worker(sandbox: Sandbox):
         console.print("[green]✅ Worker health check completed successfully![/green]")
     except Exception as e:
         console.print(f"[red]❌ Error checking worker health: {e}[/red]")
-   
+
 
 async def handle_healthy_services(sandbox: Sandbox):
     if not sandbox.sandbox_info:
@@ -833,7 +911,7 @@ async def handle_healthy_services(sandbox: Sandbox):
         await sandbox.sandbox_sdk.healthy_services(
             public_id=sandbox.sandbox_info.public_id,
             dataset=sandbox.sandbox_info.dataset,
-            dataset_config=sandbox.sandbox_info.dataset_config
+            dataset_config=sandbox.sandbox_info.dataset_config,
         )
         console.print("[green]✅ Services health check completed successfully![/green]")
     except Exception as e:
@@ -852,7 +930,6 @@ async def handle_create_snapshot(sandbox: Sandbox):
     except Exception as e:
         console.print(f"[red]❌ Error creating snapshot: {e}[/red]")
 
-   
 
 def main():
     """Main entry point for the Plato CLI."""

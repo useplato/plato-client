@@ -13,6 +13,7 @@ from plato.models.build_models import (
     SetupSandboxRequest,
     SetupSandboxResponse,
     SimConfigDataset,
+    ServicesHealthResponse,
 )
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.console import Console
@@ -154,8 +155,8 @@ class PlatoSandboxSDK:
         public_id: str,
         dataset: str,
         dataset_config: SimConfigDataset,
-    ) -> VMManagementResponse:
-        """Check the health status of the simulator services."""
+    ) -> ServicesHealthResponse:
+        """Return aggregated services health as ServicesHealthResponse."""
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
             f"{self.base_url}/public-build/vm/{public_id}/healthy-services",
@@ -167,13 +168,12 @@ class PlatoSandboxSDK:
         ) as healthy_services_response:
             if healthy_services_response.status == 200:
                 try:
-                    healthy_services_data = VMManagementResponse.model_validate(
+                    return ServicesHealthResponse.model_validate(
                         await healthy_services_response.json()
                     )
-                    return healthy_services_data
                 except Exception as e:
                     raise PlatoClientError(
-                        f"Failed to Validate healthy services response: {e}"
+                        f"Failed to validate healthy services response: {e}"
                     )
             else:
                 error = await healthy_services_response.text()
