@@ -1,4 +1,6 @@
 import os
+import subprocess
+import socket
 from plato.models.task import CustomEvalConfig
 from plato.models import PlatoTask, EvaluationResult
 from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
@@ -61,8 +63,15 @@ class PlatoEnvironment:
         self._heartbeat_task = None
         self._run_session_id = active_session
         self.fast = fast
+        self._db_tunnel_process = None
+        self._db_tunnel_info: Optional[Dict[str, Any]] = None
 
-    async def login(self, page: Page, throw_on_login_error: bool = False, screenshots_dir: Optional[Path] = None) -> None:
+    async def login(
+        self,
+        page: Page,
+        throw_on_login_error: bool = False,
+        screenshots_dir: Optional[Path] = None,
+    ) -> None:
         """Login to the environment using authentication config.
 
         Args:
@@ -98,7 +107,13 @@ class PlatoEnvironment:
         if not login_flow:
             raise PlatoClientError("No login flow found")
 
-        flow_executor = FlowExecutor(page, login_flow, base_dataset, logger=logger,screenshots_dir=screenshots_dir)
+        flow_executor = FlowExecutor(
+            page,
+            login_flow,
+            base_dataset,
+            logger=logger,
+            screenshots_dir=screenshots_dir,
+        )
         success = await flow_executor.execute_flow()
         if not success:
             if throw_on_login_error:
@@ -396,7 +411,9 @@ class PlatoEnvironment:
                 success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
-    async def evaluate(self, value: Optional[Any] = None, agent_version: Optional[str] = None) -> EvaluationResult:
+    async def evaluate(
+        self, value: Optional[Any] = None, agent_version: Optional[str] = None
+    ) -> EvaluationResult:
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
 
@@ -414,7 +431,9 @@ class PlatoEnvironment:
             return evaluation_result
         else:
             # call /evaluate endpoint
-            response = await self._client.evaluate(self._run_session_id, value, agent_version)
+            response = await self._client.evaluate(
+                self._run_session_id, value, agent_version
+            )
             if not response:
                 raise PlatoClientError("No evaluation result found")
             result = response["result"]
@@ -483,10 +502,10 @@ class PlatoEnvironment:
                 elif "plato.so" in self._client.base_url:
                     # Extract domain from base_url to construct proxy server URL
                     parsed_url = urlparse(self._client.base_url)
-                    domain_parts = parsed_url.netloc.split('.')
+                    domain_parts = parsed_url.netloc.split(".")
 
                     # Check if there's a subdomain before "plato.so"
-                    if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                    if len(domain_parts) >= 3 and domain_parts[-2:] == ["plato", "so"]:
                         subdomain = domain_parts[0]
                         proxy_server = f"https://{subdomain}.proxy.plato.so"
                     else:
@@ -526,10 +545,10 @@ class PlatoEnvironment:
                 # Extract domain from base_url (e.g., "dev", "staging", "amazon")
                 # If no subdomain, use just "sims.plato.so"
                 parsed_url = urlparse(self._client.base_url)
-                domain_parts = parsed_url.netloc.split('.')
+                domain_parts = parsed_url.netloc.split(".")
 
                 # Check if there's a subdomain before "plato.so"
-                if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                if len(domain_parts) >= 3 and domain_parts[-2:] == ["plato", "so"]:
                     subdomain = domain_parts[0]
                     return f"https://{identifier}.{subdomain}.sims.plato.so"
                 else:
@@ -546,6 +565,176 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         root_url = self._client.base_url.split("/api")[0]
         return os.path.join(root_url, "sessions", f"{self._run_session_id}/")
+
+    def get_db_login_info(self, database: Optional[str] = None) -> Dict[str, Any]:
+        """Return database login information for this simulator.
+
+        The defaults are sourced from plato.flows.db_logins.SIM_DB_CONFIGS.
+
+        Args:
+            database: Optional explicit database name to use. If not provided,
+                      defaults to the simulator/env_id.
+
+        Returns:
+            Dict[str, Any]: keys: db_type, user, password, dest_port, database
+        """
+        try:
+            from plato.flows.db_logins import SIM_DB_CONFIGS
+        except Exception as e:
+            raise PlatoClientError(f"Failed to load DB login presets: {e}")
+
+        key = self.env_id or self.alias or self.id
+        cfg = SIM_DB_CONFIGS.get(key)
+        if not cfg:
+            raise PlatoClientError(
+                f"No DB login preset found for simulator '{key}'. Provide --db-name explicitly or add a preset."
+            )
+
+        return {
+            "db_type": cfg.get("db_type", "postgresql"),
+            "user": cfg.get(
+                "user", "postgres" if cfg.get("db_type") == "postgresql" else "root"
+            ),
+            "password": cfg.get("password", ""),
+            "dest_port": int(
+                cfg.get(
+                    "dest_port", 5432 if cfg.get("db_type") == "postgresql" else 3306
+                )
+            ),
+            "databases": cfg.get("databases", []),
+        }
+
+    async def start_db_tunnel(
+        self,
+        dest_port: Optional[int] = None,
+        local_port: Optional[int] = None,
+    ) -> int:
+        """Start a local TCP tunnel to the environment's database via Plato proxy.
+
+        This uses the system 'proxytunnel' binary to open a local listening port
+        that connects through the Plato proxy to the environment's worker on the
+        specified database port.
+
+        Args:
+            dest_port: Remote database port inside the environment. If not provided,
+                       it is resolved from get_db_login_info().
+            local_port: Local port to listen on. If None, a free port is chosen.
+
+        Returns:
+            int: The chosen local port.
+        """
+        if not self._run_session_id:
+            raise PlatoClientError("No active run session. Call reset() first.")
+
+        if self._db_tunnel_process and self._db_tunnel_process.poll() is None:
+            raise PlatoClientError(
+                "Database tunnel already running. Stop it before starting a new one."
+            )
+
+        login = self.get_db_login_info()
+        target_port = int(dest_port or login["dest_port"])  # remote
+
+        def _pick_free_port() -> int:
+            s = socket.socket()
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+            s.close()
+            return port
+
+        chosen_local = local_port or _pick_free_port()
+
+        proxy_cfg = await self.get_proxy_config()
+        server_url = proxy_cfg["server"]
+        parsed = urlparse(
+            server_url if "://" in server_url else f"https://{server_url}"
+        )
+        proxy_host = parsed.hostname or server_url
+        # Default ports: https -> 9000, http -> 8888 (local dev)
+        proxy_port = parsed.port or (
+            9000 if (parsed.scheme or "https") == "https" else 8888
+        )
+        use_tls = (parsed.scheme or "https") == "https"
+
+        username = proxy_cfg["username"]
+        password = proxy_cfg["password"]
+        auth = f"{username}@{target_port}:{password}"
+
+        from plato.utils.proxytunnel import (
+            find_proxytunnel_path,
+            install_proxytunnel_noninteractive,
+        )
+
+        proxytunnel_path = find_proxytunnel_path()
+        if not proxytunnel_path:
+            try:
+                installed = install_proxytunnel_noninteractive()
+                if installed:
+                    proxytunnel_path = find_proxytunnel_path()
+            except Exception:
+                installed = False
+            if not proxytunnel_path:
+                raise PlatoClientError(
+                    "'proxytunnel' not found and auto-install failed. Install it via your package manager (brew/apt/dnf/yum/pacman/apk)."
+                )
+
+        args = [
+            proxytunnel_path,
+            "-p",
+            f"{proxy_host}:{proxy_port}",
+            "-P",
+            auth,
+            "-d",
+            f"127.0.0.1:{target_port}",
+            "-a",
+            str(chosen_local),
+        ]
+        if use_tls:
+            args.insert(1, "-E")
+            args.append("--no-check-certificate")
+
+        # Start proxytunnel in background
+        try:
+            proc = subprocess.Popen(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except Exception as e:
+            raise PlatoClientError(f"Failed to start proxytunnel: {e}")
+
+        # Brief grace period to surface immediate failures
+        await asyncio.sleep(0.3)
+        if proc.poll() is not None:
+            stderr = ""
+            try:
+                if proc.stderr is not None:
+                    stderr_bytes = proc.stderr.read() or b""
+                    stderr = stderr_bytes.decode("utf-8", errors="ignore")
+            except Exception:
+                pass
+            raise PlatoClientError(f"proxytunnel exited early: {stderr.strip()}")
+
+        self._db_tunnel_process = proc
+        self._db_tunnel_info = {
+            "local_port": chosen_local,
+            "dest_port": target_port,
+        }
+        return chosen_local
+
+    def stop_db_tunnel(self) -> None:
+        """Stop the running database tunnel if present."""
+        proc = getattr(self, "_db_tunnel_process", None)
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except Exception:
+                    proc.kill()
+            except Exception:
+                pass
+        self._db_tunnel_process = None
+        self._db_tunnel_info = None
 
     async def close(self) -> None:
         """Clean up and close the environment.
