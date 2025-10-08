@@ -1,6 +1,5 @@
 import asyncio  # noqa: F401
 import os
-import shutil
 import tempfile
 from typing import Optional, Dict, Any
 
@@ -11,6 +10,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 from plato.sdk import Plato
+from plato.proxy_client import ProxyTunnel
 from pydantic import BaseModel
 import json
 import yaml
@@ -18,6 +18,7 @@ import uuid
 import subprocess
 import base64
 import time
+import random
 import json  # noqa: F811
 from plato.models.config import (
     SimConfig,
@@ -48,7 +49,6 @@ class SandboxInfo(BaseModel):
     dev_branch: str
     vm_url: str
     ssh_url: str
-    chisel_port: int
     local_port: int
     service: str
     ssh_host: str
@@ -61,6 +61,7 @@ class InitVMInfo(BaseModel):
     vm_job_uuid: str
     correlation_id: str
     url: str
+    job_group_id: str
 
 
 class SSHExecutionResult(BaseModel):
@@ -102,6 +103,7 @@ def get_authenticated_url(hub_config: PlatoHubConfig) -> str:
 # SSH Config Utilities
 # =============================================================================
 
+
 def read_ssh_config() -> str:
     """Read SSH config file, return empty string if doesn't exist."""
     ssh_config_path = os.path.join(os.path.expanduser("~/.ssh"), "config")
@@ -120,11 +122,11 @@ def find_available_hostname(base_hostname: str, config_content: str) -> str:
     """Find next available hostname by appending numbers if needed."""
     hostname = base_hostname
     counter = 1
-    
+
     while host_exists_in_config(hostname, config_content):
         hostname = f"{base_hostname}-{counter}"
         counter += 1
-    
+
     return hostname
 
 
@@ -133,7 +135,7 @@ def remove_ssh_host_from_config(hostname: str, config_content: str) -> str:
     lines = config_content.split("\n")
     new_lines = []
     skip_block = False
-    
+
     for line in lines:
         if line.strip() == f"Host {hostname}":
             skip_block = True
@@ -143,7 +145,7 @@ def remove_ssh_host_from_config(hostname: str, config_content: str) -> str:
             new_lines.append(line)
         elif not skip_block:
             new_lines.append(line)
-    
+
     return "\n".join(new_lines).rstrip()
 
 
@@ -152,7 +154,7 @@ def write_ssh_config(config_content: str) -> None:
     ssh_config_dir = os.path.expanduser("~/.ssh")
     os.makedirs(ssh_config_dir, exist_ok=True)
     ssh_config_path = os.path.join(ssh_config_dir, "config")
-    
+
     with open(ssh_config_path, "w") as f:
         if config_content:
             f.write(config_content)
@@ -160,27 +162,30 @@ def write_ssh_config(config_content: str) -> None:
                 f.write("\n")
 
 
-def append_ssh_host_entry(hostname: str, port: int, key_path: str) -> None:
+def append_ssh_host_entry(
+    hostname: str, port: int, key_path: str, job_group_id: str
+) -> None:
     """Append a new SSH host entry to config."""
     config_content = read_ssh_config()
-    
-    config_entry = (
-        f"Host {hostname}\n"
-        f"\tHostName localhost\n"
-        f"\tPort {port}\n"
-        f"\tUser root\n"
-        f"\tIdentityFile {key_path}\n"
-        f"\tIdentitiesOnly yes\n"
-        f"\tStrictHostKeyChecking no\n"
-        f"\tUserKnownHostsFile /dev/null\n"
-        f"\tConnectTimeout 10\n"
-    )
-    
+
+    config_with_proxy = f""""
+        Host {hostname}
+        HostName localhost
+        Port {port}
+        User root
+        IdentityFile {key_path}
+        IdentitiesOnly yes
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+        ConnectTimeout 10
+        ProxyCommand /opt/homebrew/bin/proxytunnel -E -p proxy.plato.so:9000 -P '{job_group_id}@22:newpass' -d %h:%p --no-check-certificate
+    """
+
     if config_content:
-        config_content = config_content.rstrip() + "\n\n" + config_entry
+        config_content = config_content.rstrip() + "\n\n" + config_with_proxy
     else:
-        config_content = config_entry
-    
+        config_content = config_with_proxy
+
     write_ssh_config(config_content)
 
 
@@ -188,11 +193,9 @@ class Sandbox:
     def __init__(self):
         self.sandbox_info = None
         self._vm_job_uuid: Optional[str] = None
-        self._chisel_process: Optional[subprocess.Popen] = None
+        self._proxy_tunnel: Optional[ProxyTunnel] = None
 
-    async def init(
-        self, console: Console, dataset: str, plato_client: Plato, chisel_port: int
-    ):
+    async def init(self, console: Console, dataset: str, plato_client: Plato):
         self.console = console
         self.dataset = dataset
         self.client = plato_client
@@ -372,7 +375,6 @@ class Sandbox:
                 vm_job_uuid,
                 dev_branch,
                 clone_url,
-                chisel_port,
                 local_public_key,
             )
             sandbox_panel = Panel.fit(
@@ -385,20 +387,12 @@ class Sandbox:
             )
             self.console.print(sandbox_panel)
 
-            ##  Step 8: Setup local chisel client ##
-            local_port = await self._setup_chisel_client(ssh_url)
-            tunnel_panel = Panel.fit(
-                f"[green]Secure tunnel established successfully![/green]\n"
-                f"[cyan]Local SSH port:[/cyan] [bold]{local_port}[/bold]\n"
-                f"[dim]Your local machine can now connect securely to the remote sandbox[/dim]",
-                title="[bold green]✅ Tunnel Active[/bold green]",
-                border_style="green",
-            )
-            self.console.print(tunnel_panel)
+            # choose a random port between 2200 and 2299
+            local_port = random.randint(2200, 2299)
 
             ## Step 9: Setup SSH config with password ##
             ssh_host = await self._setup_ssh_config_with_password(
-                local_port, vm_job_uuid
+                local_port, vm_info.job_group_id
             )
             ssh_success_panel = Panel.fit(
                 f"[green]SSH configuration updated successfully![/green]\n"
@@ -415,7 +409,6 @@ class Sandbox:
                 dev_branch=dev_branch,
                 vm_url=vm_info.url,
                 ssh_url=ssh_url,
-                chisel_port=chisel_port,
                 local_port=local_port,
                 ssh_host=ssh_host,
                 dataset=dataset,
@@ -484,13 +477,13 @@ class Sandbox:
                 if snapshot_name:
                     snapshot_request["snapshot_name"] = snapshot_name
 
-                self.console.print(f"📋 [cyan]Snapshot details:[/cyan]")
+                self.console.print("📋 [cyan]Snapshot details:[/cyan]")
                 self.console.print(f"  • Service: {service}")
                 self.console.print(f"  • Version: {version}")
                 self.console.print(f"  • Dataset: {dataset}")
                 if snapshot_name:
                     self.console.print(f"  • Name: {snapshot_name}")
-                self.console.print(f"  • Timeout: 1800 seconds")
+                self.console.print("  • Timeout: 1800 seconds")
 
                 snapshot_response = await self.client.http_session.post(
                     f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/snapshot",
@@ -506,7 +499,9 @@ class Sandbox:
                         description="[bold green] Snapshot request submitted...",
                     )
 
-                    self.console.print(f"🔗 [cyan]Snapshot request submitted:[/cyan] {response_data}")  
+                    self.console.print(
+                        f"🔗 [cyan]Snapshot request submitted:[/cyan] {response_data}"
+                    )
 
                     correlation_id = response_data.get("correlation_id")
                     if correlation_id:
@@ -609,18 +604,20 @@ class Sandbox:
                 reset_response_json = await reset_response.json()
                 # Handle both dict and object responses - sorry for being an idiot and not handling this properly
                 if isinstance(reset_response_json, dict):
-                    success = reset_response_json.get('success', False)
-                    error = reset_response_json.get('error')
+                    success = reset_response_json.get("success", False)
+                    error = reset_response_json.get("error")
                 else:
-                    success = getattr(reset_response_json, 'success', False)
-                    error = getattr(reset_response_json, 'error', None)
-                
+                    success = getattr(reset_response_json, "success", False)
+                    error = getattr(reset_response_json, "error", None)
+
                 if success:
                     self.console.print(
                         f"✅ [green]Environment reset completed successfully[/green] {reset_response_json}"
                     )
                 else:
-                    raise Exception(f"Failed to reset environment: {error or 'Unknown error'}")
+                    raise Exception(
+                        f"Failed to reset environment: {error or 'Unknown error'}"
+                    )
             else:
                 error = await reset_response.text()
                 raise Exception(f"Failed to reset environment: {error}")
@@ -929,6 +926,7 @@ class Sandbox:
             return InitVMInfo(
                 vm_job_uuid=vm_job_uuid,
                 correlation_id=correlation_id,
+                job_group_id=vm_info["job_group_id"],
                 url=vm_info["url"],
             )
 
@@ -937,7 +935,6 @@ class Sandbox:
         vm_job_uuid: str,
         dev_branch: str,
         clone_url: str,
-        chisel_port: int,
         local_public_key: str,
     ) -> str:
         """Initialize sandbox environment with integrated progress tracking."""
@@ -966,7 +963,6 @@ class Sandbox:
                 setup_data = {
                     "branch": dev_branch,
                     "clone_url": clone_url,
-                    "chisel_port": chisel_port,
                     "timeout": 300,
                 }
                 if local_public_key:
@@ -1167,13 +1163,11 @@ class Sandbox:
                     raise Exception(
                         f"Failed to connect to event stream: {response.status}"
                     )
-                
 
                 async for line in response.content:
                     if time.time() - start_time > timeout:
                         raise Exception(f"Operation timed out after {timeout} seconds")
-                    
-               
+
                     line_str = line.decode("utf-8").strip()
                     if line_str.startswith("data: "):
                         try:
@@ -1192,7 +1186,11 @@ class Sandbox:
 
                                 # Show only the final success line from stdout if available
                                 if stdout and "✅" in stdout:
-                                    success_lines = [line for line in stdout.strip().split("\n") if "✅" in line]
+                                    success_lines = [
+                                        line
+                                        for line in stdout.strip().split("\n")
+                                        if "✅" in line
+                                    ]
                                     if success_lines:
                                         self.console.print(f"   {success_lines[-1]}")
 
@@ -1200,9 +1198,18 @@ class Sandbox:
                                 if stderr:
                                     filtered_stderr = _filter_ssh_warnings(stderr)
                                     if filtered_stderr and filtered_stderr.strip():
-                                        error_lines = [line for line in filtered_stderr.strip().split("\n") if line.strip() and not line.startswith("Warning:")]
+                                        error_lines = [
+                                            line
+                                            for line in filtered_stderr.strip().split(
+                                                "\n"
+                                            )
+                                            if line.strip()
+                                            and not line.startswith("Warning:")
+                                        ]
                                         if error_lines:
-                                            self.console.print("📤 [yellow]Errors:[/yellow]")
+                                            self.console.print(
+                                                "📤 [yellow]Errors:[/yellow]"
+                                            )
                                             for line in error_lines:
                                                 self.console.print(f"   {line}")
 
@@ -1289,141 +1296,33 @@ class Sandbox:
                 f"[yellow]⚠️  [yellow]Warning: Failed to setup SSH key: {e}[/yellow]"
             )
 
-    async def _setup_chisel_client(self, ssh_url: str) -> int:
-        import subprocess
-        import random
-        import time
-        import platform
-
-        try:
-            if "/connect-job/" not in ssh_url:
-                raise Exception(f"Invalid SSH URL format: {ssh_url}")
-            url_parts = ssh_url.split("/connect-job/")
-            base_url = url_parts[0].replace("https://", "").replace("http://", "")
-            server_url = f"{base_url}"
-            if "localhost" in base_url:
-                server_url = server_url.replace("localhost", "127.0.0.1")
-            local_ssh_port = random.randint(2200, 2299)
-            
-            # Check if we're on macOS and can use Docker
-            is_macos = platform.system() == "Darwin"
-            use_docker = False
-            
-            if is_macos:
-                # Check if Docker is available
-                docker_path = shutil.which("docker")
-                if docker_path:
-                    try:
-                        # Verify docker is running
-                        docker_check = subprocess.run(
-                            ["docker", "info"],
-                            capture_output=True,
-                            timeout=5
-                        )
-                        if docker_check.returncode == 0:
-                            use_docker = True
-                            self.console.print("📦 Using Docker for chisel client...")
-                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                        pass
-            
-            if use_docker:
-                # Use Docker to run chisel (macOS)
-                chisel_cmd = [
-                    "docker", "run", "--rm",
-                    "--network", "host",
-                    "jpillora/chisel",
-                    "client", ssh_url, f"{local_ssh_port}:127.0.0.1:22"
-                ]
-            else:
-                # Use native chisel binary (Linux or fallback)
-                chisel_path = shutil.which("chisel")
-                if not chisel_path:
-                    self.console.print("📦 Installing chisel client...")
-                    try:
-                        subprocess.run(
-                            [
-                                "curl",
-                                "-L",
-                                "https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz",
-                                "-o",
-                                "/tmp/chisel.gz",
-                            ],
-                            check=True,
-                            capture_output=True,
-                        )
-                        subprocess.run(
-                            ["gunzip", "/tmp/chisel.gz"], check=True, capture_output=True
-                        )
-                        subprocess.run(
-                            ["chmod", "+x", "/tmp/chisel"], check=True, capture_output=True
-                        )
-                        subprocess.run(
-                            ["sudo", "mv", "/tmp/chisel", "/usr/local/bin/chisel"],
-                            check=False,
-                            capture_output=True,
-                        )
-                    except subprocess.CalledProcessError:
-                        raise Exception(
-                            "Failed to install chisel. Please install manually or ensure Docker is running."
-                        )
-                    except FileNotFoundError:
-                        raise Exception("curl not found. Please install chisel manually or use Docker.")
-                chisel_cmd = ["chisel", "client", ssh_url, f"{local_ssh_port}:127.0.0.1:22"]
-            
-            # Start chisel process
-            chisel_process = subprocess.Popen(
-                chisel_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            self._chisel_process = chisel_process
-            time.sleep(3)
-            if chisel_process.poll() is None:
-                # No panels printed here; panels are printed by caller after completion
-                return local_ssh_port
-            else:
-                stdout, stderr = chisel_process.communicate()
-                raise Exception(f"Chisel client failed: {stderr.decode()}")
-        except Exception as e:
-            raise Exception(f"Error setting up chisel: {e}")
-
     async def _setup_ssh_config_with_password(
-        self, local_port: int, vm_job_uuid: str
+        self, local_port: int, job_group_id: str
     ) -> str:
         try:
             ssh_config_dir = os.path.expanduser("~/.ssh")
             os.makedirs(ssh_config_dir, exist_ok=True)
             key_path = os.path.join(ssh_config_dir, "plato_sandbox_key")
-            
+
             # Find next available sandbox hostname using utility
             existing_config = read_ssh_config()
             ssh_host = find_available_hostname("sandbox", existing_config)
-            
+
             # Add SSH host entry using utility
-            append_ssh_host_entry(ssh_host, local_port, key_path)
-            
+            append_ssh_host_entry(ssh_host, local_port, key_path, job_group_id)
+
             # No panels printed here; panels are printed by caller after completion
             return ssh_host
         except Exception as e:
             raise Exception(f"Failed to setup SSH config: {e}")
 
-    async def close(self) -> None:
-        # Never raise from cleanup; make idempotent
-        # Stop chisel client if running
-        if self._chisel_process and self._chisel_process.poll() is None:
+    async def close(self) -> None:  # Delete SSH config entry if exists
+        if self.sandbox_info and hasattr(self.sandbox_info, "ssh_host"):
             try:
-                self._chisel_process.terminate()
-                try:
-                    self._chisel_process.wait(timeout=5)
-                except Exception:
-                    self._chisel_process.kill()
-            except Exception:
-                pass
-        self._chisel_process = None
+                self.console.print(
+                    f"🧹 Removing SSH config entry '{self.sandbox_info.ssh_host}'..."
+                )
 
-        # Delete SSH config entry if exists
-        if self.sandbox_info and hasattr(self.sandbox_info, 'ssh_host'):
-            try:
-                self.console.print(f"🧹 Removing SSH config entry '{self.sandbox_info.ssh_host}'...")
-                
                 # Read, remove host, and write back using utilities
                 existing_config = read_ssh_config()
                 if existing_config:
@@ -1431,28 +1330,49 @@ class Sandbox:
                         self.sandbox_info.ssh_host, existing_config
                     )
                     write_ssh_config(updated_config)
-                    self.console.print(f"✅ SSH config entry '{self.sandbox_info.ssh_host}' removed")
+                    self.console.print(
+                        f"✅ SSH config entry '{self.sandbox_info.ssh_host}' removed"
+                    )
             except Exception as e:
                 # Non-fatal: log but continue with other cleanup
-                self.console.print(f"[yellow]⚠️  Failed to remove SSH config: {e}[/yellow]")
+                self.console.print(
+                    f"[yellow]⚠️  Failed to remove SSH config: {e}[/yellow]"
+                )
 
         # Delete development branch if exists
-        if self.sandbox_info and hasattr(self.sandbox_info, 'dev_branch') and hasattr(self.sandbox_info, 'clone_url'):
+        if (
+            self.sandbox_info
+            and hasattr(self.sandbox_info, "dev_branch")
+            and hasattr(self.sandbox_info, "clone_url")
+        ):
             try:
-                self.console.print(f"🧹 Deleting development branch '{self.sandbox_info.dev_branch}'...")
+                self.console.print(
+                    f"🧹 Deleting development branch '{self.sandbox_info.dev_branch}'..."
+                )
                 import subprocess
+
                 # Delete the remote branch using git push with delete flag
                 delete_result = subprocess.run(
-                    ["git", "push", self.sandbox_info.clone_url, "--delete", self.sandbox_info.dev_branch],
+                    [
+                        "git",
+                        "push",
+                        self.sandbox_info.clone_url,
+                        "--delete",
+                        self.sandbox_info.dev_branch,
+                    ],
                     capture_output=True,
                     text=True,
-                    timeout=10
+                    timeout=10,
                 )
                 if delete_result.returncode == 0:
-                    self.console.print(f"✅ Development branch '{self.sandbox_info.dev_branch}' deleted")
+                    self.console.print(
+                        f"✅ Development branch '{self.sandbox_info.dev_branch}' deleted"
+                    )
                 else:
                     # Non-fatal: branch might not exist or already deleted
-                    self.console.print(f"[yellow]⚠️  Could not delete branch (may have been already deleted)[/yellow]")
+                    self.console.print(
+                        "[yellow]⚠️  Could not delete branch (may have been already deleted)[/yellow]"
+                    )
             except subprocess.TimeoutExpired:
                 self.console.print("[yellow]⚠️  Branch deletion timed out[/yellow]")
             except Exception as e:
@@ -1518,3 +1438,10 @@ class Sandbox:
             except Exception as cleanup_e:
                 self.console.print(f"[yellow]⚠️  Failed to cleanup VM: {cleanup_e}")
         self._vm_job_uuid = None
+
+        # Stop proxy tunnel if running
+        try:
+            if self._proxy_tunnel is not None:
+                self._proxy_tunnel.stop()
+        finally:
+            self._proxy_tunnel = None
