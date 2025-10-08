@@ -10,7 +10,6 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 from plato.sdk import Plato
-from plato.proxy_client import ProxyTunnel
 from pydantic import BaseModel
 import json
 import yaml
