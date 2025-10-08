@@ -192,7 +192,6 @@ class Sandbox:
     def __init__(self):
         self.sandbox_info = None
         self._vm_job_uuid: Optional[str] = None
-        self._proxy_tunnel: Optional[ProxyTunnel] = None
 
     async def init(self, console: Console, dataset: str, plato_client: Plato):
         self.console = console
@@ -1437,10 +1436,3 @@ class Sandbox:
             except Exception as cleanup_e:
                 self.console.print(f"[yellow]⚠️  Failed to cleanup VM: {cleanup_e}")
         self._vm_job_uuid = None
-
-        # Stop proxy tunnel if running
-        try:
-            if self._proxy_tunnel is not None:
-                self._proxy_tunnel.stop()
-        finally:
-            self._proxy_tunnel = None
