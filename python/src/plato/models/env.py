@@ -71,6 +71,7 @@ class PlatoEnvironment:
         page: Page,
         throw_on_login_error: bool = False,
         screenshots_dir: Optional[Path] = None,
+        dataset: str = "base"
     ) -> None:
         """Login to the environment using authentication config.
 
@@ -96,13 +97,18 @@ class PlatoEnvironment:
 
         # Get base dataset and login flow
         base_dataset = next(
-            (dataset for dataset in simulator.datasets if dataset.name == "base"), None
+            (dataset for dataset in simulator.datasets if dataset.name == dataset), None
         )
         if not base_dataset:
-            raise PlatoClientError("No base dataset found")
+            raise PlatoClientError("No dataset found")
+
+        if dataset == "base":
+            flow_name = "login"
+        else:
+            flow_name = dataset
 
         login_flow = next(
-            (flow for flow in simulator.flows if flow.name == "login"), None
+            (flow for flow in simulator.flows if flow.name == flow_name), None
         )
         if not login_flow:
             raise PlatoClientError("No login flow found")
