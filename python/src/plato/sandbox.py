@@ -1,5 +1,6 @@
 import asyncio  # noqa: F401
 import os
+import shutil
 import tempfile
 from typing import Optional, Dict, Any
 
@@ -167,6 +168,8 @@ def append_ssh_host_entry(
     """Append a new SSH host entry to config."""
     config_content = read_ssh_config()
 
+    proxytunnel_path = shutil.which("proxytunnel")
+
     config_with_proxy = f""""
         Host {hostname}
         HostName localhost
@@ -177,7 +180,7 @@ def append_ssh_host_entry(
         StrictHostKeyChecking no
         UserKnownHostsFile /dev/null
         ConnectTimeout 10
-        ProxyCommand /opt/homebrew/bin/proxytunnel -E -p proxy.plato.so:9000 -P '{job_group_id}@22:newpass' -d %h:%p --no-check-certificate
+        ProxyCommand {proxytunnel_path} -E -p proxy.plato.so:9000 -P '{job_group_id}@22:newpass' -d %h:%p --no-check-certificate
     """
 
     if config_content:
