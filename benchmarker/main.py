@@ -289,6 +289,10 @@ async def main():
 
     # Get tasks for the selected simulator
     simulator_tasks = await client.load_tasks(selected_simulator_name)
+    simulator_tasks = [
+        task for task in simulator_tasks
+        if task.default_scoring_config and task.default_scoring_config.get("type") != "human_in_the_loop"
+    ]
 
     # Filter tasks based on max_num_validator_human_scores if specified
     if args.max_num_validator_human_scores is not None:
