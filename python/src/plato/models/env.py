@@ -71,7 +71,7 @@ class PlatoEnvironment:
         page: Page,
         throw_on_login_error: bool = False,
         screenshots_dir: Optional[Path] = None,
-        dataset: str = "base"
+        dataset: str = "base",
     ) -> None:
         """Login to the environment using authentication config.
 
@@ -308,7 +308,7 @@ class PlatoEnvironment:
             finally:
                 self._heartbeat_task = None
 
-    async def get_state(self) -> Dict[str, Any]:
+    async def get_state(self, merge_mutations: bool = False) -> Dict[str, Any]:
         """Get the current state of the environment.
 
         Returns:
@@ -319,9 +319,11 @@ class PlatoEnvironment:
         """
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
-        return await self._client.get_environment_state(self.id)
+        return await self._client.get_environment_state(self.id, merge_mutations)
 
-    async def get_state_mutations(self) -> List[Dict[str, Any]]:
+    async def get_state_mutations(
+        self, merge_mutations: bool = False
+    ) -> List[Dict[str, Any]]:
         """Get a list of state mutations that have occurred in the environment.
 
         Returns:
@@ -330,7 +332,7 @@ class PlatoEnvironment:
         Raises:
             PlatoClientError: If no active run session exists.
         """
-        state = await self.get_state()
+        state = await self.get_state(merge_mutations)
         return state.get("mutations", [])
 
     def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:
