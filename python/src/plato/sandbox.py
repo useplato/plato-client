@@ -170,8 +170,6 @@ def append_ssh_host_entry(
 
     proxytunnel_path = shutil.which("proxytunnel")
 
-    print(f"Proxytunnel path: {proxytunnel_path}")
-
     config_with_proxy = f""""
         Host {hostname}
         HostName localhost
