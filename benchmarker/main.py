@@ -3,6 +3,7 @@ import os
 import argparse
 import traceback
 import logging
+import json
 
 from browser_use import (
     Agent as BrowserUseAgent,
@@ -12,6 +13,7 @@ from browser_use import (
 )
 from langchain_openai import ChatOpenAI
 from plato import Plato, PlatoTask
+from plato.models.task import ScoringType
 from plato.models.env import PlatoEnvironment
 from dotenv import load_dotenv
 from models.anthropic.agent import AnthropicAgent
@@ -38,102 +40,6 @@ PLATO_BASE_URL = os.environ.get("PLATO_BASE_URL", "https://plato.so/api")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set. Please set it in your .env file."
-
-# Task set configuration
-TASK_SETS = {
-    "doordash": {
-        "base_prompt": """
-You are a helpful assistant that can help me buy food from doordash.
-start by going to {start_url}. Do not navigate to other websites.
-Do not end the task until you have completed and paid for the order.
-Here is the task:
-{prompt}
-
-Make sure to complete the checkout process once you've added the necessary items to cart.
-The task is not complete until the order is sent and paid for.
-You do not need my permission to and place an order.
-""",
-    },
-    "espocrm": {
-        "base_prompt": """
-You are a helpful assistant that can help me use EspoCRM.
-start by going to {start_url}. Do not navigate to other websites.
-Here is the task:
-{prompt}
-
-The login credentials are:
-username: admin
-password: password
-""",
-    },
-    "roundcube": {
-        "base_prompt": """
-You are a helpful assistant that can help me use Roundcube webmail.
-start by going to {start_url}. Do not navigate to other websites.
-Here is the task:
-{prompt}
-
-The login credentials are:
-username: sarah.chen@technova.io
-password: password
-""",
-    },
-    "mattermost": {
-        "base_prompt": """
-You are a helpful assistant that can help me use Mattermost.
-start by going to {start_url}. Do not navigate to other websites.
-Here is the task:
-{prompt}
-
-The login credentials are:
-username: alex.reynolds
-password: password
-""",
-    },
-    "snipeit": {
-        "base_prompt": """
-You are a helpful assistant that can help me use Snipe-IT.
-start by going to {start_url}. Do not navigate to other websites.
-Here is the task:
-{prompt}
-
-The login credentials are:
-username: mrudulplato
-password: platodev
-""",
-    },
-    "taiga": {
-        "base_prompt": """
-You are a helpful assistant that can help me use Taiga.
-start by going to {start_url}. Do not navigate to other websites.
-Here is the task:
-{prompt}
-The login credentials are:
-username: admin
-password: admin
-""",
-    },
-    "suitecrm": {
-        "base_prompt": """
-You are a helpful assistant that can help me use SuiteCRM.
-start by going to {start_url}. Do not navigate to other websites.
-Here is the task:
-{prompt}
-
-The login credentials are:
-username: user
-password: bitnami
-""",
-    },
-    "getcalfresh": {
-        "base_prompt": """
-You are a helpful assistant that can help me use GetCalFresh.
-start by going to {start_url}. Do not navigate to other websites.
-Here is the task:
-{prompt}
-""",
-    },
-}
 
 
 async def create_concurrency_controllers(pool_size: int):
@@ -187,8 +93,14 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
           await env.login(page)
         except Exception as e:
           logger.warning(f"Error logging in: {e}", exc_info=True)
+
+        final_message = None
         async for item in agent.run_in_loop_generator(prompt, max_steps=100):
             await env.log(item)
+            if item.get("role") == "assistant":
+                final_message = item
+
+        return final_message
 
 
 async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
@@ -202,7 +114,13 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
           await env.login(page)
         except Exception as e:
           logger.warning(f"Error logging in: {e}", exc_info=True)
-        await agent.run(prompt, browser_tool=computer)
+        messages = await agent.run(prompt, browser_tool=computer)
+
+        # Return the final assistant message
+        for message in reversed(messages):
+            if message.get("role") == "assistant":
+                return message
+        return None
 
 
 async def run_task(
@@ -214,23 +132,28 @@ async def run_task(
 ):
     logger.info(f"[{task.name}] Running task: {task.prompt}")
     logger.info(f"[{task.name}] Creating New Environment For Task: ({task.env_id})")
-    env = await client.make_environment(task.env_id, open_page_on_start=True, record_actions=True, fast=True)
+    if task.simulator_artifact_id:
+        env = await client.make_environment(task.env_id, artifact_id=task.simulator_artifact_id, open_page_on_start=True, record_actions=True, fast=True)
+    else:
+        env = await client.make_environment(task.env_id, open_page_on_start=True, record_actions=True, fast=True)
     await env.wait_for_ready(timeout=30)
     logger.info(f"[{task.name}] Environment ready")
 
     # Get the base prompt template from the task set configuration
-    if task_set in TASK_SETS:
-        base_prompt = TASK_SETS[task_set]["base_prompt"]
-    else:
-        base_prompt = f"""
-        You are a helpful assistant that can help me use the {task_set}.
-        Do not navigate to other websites.
-        Here is the task:
-        {task.prompt}
-        """
+    base_prompt = f"""
+    You are a helpful assistant that can help me use the {task_set}.
+    Do not navigate to other websites.
+    Here is the task:
+    {task.prompt}
+    """
+
+    # If scoring type includes OUTPUT, add instruction to extract answer in JSON format
+    if ScoringType.OUTPUT in task.scoring_type and task.output_schema:
+        base_prompt += f"\n\nAt the end of the task, extract the answer in the following JSON format:\n{task.output_schema}\n\nProvide only the JSON object as your final response."
 
     # Format the prompt with task-specific information
-    prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
+    # prompt = base_prompt.format(start_url=task.start_url, prompt=task.prompt)
+    prompt = base_prompt
 
     logger.info(f"[{task.name}] Resetting environment {agent_version}")
     await env.reset(task, agent_version=agent_version)
@@ -242,16 +165,40 @@ async def run_task(
         live_view_url = await env.get_live_view_url()
         logger.info(f"[{task.name}] Live view URL: {live_view_url}")
 
+        final_message = None
         if "browser_use" in agent_version:
             await run_browseruse_task(cdp_url, prompt, public_url, env)
+            # Browser use doesn't return final message, skip output extraction
         elif "openai" in agent_version:
-            await run_openai_cua_task(cdp_url, prompt, public_url, env)
+            final_message = await run_openai_cua_task(cdp_url, prompt, public_url, env)
         elif "anthropic" in agent_version:
-            await run_anthropic_cua_task(cdp_url, prompt, public_url, env)
+            final_message = await run_anthropic_cua_task(cdp_url, prompt, public_url, env)
 
         # evaluate the task
         try:
-            eval_result = await env.evaluate()
+            if ScoringType.OUTPUT in task.scoring_type and final_message:
+                # Extract JSON from the final message content
+                evaluation_value = None
+                if final_message.get("content"):
+                    content = final_message["content"]
+                    if isinstance(content, list) and content:
+                        # Handle list format (Anthropic style)
+                        text_content = content[0].get("text", "") if isinstance(content[0], dict) else str(content[0])
+                    else:
+                        # Handle string format (OpenAI style)
+                        text_content = str(content)
+
+                    try:
+                        evaluation_value = json.loads(text_content)
+                        logger.info(f"[{task.name}] Extracted JSON output: {evaluation_value}")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"[{task.name}] Failed to parse JSON from final message: {e}")
+                        evaluation_value = text_content
+
+                eval_result = await env.evaluate(value=evaluation_value)
+            else:
+                # For non-OUTPUT scoring types, call evaluate without value parameter
+                eval_result = await env.evaluate()
             logger.info(f"[{task.name}] Evaluation result: {eval_result}")
         except Exception as e:
             logger.error(f"[{task.name}] Error evaluating task: {e}\n{traceback.format_exc()}")
