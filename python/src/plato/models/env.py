@@ -97,7 +97,7 @@ class PlatoEnvironment:
 
         # Get base dataset and login flow
         base_dataset = next(
-            (dataset for dataset in simulator.datasets if dataset.name == dataset), None
+            (ds for ds in simulator.datasets if ds.name == dataset), None
         )
         if not base_dataset:
             raise PlatoClientError("No dataset found")
