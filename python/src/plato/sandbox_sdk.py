@@ -1,10 +1,7 @@
-from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal
+from typing import Optional
+import os
 from plato.config import get_config
-from plato.models import PlatoTask, PlatoEnvironment
-from plato.models.task import ScoringType
 from plato.exceptions import PlatoClientError
-from plato.models.task import EvaluationResult
 from plato.models.build_models import (
     VMManagementResponse,
     VMManagementRequest,
@@ -13,16 +10,12 @@ from plato.models.build_models import (
     SetupSandboxRequest,
     SetupSandboxResponse,
     SimConfigDataset,
-    ServicesHealthResponse,
 )
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.console import Console
-import json
-import base64
+
+# Rich progress and console are not used here; keep minimal imports
 import aiohttp
-import os
 import logging
-import time
+# no-op
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +33,7 @@ class PlatoSandboxSDK:
         self.api_key = api_key or config.api_key
         self.base_url = base_url or config.base_url
         self._http_session: Optional[aiohttp.ClientSession] = None
+        self._debug = bool(os.getenv("PLATO_DEBUG", "").strip())
 
     @property
     def http_session(self) -> aiohttp.ClientSession:
@@ -106,10 +100,14 @@ class PlatoSandboxSDK:
             PlatoClientError: If the API request fails.
         """
         headers = {"X-API-Key": self.api_key}
+        if self._debug:
+            logger.info(f"POST {self.base_url}/public-build/vm/{public_id}/snapshot")
         async with self.http_session.post(
             f"{self.base_url}/public-build/vm/{public_id}/snapshot",
             headers=headers,
         ) as snapshot_response:
+            if self._debug:
+                logger.info(f"<- {snapshot_response.status}")
             if snapshot_response.status == 200:
                 try:
                     snapshot_data = VMManagementResponse.model_validate(
@@ -130,14 +128,21 @@ class PlatoSandboxSDK:
     ) -> VMManagementResponse:
         headers = {"X-API-Key": self.api_key}
 
+        if self._debug:
+            logger.info(
+                f"POST {self.base_url}/public-build/vm/{public_id}/start-services"
+            )
         async with self.http_session.post(
             f"{self.base_url}/public-build/vm/{public_id}/start-services",
             headers=headers,
             json=VMManagementRequest(
                 dataset=dataset,
                 plato_dataset_config=dataset_config.model_dump(),
+                timeout=120,  # Increase timeout to 2 minutes for services start
             ).model_dump(mode="json"),
         ) as services_response:
+            if self._debug:
+                logger.info(f"<- {services_response.status}")
             if services_response.status == 200:
                 try:
                     services_data = VMManagementResponse.model_validate(
@@ -155,9 +160,13 @@ class PlatoSandboxSDK:
         public_id: str,
         dataset: str,
         dataset_config: SimConfigDataset,
-    ) -> ServicesHealthResponse:
-        """Return aggregated services health as ServicesHealthResponse."""
+    ) -> VMManagementResponse:
+        """Trigger services health check (async); returns correlation id only."""
         headers = {"X-API-Key": self.api_key}
+        if self._debug:
+            logger.info(
+                f"GET {self.base_url}/public-build/vm/{public_id}/healthy-services"
+            )
         async with self.http_session.get(
             f"{self.base_url}/public-build/vm/{public_id}/healthy-services",
             headers=headers,
@@ -166,9 +175,11 @@ class PlatoSandboxSDK:
                 plato_dataset_config=dataset_config.model_dump(),
             ).model_dump(mode="json"),
         ) as healthy_services_response:
+            if self._debug:
+                logger.info(f"<- {healthy_services_response.status}")
             if healthy_services_response.status == 200:
                 try:
-                    return ServicesHealthResponse.model_validate(
+                    return VMManagementResponse.model_validate(
                         await healthy_services_response.json()
                     )
                 except Exception as e:
@@ -187,14 +198,21 @@ class PlatoSandboxSDK:
     ) -> VMManagementResponse:
         """Start listeners and plato worker with the dataset configuration."""
         headers = {"X-API-Key": self.api_key}
+        if self._debug:
+            logger.info(
+                f"POST {self.base_url}/public-build/vm/{public_id}/start-worker"
+            )
         async with self.http_session.post(
             f"{self.base_url}/public-build/vm/{public_id}/start-worker",
             headers=headers,
             json=VMManagementRequest(
                 dataset=dataset,
                 plato_dataset_config=dataset_config.model_dump(),
+                timeout=120,  # Increase timeout to 2 minutes for worker start
             ).model_dump(mode="json"),
         ) as worker_response:
+            if self._debug:
+                logger.info(f"<- {worker_response.status}")
             if worker_response.status == 200:
                 try:
                     worker_data = VMManagementResponse.model_validate(
@@ -210,10 +228,16 @@ class PlatoSandboxSDK:
     async def healthy_worker(self, public_id: str) -> VMManagementResponse:
         """Check the health status of the plato-worker service."""
         headers = {"X-API-Key": self.api_key}
+        if self._debug:
+            logger.info(
+                f"GET {self.base_url}/public-build/vm/{public_id}/healthy-worker"
+            )
         async with self.http_session.get(
             f"{self.base_url}/public-build/vm/{public_id}/healthy-worker",
             headers=headers,
         ) as healthy_worker_response:
+            if self._debug:
+                logger.info(f"<- {healthy_worker_response.status}")
             if healthy_worker_response.status == 200:
                 try:
                     healthy_worker_data = VMManagementResponse.model_validate(
@@ -240,6 +264,8 @@ class PlatoSandboxSDK:
     ) -> CreateVMResponse:
         """Create a VM instance."""
         headers = {"X-API-Key": self.api_key}
+        if self._debug:
+            logger.info(f"POST {self.base_url}/public-build/vm/create")
         async with self.http_session.post(
             f"{self.base_url}/public-build/vm/create",
             json=CreateVMRequest(
@@ -253,6 +279,8 @@ class PlatoSandboxSDK:
             ).model_dump(mode="json"),
             headers=headers,
         ) as vm_response:
+            if self._debug:
+                logger.info(f"<- {vm_response.status}")
             if vm_response.status == 200:
                 try:
                     vm_data = CreateVMResponse.model_validate(await vm_response.json())
@@ -275,6 +303,10 @@ class PlatoSandboxSDK:
         local_public_key: str,
     ) -> SetupSandboxResponse:
         headers = {"X-API-Key": self.api_key}
+        if self._debug:
+            logger.info(
+                f"POST {self.base_url}/public-build/vm/{public_id}/setup-sandbox"
+            )
         async with self.http_session.post(
             f"{self.base_url}/public-build/vm/{public_id}/setup-sandbox",
             json=SetupSandboxRequest(
@@ -286,6 +318,8 @@ class PlatoSandboxSDK:
             ).model_dump(mode="json"),
             headers=headers,
         ) as setup_response:
+            if self._debug:
+                logger.info(f"<- {setup_response.status}")
             if setup_response.status == 200:
                 try:
                     setup_response_data = SetupSandboxResponse.model_validate(

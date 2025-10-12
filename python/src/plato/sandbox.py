@@ -1,4 +1,5 @@
 import os
+import asyncio
 import shutil
 import tempfile
 from typing import Optional, Dict, Any
@@ -20,6 +21,7 @@ from plato.models.build_models import (
     SimConfigMetadata,
     SimConfigService,
 )
+
 
 class Repository(BaseModel):
     name: str
@@ -96,7 +98,12 @@ class Sandbox:
         self._chisel_process: Optional[subprocess.Popen] = None
 
     async def init(
-        self, console: Console, dataset: str, plato_client: Plato, chisel_port: int, plato_sandbox_sdk: PlatoSandboxSDK
+        self,
+        console: Console,
+        dataset: str,
+        plato_client: Plato,
+        chisel_port: int,
+        plato_sandbox_sdk: PlatoSandboxSDK,
     ):
         self.console = console
         self.dataset = dataset
@@ -106,6 +113,13 @@ class Sandbox:
         public_id = None
 
         try:
+            # Debug: show SDK target and key presence
+            try:
+                self.console.print(
+                    f"[dim]DEBUG: SandboxSDK base_url={getattr(plato_sandbox_sdk, 'base_url', 'unknown')} api_key_set={'yes' if getattr(plato_sandbox_sdk, 'api_key', None) else 'no'}[/dim]"
+                )
+            except Exception:
+                pass
             ## Step 1: Load hub configuration ##
             hub_config_file = ".plato-hub.json"
             if not os.path.exists(hub_config_file):
@@ -241,7 +255,7 @@ class Sandbox:
                     check=True,
                 )
                 commit_hash = commit_result.stdout.strip()
-                
+
                 subprocess.run(
                     ["git", "push", "--force", "origin", "main"],
                     capture_output=True,
@@ -258,7 +272,51 @@ class Sandbox:
             self.console.print(commit_panel)
 
             ## Step 5: Start VM with progress tracking ##
-            vm_info = await self.sandbox_sdk.create_vm(sim_name, dataset_config, commit_hash, dataset, 300, 300, "sandbox")
+            from rich.progress import (
+                Progress as _Progress,
+                SpinnerColumn as _SpinnerColumn,
+                TextColumn as _TextColumn,
+            )
+
+            with _Progress(
+                _SpinnerColumn(),
+                _TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+            ) as _progress:
+                _task = _progress.add_task("[cyan]Starting VM...", total=None)
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: create_vm(service={sim_name}, dataset={dataset}, cpus={dataset_config.compute.cpus}, mem={dataset_config.compute.memory}, disk={dataset_config.compute.disk})[/dim]"
+                    )
+                except Exception:
+                    pass
+                # Apply strict client-side timeout to avoid hanging
+                vm_timeout = int(os.getenv("PLATO_SANDBOX_VM_TIMEOUT_SECS", "120"))
+                vm_wait = int(os.getenv("PLATO_SANDBOX_VM_WAIT_SECS", "60"))
+                try:
+                    vm_info = await asyncio.wait_for(
+                        self.sandbox_sdk.create_vm(
+                            sim_name,
+                            dataset_config,
+                            commit_hash,
+                            dataset,
+                            vm_timeout,
+                            vm_wait,
+                            "sandbox",
+                        ),
+                        timeout=vm_timeout + 15,
+                    )
+                except asyncio.TimeoutError:
+                    raise Exception(
+                        f"VM creation timed out after {vm_timeout}s (client-side)"
+                    )
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: create_vm response public_id={vm_info.public_id} job_group_id={vm_info.job_group_id} url={vm_info.url} corr={vm_info.correlation_id}[/dim]"
+                    )
+                except Exception:
+                    pass
+                _progress.update(_task, description="[green]VM started[/green]")
             public_id = vm_info.public_id
             self._vm_job_uuid = public_id
             vm_panel = Panel.fit(
@@ -281,14 +339,43 @@ class Sandbox:
             self.console.print(ssh_panel)
 
             ## Step 7: Setup sandbox environment ##
-            sandbox_info = await self.sandbox_sdk.setup_sandbox(
-                public_id=public_id,
-                clone_url=clone_url,
-                dataset=dataset,
-                dataset_config=dataset_config,
-                chisel_port=chisel_port,
-                local_public_key=local_public_key
+            from rich.progress import (
+                Progress as _Progress2,
+                SpinnerColumn as _SpinnerColumn2,
+                TextColumn as _TextColumn2,
             )
+
+            with _Progress2(
+                _SpinnerColumn2(),
+                _TextColumn2("[progress.description]{task.description}"),
+                console=self.console,
+            ) as _progress2:
+                _task2 = _progress2.add_task(
+                    "[cyan]Setting up sandbox on VM...", total=None
+                )
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: setup_sandbox(public_id={public_id}, chisel_port={chisel_port})[/dim]"
+                    )
+                except Exception:
+                    pass
+                sandbox_info = await self.sandbox_sdk.setup_sandbox(
+                    public_id=public_id,
+                    clone_url=clone_url,
+                    dataset=dataset,
+                    dataset_config=dataset_config,
+                    chisel_port=chisel_port,
+                    local_public_key=local_public_key,
+                )
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: setup_sandbox ssh_url={sandbox_info.ssh_url} corr={sandbox_info.correlation_id}[/dim]"
+                    )
+                except Exception:
+                    pass
+                _progress2.update(
+                    _task2, description="[green]Sandbox configured[/green]"
+                )
             sandbox_panel = Panel.fit(
                 f"[green]🎉 Your development sandbox is now fully operational![/green]\n"
                 f"[cyan]• SSH URL:[/cyan] {sandbox_info.ssh_url}\n"
@@ -300,7 +387,30 @@ class Sandbox:
             self.console.print(sandbox_panel)
 
             ##  Step 8: Setup local chisel client ##
-            local_port = await self._setup_chisel_client(sandbox_info.ssh_url)
+            from rich.progress import (
+                Progress as _Progress3,
+                SpinnerColumn as _SpinnerColumn3,
+                TextColumn as _TextColumn3,
+            )
+
+            with _Progress3(
+                _SpinnerColumn3(),
+                _TextColumn3("[progress.description]{task.description}"),
+                console=self.console,
+            ) as _progress3:
+                _task3 = _progress3.add_task(
+                    "[cyan]Establishing secure tunnel...", total=None
+                )
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: setup_chisel_client(ssh_url={sandbox_info.ssh_url})[/dim]"
+                    )
+                except Exception:
+                    pass
+                local_port = await self._setup_chisel_client(sandbox_info.ssh_url)
+                _progress3.update(
+                    _task3, description="[green]Tunnel established[/green]"
+                )
             tunnel_panel = Panel.fit(
                 f"[green]Secure tunnel established successfully![/green]\n"
                 f"[cyan]Local SSH port:[/cyan] [bold]{local_port}[/bold]\n"
@@ -311,9 +421,28 @@ class Sandbox:
             self.console.print(tunnel_panel)
 
             ## Step 9: Setup SSH config with password ##
-            ssh_host = await self._setup_ssh_config_with_password(
-                local_port, public_id
+            from rich.progress import (
+                Progress as _Progress4,
+                SpinnerColumn as _SpinnerColumn4,
+                TextColumn as _TextColumn4,
             )
+
+            with _Progress4(
+                _SpinnerColumn4(),
+                _TextColumn4("[progress.description]{task.description}"),
+                console=self.console,
+            ) as _progress4:
+                _task4 = _progress4.add_task("[cyan]Writing SSH config...", total=None)
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: setup_ssh_config(local_port={local_port}, public_id={public_id})[/dim]"
+                    )
+                except Exception:
+                    pass
+                ssh_host = await self._setup_ssh_config_with_password(
+                    local_port, public_id
+                )
+                _progress4.update(_task4, description="[green]SSH ready[/green]")
             ssh_success_panel = Panel.fit(
                 f"[green]SSH configuration updated successfully![/green]\n"
                 f"[cyan]Connection command:[/cyan] [bold]ssh {ssh_host}[/bold]\n"
@@ -364,7 +493,6 @@ class Sandbox:
             )
         self.sandbox_info.dataset_config = sim_config.datasets[self.dataset]
 
-
     async def _monitor_ssh_execution(
         self,
         client: "Plato",
@@ -388,7 +516,6 @@ class Sandbox:
         operation_name: str,
         timeout: int = 600,
     ) -> SSHExecutionResult:
-
         def _filter_ssh_warnings(stderr: str) -> str:
             if not stderr:
                 return ""
@@ -420,13 +547,11 @@ class Sandbox:
                     raise Exception(
                         f"Failed to connect to event stream: {response.status}"
                     )
-                
 
                 async for line in response.content:
                     if time.time() - start_time > timeout:
                         raise Exception(f"Operation timed out after {timeout} seconds")
-                    
-               
+
                     line_str = line.decode("utf-8").strip()
                     if line_str.startswith("data: "):
                         try:
@@ -445,7 +570,11 @@ class Sandbox:
 
                                 # Show only the final success line from stdout if available
                                 if stdout and "✅" in stdout:
-                                    success_lines = [line for line in stdout.strip().split("\n") if "✅" in line]
+                                    success_lines = [
+                                        line
+                                        for line in stdout.strip().split("\n")
+                                        if "✅" in line
+                                    ]
                                     if success_lines:
                                         self.console.print(f"   {success_lines[-1]}")
 
@@ -453,9 +582,18 @@ class Sandbox:
                                 if stderr:
                                     filtered_stderr = _filter_ssh_warnings(stderr)
                                     if filtered_stderr and filtered_stderr.strip():
-                                        error_lines = [line for line in filtered_stderr.strip().split("\n") if line.strip() and not line.startswith("Warning:")]
+                                        error_lines = [
+                                            line
+                                            for line in filtered_stderr.strip().split(
+                                                "\n"
+                                            )
+                                            if line.strip()
+                                            and not line.startswith("Warning:")
+                                        ]
                                         if error_lines:
-                                            self.console.print("📤 [yellow]Errors:[/yellow]")
+                                            self.console.print(
+                                                "📤 [yellow]Errors:[/yellow]"
+                                            )
                                             for line in error_lines:
                                                 self.console.print(f"   {line}")
 
@@ -586,7 +724,12 @@ class Sandbox:
             # Format: https://staging.plato.so/connect-job/{uuid}/{port}
             chisel_server_url = ssh_url
             local_ssh_port = random.randint(2200, 2299)
-            chisel_cmd = ["chisel", "client", chisel_server_url, f"{local_ssh_port}:127.0.0.1:22"]
+            chisel_cmd = [
+                "chisel",
+                "client",
+                chisel_server_url,
+                f"{local_ssh_port}:127.0.0.1:22",
+            ]
             # No panels printed here; panels are printed by caller after completion
             chisel_process = subprocess.Popen(
                 chisel_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
