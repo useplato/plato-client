@@ -171,16 +171,19 @@ def append_ssh_host_entry(
     proxytunnel_path = shutil.which("proxytunnel")
 
     config_with_proxy = f""""
-        Host {hostname}
-        HostName localhost
-        Port {port}
-        User root
-        IdentityFile {key_path}
-        IdentitiesOnly yes
-        StrictHostKeyChecking no
-        UserKnownHostsFile /dev/null
-        ConnectTimeout 10
-        ProxyCommand {proxytunnel_path} -E -p proxy.plato.so:9000 -P '{job_group_id}@22:newpass' -d %h:%p --no-check-certificate
+Host {hostname}
+    HostName localhost
+    Port {port}
+    User root
+    IdentityFile {key_path}
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    ConnectTimeout 10
+    ProxyCommand {proxytunnel_path} -E -p proxy.plato.so:9000 -P '{job_group_id}@22:newpass' -d %h:%p --no-check-certificate
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
     """
 
     if config_content:
