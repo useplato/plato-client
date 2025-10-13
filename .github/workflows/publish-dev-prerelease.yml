@@ -59,7 +59,7 @@ jobs:
           # Build a unique dev version: <base>.devYYYYMMDDHHMMSS+g<sha>
           now = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
           sha = subprocess.check_output(["git","rev-parse","--short","HEAD"], text=True).strip()
-          dev_version = f"{base}.dev{now}+g{sha}"
+          dev_version = f"{base}.dev{now}g{sha}"
 
           patched = re.sub(r'(?m)^(\s*version\s*=\s*")([^"]+)(")',
                            r'\g<1>' + dev_version + r'\3', text)
