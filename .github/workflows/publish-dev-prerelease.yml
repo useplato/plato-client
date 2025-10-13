@@ -75,6 +75,7 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: python/dist/
           skip-existing: true
+          verbose: true
 
       # Optional: smoke test that it installs from TestPyPI
       - name: Smoke test - verify installation from TestPyPI
