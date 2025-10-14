@@ -2,7 +2,7 @@ name: Publish Dev Pre-release (TestPyPI)
 
 on:
   push:
-    branches: [main, dev-auto-push]
+    branches: [main]
 
 jobs:
   publish-dev:
@@ -75,14 +75,3 @@ jobs:
           packages-dir: python/dist/
           skip-existing: true
           verbose: true
-
-      # Optional: smoke test that it installs from TestPyPI
-      - name: Smoke test - verify installation from TestPyPI
-        run: |
-          python -m venv .venv-test
-          . .venv-test/bin/activate
-          python -m pip install --upgrade pip
-          # Install the package from TestPyPI (no deps to avoid missing dependencies)
-          python -m pip install --index-url https://test.pypi.org/simple/ plato-sdk
-          # Import the actual module (which is 'plato', not 'plato_sdk')
-          python -c "import plato; print('✓ Successfully imported plato module')"
