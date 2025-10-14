@@ -81,21 +81,9 @@ jobs:
         run: |
           python -m venv .venv-test
           . .venv-test/bin/activate
-          # Extract package name from metadata (best effort)
-          PKG=$(python - <<'PY'
-          import json, pathlib, sys
-          # try to read project.name from pyproject
-          t = pathlib.Path("pyproject.toml").read_text(encoding="utf-8")
-          import re
-          m = re.search(r'(?ms)^\s*\[project\]\s.*?^\s*name\s*=\s*"([^"]+)"', t)
-          print(m.group(1) if m else "")
-          PY
-          )
-          if [ -z "$PKG" ]; then
-            echo "WARN: Could not detect project.name; skipping smoke install."
-            exit 0
-          fi
           python -m pip install --upgrade pip
-          python -m pip install --index-url https://test.pypi.org/simple/ --no-deps "$PKG"
-          python -c "import importlib; importlib.import_module('$PKG'.replace('-','_')); print('Imported OK')"
+          # Install the package from TestPyPI (no deps to avoid missing dependencies)
+          python -m pip install --index-url https://test.pypi.org/simple/ --no-deps plato-sdk
+          # Import the actual module (which is 'plato', not 'plato_sdk')
+          python -c "import plato; print('✓ Successfully imported plato module')"
 
