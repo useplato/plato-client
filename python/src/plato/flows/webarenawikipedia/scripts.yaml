@@ -1,0 +1,41 @@
+name: webarenawikipedia
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: WebArena Wikipedia (Kiwix) - no auth required
+  variables: {}
+  flows:
+  - login
+flows:
+- name: login
+  description: Navigate to Kiwix home and verify core UI elements
+  steps:
+  - action: navigate
+    description: Navigate to home
+    url: '/'
+  - action: wait
+    description: Let page settle
+    duration: 2000
+  - action: wait_for_selector
+    description: Wait for presence of search input
+    selector: 'input[type="text"], input#search, input#searchInput, input[name="search"], input[name="pattern"], form[action*="search"] input, #searchFilter.kiwixSearch'
+    timeout: 15000
+  - action: verify_url
+    description: Verify still on root route
+    url: '/'
+    contains: true
+  - action: verify
+    description: Verify Kiwix search form elements exist
+    selector: 'form#kiwixSearchForm, .kiwixNav__SearchForm, #searchFilter.kiwixSearch'
+    type: element_exists
+  - action: verify
+    description: Verify Wikipedia book link exists on home page
+    selector: 'a.book__link[href*="wikipedia"], .book__list .book__link, #book__title'
+    type: element_exists
+  - action: verify
+    description: Verify page title contains Kiwix
+    title: 'Kiwix'
+    contains: true
+    type: page_title
+

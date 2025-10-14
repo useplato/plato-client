@@ -27,6 +27,9 @@ from plato.hub import Hub
 from plato.sandbox import Sandbox
 from plato.sandbox_sdk import PlatoSandboxSDK
 from dotenv import load_dotenv
+import platform
+import shutil
+import subprocess
 
 import json
 # time is not used; remove to satisfy linter
@@ -432,13 +435,123 @@ After snapshotting, you have:
     console.print(guide_content)
 
 
+# =============================================================================
+# PROXYTUNNEL INSTALLER
+# =============================================================================
+
+
+def _is_command_available(cmd: str) -> bool:
+    return shutil.which(cmd) is not None
+
+
+def _install_proxytunnel_noninteractive() -> bool:
+    """Attempt to install proxytunnel using the platform's package manager.
+
+    Returns True on success, False otherwise. Avoids interactive prompts.
+    """
+    try:
+        if _is_command_available("proxytunnel"):
+            console.print("[green]✅ proxytunnel is already installed[/green]")
+            return True
+
+        system = platform.system().lower()
+
+        if system == "darwin":
+            # macOS: prefer Homebrew
+            if _is_command_available("brew"):
+                console.print("[cyan]🔧 Installing proxytunnel via Homebrew...[/cyan]")
+                env = os.environ.copy()
+                env["NONINTERACTIVE"] = "1"
+                # Try list first to skip reinstall
+                list_res = subprocess.run(
+                    ["brew", "list", "proxytunnel"], capture_output=True, text=True
+                )
+                if list_res.returncode != 0:
+                    res = subprocess.run(
+                        ["brew", "install", "proxytunnel"],
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                    if res.returncode != 0:
+                        console.print(
+                            f"[red]❌ Homebrew install failed:[/red] {res.stderr.strip()}"
+                        )
+                        return False
+            else:
+                console.print(
+                    "[yellow]⚠️  Homebrew not found. Install Homebrew or install proxytunnel manually.[/yellow]"
+                )
+                console.print(
+                    "[cyan]💡 See: https://brew.sh then run: brew install proxytunnel[/cyan]"
+                )
+                return False
+
+        elif system == "linux":
+            console.print("[cyan]🔧 Installing proxytunnel via system package manager...[/cyan]")
+            # Try common package managers, preferring non-interactive with sudo -n
+            if _is_command_available("apt-get"):
+                cmd = [
+                    "sudo",
+                    "-n",
+                    "bash",
+                    "-lc",
+                    "apt-get update && apt-get install -y proxytunnel",
+                ]
+            elif _is_command_available("dnf"):
+                cmd = ["sudo", "-n", "dnf", "install", "-y", "proxytunnel"]
+            elif _is_command_available("yum"):
+                cmd = ["sudo", "-n", "yum", "install", "-y", "proxytunnel"]
+            elif _is_command_available("pacman"):
+                cmd = ["sudo", "-n", "pacman", "-Sy", "--noconfirm", "proxytunnel"]
+            elif _is_command_available("apk"):
+                cmd = ["sudo", "-n", "apk", "add", "--no-cache", "proxytunnel"]
+            else:
+                console.print(
+                    "[yellow]⚠️  Unsupported Linux distro: please install 'proxytunnel' via your package manager.[/yellow]"
+                )
+                return False
+
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                # If sudo -n failed, advise user to re-run with privileges
+                hint = " (tip: re-run with sudo)" if "sudo" in cmd[0:1] else ""
+                console.print(
+                    f"[red]❌ Installation failed:{hint}[/red] {res.stderr.strip() or res.stdout.strip()}"
+                )
+                return False
+
+        else:
+            console.print(
+                f"[yellow]⚠️  Unsupported platform '{system}'. Install proxytunnel manually.[/yellow]"
+            )
+            return False
+
+        # Verify installation
+        if not _is_command_available("proxytunnel"):
+            console.print("[red]❌ proxytunnel not found in PATH after installation[/red]")
+            return False
+
+        # Quick sanity check
+        check = subprocess.run(["proxytunnel", "-h"], capture_output=True, text=True)
+        if check.returncode not in (0, 1):  # -h may exit 1 depending on build
+            console.print(
+                f"[yellow]⚠️  proxytunnel installed but health check returned {check.returncode}[/yellow]"
+            )
+        console.print("[green]✅ proxytunnel installed successfully[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]❌ Failed to install proxytunnel: {e}[/red]")
+        return False
+
+
+
 @hub_app.command()
 def sandbox(
     config: str = typer.Option(
         "plato-config.yml", "--config", help="VM configuration file"
     ),
     dataset: str = typer.Option("base", "--dataset", help="Dataset to use"),
-    chisel_port: int = typer.Option(6000, "--chisel-port", help="Chisel server port"),
 ):
     """Start a development sandbox environment."""
 
@@ -446,6 +559,7 @@ def sandbox(
         sdk = Plato()
         sandbox_sdk = PlatoSandboxSDK()
         try:
+
             # Initialize sandbox service (async init) with a live progress spinner
             sandbox_service = Sandbox()
             with Progress(
@@ -456,6 +570,14 @@ def sandbox(
                 task = progress.add_task(
                     "[cyan]Provisioning sandbox (VM, SSH, tunnel)...", total=None
                 )
+                # Best-effort: ensure proxytunnel is available locally
+                try:
+                    console.print("[dim]🔧 Ensuring proxytunnel is installed...[/dim]")
+                    _install_proxytunnel_noninteractive()
+                except Exception as _e:
+                    console.print(
+                        "[red]❌ Could not install proxytunnel automatically; continuing.[/red]"
+                    )
                 await sandbox_service.init(
                     console, dataset, sdk, chisel_port, sandbox_sdk
                 )
@@ -557,7 +679,7 @@ async def run_interactive_sandbox_menu(sandbox: Sandbox):
             continue
 
         if choice == 0:
-            break
+            await handle_display_sandbox_info(sandbox)
         elif choice == 1:
             await handle_run_services(sandbox)
         elif choice == 2:

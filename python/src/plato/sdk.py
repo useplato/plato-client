@@ -80,7 +80,11 @@ class Plato:
             try:
                 # Try to get the error message from the response body
                 error_data = await response.json()
-                error_message = error_data.get('error') or error_data.get('message') or str(error_data)
+                error_message = (
+                    error_data.get("error")
+                    or error_data.get("message")
+                    or str(error_data)
+                )
             except (aiohttp.ContentTypeError, ValueError):
                 # Fallback to status text if we can't parse JSON
                 error_message = response.reason or f"HTTP {response.status}"
@@ -101,6 +105,9 @@ class Plato:
         alias: Optional[str] = None,
         fast: bool = False,
         version: Optional[str] = None,
+        tag: Optional[str] = None,
+        dataset: Optional[str] = None,
+        artifact_id: Optional[str] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -134,6 +141,9 @@ class Plato:
                 "source": "SDK",
                 "open_page_on_start": open_page_on_start,
                 "env_id": env_id,
+                "tag": tag,
+                "dataset": dataset,
+                "artifact_id": artifact_id,
                 "env_config": env_config or {},
                 "record_network_requests": record_network_requests,
                 "record_actions": record_actions,
@@ -287,7 +297,9 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
-    async def get_environment_state(self, job_id: str) -> Dict[str, Any]:
+    async def get_environment_state(
+        self, job_id: str, merge_mutations: bool = False
+    ) -> Dict[str, Any]:
         """Get the current state of an environment.
 
         Args:
@@ -301,7 +313,9 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/env/{job_id}/state", headers=headers
+            f"{self.base_url}/env/{job_id}/state",
+            headers=headers,
+            params={"merge_mutations": str(merge_mutations).lower()},
         ) as response:
             await self._handle_response_error(response)
             data = await response.json()
@@ -396,7 +410,10 @@ class Plato:
             return await response.json()
 
     async def evaluate(
-        self, session_id: str, value: Optional[Any] = None, agent_version: Optional[str] = None
+        self,
+        session_id: str,
+        value: Optional[Any] = None,
+        agent_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Evaluate the environment.
 
@@ -508,11 +525,16 @@ class Plato:
                     env_id=t["simulator"]["name"],
                     average_time=t.get("averageTimeTaken"),
                     average_steps=t.get("averageStepsTaken"),
-                    num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
+                    num_validator_human_scores=t.get("defaultScoringConfig", {}).get(
+                        "num_sessions_used", 0
+                    ),
                     default_scoring_config=t.get("defaultScoringConfig", {}),
-                    scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
+                    scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])]
+                    if t.get("scoringTypes")
+                    else None,
                     output_schema=t.get("outputSchema"),
                     is_sample=t.get("isSample", False),
+                    simulator_artifact_id=t.get("simulatorArtifactId"),
                 )
                 for t in test_cases
             ]
@@ -651,7 +673,9 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
-    async def create_simulator(self, name: str, description: str = None, sim_type: str = "docker_app") -> Dict[str, Any]:
+    async def create_simulator(
+        self, name: str, description: str = None, sim_type: str = "docker_app"
+    ) -> Dict[str, Any]:
         """Create a new simulator.
 
         Args:
@@ -677,14 +701,12 @@ class Plato:
             "config": {
                 "image_name": f"plato-{name}:latest",
                 "internal_app_port": 80,
-                "supported_providers": ["ecs_service", "ecs_task"]
-            }
+                "supported_providers": ["ecs_service", "ecs_task"],
+            },
         }
 
         async with self.http_session.post(
-            f"{self.base_url}/env/simulators",
-            json=simulator_data,
-            headers=headers
+            f"{self.base_url}/env/simulators", json=simulator_data, headers=headers
         ) as response:
             await self._handle_response_error(response)
             return await response.json()
@@ -704,9 +726,7 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
-            f"{self.base_url}/gitea/simulators/{simulator_id}/repo",
-            headers=headers
+            f"{self.base_url}/gitea/simulators/{simulator_id}/repo", headers=headers
         ) as response:
             await self._handle_response_error(response)
             return await response.json()
-

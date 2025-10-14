@@ -92,6 +92,9 @@ class SyncPlato:
         alias: Optional[str] = None,
         fast: bool = False,
         version: Optional[str] = None,
+        tag: Optional[str] = None,
+        dataset: Optional[str] = None,
+        artifact_id: Optional[str] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -131,6 +134,9 @@ class SyncPlato:
                 "alias": alias,
                 "fast": fast,
                 "version": version,
+                "tag": tag,
+                "dataset": dataset,
+                "artifact_id": artifact_id,
             },
         )
         self._handle_response_error(response)
@@ -490,6 +496,7 @@ class SyncPlato:
                 scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
                 output_schema=t.get("outputSchema"),
                 is_sample=t.get("isSample", False),
+                simulator_artifact_id=t.get("simulatorArtifactId"),
             )
             for t in test_cases
         ]
