@@ -2,7 +2,7 @@ name: Publish Dev Pre-release (TestPyPI)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, dev-auto-push]
 
 jobs:
   publish-dev:
@@ -10,12 +10,12 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write  # Required for OIDC trusted publishing
+      id-token: write # Required for OIDC trusted publishing
 
     env:
       # Change to your next intended minor/major base if you prefer (e.g., 2.0.0).
       # If omitted, we auto-read the current version in pyproject and append .dev...
-      BASE_VERSION: ""   # leave empty to auto-detect from pyproject
+      BASE_VERSION: "" # leave empty to auto-detect from pyproject
 
     defaults:
       run:
@@ -83,7 +83,6 @@ jobs:
           . .venv-test/bin/activate
           python -m pip install --upgrade pip
           # Install the package from TestPyPI (no deps to avoid missing dependencies)
-          python -m pip install --index-url https://test.pypi.org/simple/ --no-deps plato-sdk
+          python -m pip install --index-url https://test.pypi.org/simple/ plato-sdk
           # Import the actual module (which is 'plato', not 'plato_sdk')
           python -c "import plato; print('✓ Successfully imported plato module')"
-
