@@ -1,0 +1,90 @@
+name: webarenacms
+reset_timeout: 120000
+environment_ready_timeout: 450000
+datasets:
+- name: base
+  description: WebArena CMS (Magento 2 Admin) credentials
+  variables:
+    username: admin
+    password: admin1234
+    wrong_password: wrongpassword
+  flows:
+  - login
+flows:
+- name: login
+  description: Login flow for WebArena CMS (Magento 2 Admin) with comprehensive verification
+  steps:
+  - action: navigate
+    description: Navigate to Magento admin login page
+    url: '/admin'
+    timeout: 30000
+  - action: wait
+    description: Wait for page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for username field to be available
+    selector: 'input[name="login[username]"], input#username, input[name="username"], input#email'
+    timeout: 15000
+  - action: verify
+    description: Verify username field is visible
+    selector: 'input[name="login[username]"], input#username, input[name="username"]'
+    type: element_exists
+  - action: fill
+    description: Enter admin username
+    selector: 'input[name="login[username]"], input#username, input[name="username"]'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="login[password]"], input#password, input[name="password"], input[type="password"]'
+    timeout: 5000
+  - action: verify
+    description: Verify password field is visible
+    selector: 'input[name="login[password]"], input#password, input[name="password"], input[type="password"]'
+    type: element_exists
+  - action: fill
+    description: Enter admin password
+    selector: 'input[name="login[password]"], input#password, input[name="password"], input[type="password"]'
+    value: $password
+  - action: wait
+    description: Brief pause before clicking login
+    duration: 1000
+  - action: click
+    description: Click Sign In button
+    selector: 'button.action-login, button[type="submit"], button.action-primary, .actions .action-primary'
+    timeout: 10000
+  - action: wait
+    description: Wait for login processing and dashboard loading
+    duration: 8000
+  # Mandatory authentication verification - multiple signals
+  - action: verify_url
+    description: Verify redirected to admin dashboard URL
+    url: '/admin/admin/dashboard'
+    contains: true
+    timeout: 15000
+  - action: verify_no_errors
+    description: Verify no login errors displayed
+    error_selectors:
+      - '.message-error'
+      - '.error'
+      - '.alert-danger'
+      - '.message.message-error'
+      - '.messages .message-error'
+  - action: wait_for_selector
+    description: Wait for admin navigation menu
+    selector: '.page-header, .admin__menu, .menu-wrapper, nav.admin__menu'
+    timeout: 15000
+  - action: verify
+    description: Verify admin menu is present (authenticated state)
+    selector: '.admin__menu, nav.admin__menu, .menu-wrapper'
+    type: element_exists
+  - action: verify
+    description: Verify user account dropdown is present
+    selector: '.admin-user, .account-dropdown, .admin__action-dropdown, [data-bind*="username"]'
+    type: element_exists
+  - action: verify_text
+    description: Verify page title contains Dashboard
+    text: 'Dashboard'
+  - action: verify
+    description: Verify dashboard main content is visible
+    selector: '.dashboard-container, .dashboard-main, .dashboard-diagram-container, .dashboard-diagram, .dashboard-advanced-reports'
+    type: element_exists

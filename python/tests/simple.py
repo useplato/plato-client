@@ -14,15 +14,24 @@ async def main():
     client = Plato(base_url=BASE_URL, api_key=API_KEY)
     running_sessions_count = await client.get_running_sessions_count()
     env = await client.make_environment(
-        "mattermost",
+        "espocrm",
         fast=True,
         interface_type=None,
+        # dataset="wintergreen",
+        artifact_id="56f85a14-8e82-4053-a7df-8490c31a14e3",
         # version="latest"
     )
+    tasks = await client.load_tasks("espocrm")
+    task = tasks[0]
     await env.wait_for_ready()
-    await env.reset()
+    await env.reset(task=task)
     public_url = await env.get_public_url()
     print(public_url)
+    input("Press Enter to continue...")
+
+    state = await env.get_state()
+    print(state)
+
     input("Press Enter to continue...")
     # tasks = await client.load_tasks("firefly")
     # task = tasks[0]
@@ -33,3 +42,5 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
+

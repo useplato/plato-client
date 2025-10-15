@@ -64,11 +64,13 @@ class SyncPlatoEnvironment:
 
     # No embedded defaults; expect scripts.yaml to exist in repo at plato/flows/{env_id}/scripts.yaml
 
-    def login(self, page: Page, throw_on_login_error: bool = False) -> None:
+    def login(self, page: Page, throw_on_login_error: bool = False, dataset: str = "base") -> None:
         """Login to the environment using authentication config.
 
         Args:
             page (Page): The Playwright page to authenticate
+            throw_on_login_error (bool): Whether to raise an error on login failure
+            dataset (str): The dataset to use for login (default: "base")
         """
         from plato.models.flow import Simulator
         from plato.sync_flow_executor import SyncFlowExecutor
@@ -86,20 +88,26 @@ class SyncPlatoEnvironment:
             scripts = yaml.safe_load(f)
         simulator = Simulator.model_validate(scripts)
 
-        # Get base dataset and login flow
-        base_dataset = next(
-            (dataset for dataset in simulator.datasets if dataset.name == "base"), None
+        # Get the specified dataset
+        target_dataset = next(
+            (d for d in simulator.datasets if d.name == dataset), None
         )
-        if not base_dataset:
-            raise PlatoClientError("No base dataset found")
+        if not target_dataset:
+            raise PlatoClientError(f"No dataset '{dataset}' found")
+
+        # Determine flow name based on dataset
+        if dataset == "base":
+            flow_name = "login"
+        else:
+            flow_name = dataset
 
         login_flow = next(
-            (flow for flow in simulator.flows if flow.name == "login"), None
+            (flow for flow in simulator.flows if flow.name == flow_name), None
         )
         if not login_flow:
-            raise PlatoClientError("No login flow found")
+            raise PlatoClientError(f"No login flow '{flow_name}' found")
 
-        flow_executor = SyncFlowExecutor(page, login_flow, base_dataset, logger=logger)
+        flow_executor = SyncFlowExecutor(page, login_flow, target_dataset, logger=logger)
         if not flow_executor.execute_flow():
             if throw_on_login_error:
                 raise PlatoClientError("Failed to login")

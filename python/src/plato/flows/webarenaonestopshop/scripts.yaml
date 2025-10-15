@@ -1,0 +1,76 @@
+name: webarenaonestopshop
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: WebArena OneStopShop customer credentials
+  variables:
+    username: emma.lopez@gmail.com
+    password: Password.123
+    wrong_password: wrongpassword
+  flows:
+  - login
+flows:
+- name: login
+  description: Customer login flow with robust verification (Magento)
+  steps:
+  - action: navigate
+    description: Navigate directly to the customer login page
+    url: '/customer/account/login/'
+  - action: wait
+    description: Wait for login page to fully load
+    duration: 3000
+  - action: wait_for_selector
+    description: Wait for email/username field
+    selector: 'input[name="login[username]"], input[name="email"], #email, input[type="email"]'
+    timeout: 15000
+  - action: fill
+    description: Fill email/username field
+    selector: 'input[name="login[username]"], input[name="email"], #email, input[type="email"]'
+    value: $username
+  - action: wait_for_selector
+    description: Wait for password field
+    selector: 'input[name="login[password]"], #pass, input[type="password"]'
+    timeout: 10000
+  - action: fill
+    description: Fill password field
+    selector: 'input[name="login[password]"], #pass, input[type="password"]'
+    value: $password
+  - action: wait_for_selector
+    description: Wait for login form submit button (not disabled)
+    selector: 'form[action*="/customer/account/login"] button#send2:not([disabled]), form[action*="/customer/account/login"] button.action.login:not([disabled]), button#send2:not([disabled]), button.action.login:not([disabled])'
+    timeout: 15000
+  - action: click
+    description: Click login submit button (avoid search button)
+    selector: 'form[action*="/customer/account/login"] button#send2:not([disabled]), form[action*="/customer/account/login"] button.action.login:not([disabled]), button#send2:not([disabled]), button.action.login:not([disabled])'
+  - action: wait
+    description: Wait for login to process and redirect
+    duration: 6000
+  - action: verify_no_errors
+    description: Verify no login errors are displayed
+    error_selectors:
+      - '.message-error'
+      - '.messages .error'
+      - '.mage-error'
+      - '.alert-danger'
+      - '.alert-error'
+      - '.invalid-feedback'
+      - '[role="alert"]'
+  - action: verify_url
+    description: Verify redirected to account area
+    url: '/customer/account'
+    contains: true
+  - action: verify
+    description: Verify authenticated UI indicators present
+    selector: 'li.authorization-link a[href*="logout"], .customer-welcome, a[href*="/customer/account/"]'
+    type: element_exists
+  - action: verify
+    description: Verify main navigation/header visible
+    selector: '.page-header, .navigation, .nav-sections, header.page-header, nav'
+    type: element_exists
+  - action: verify
+    description: Verify page title indicates account/dashboard
+    title: 'Account'
+    contains: true
+    type: page_title
+

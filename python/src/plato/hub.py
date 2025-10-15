@@ -53,7 +53,6 @@ def copy_files_respecting_gitignore(
 ) -> None:
     """
     Copy files from source_dir to dest_dir while respecting .gitignore rules.
-
     Args:
         source_dir: Source directory to copy from
         dest_dir: Destination directory to copy to
@@ -61,14 +60,12 @@ def copy_files_respecting_gitignore(
     """
     if exclude_files is None:
         exclude_files = []
-
     # First, copy .gitignore if it exists (for git check-ignore to work in dest)
     gitignore_path = os.path.join(source_dir, ".gitignore")
     if os.path.isfile(gitignore_path) and dest_dir != source_dir:
         dest_gitignore = os.path.join(dest_dir, ".gitignore")
         if not os.path.exists(dest_gitignore):
             shutil.copy2(gitignore_path, dest_gitignore)
-
     # Helper function to check if a path should be copied
     def should_copy(path: str) -> bool:
         # Always skip .git and any specified exclude files
@@ -83,7 +80,6 @@ def copy_files_respecting_gitignore(
         )
         # git check-ignore returns 0 if path IS ignored, 1 if NOT ignored
         return check_result.returncode != 0
-
     # Copy files respecting .gitignore
     for item in os.listdir(source_dir):
         if not should_copy(item):
@@ -579,17 +575,11 @@ class Hub:
                         error=result.stderr.strip(),
                     )
                 current_dir = os.getcwd()
-                for item in os.listdir(current_dir):
-                    if item.startswith("."):
-                        continue
-                    src = os.path.join(current_dir, item)
-                    dst = os.path.join(temp_repo, item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-                    elif os.path.isdir(src):
-                        if os.path.exists(dst):
-                            shutil.rmtree(dst)
-                        shutil.copytree(src, dst)
+                
+                # Copy files respecting .gitignore
+                copy_files_respecting_gitignore(
+                    current_dir, temp_repo, exclude_files=[".plato-hub.json"]
+                )
                 os.chdir(temp_repo)
                 subprocess.run(["git", "add", "."], check=True)
                 status_result = subprocess.run(
@@ -708,15 +698,11 @@ class Hub:
                             os.remove(item_path)
                         elif os.path.isdir(item_path):
                             shutil.rmtree(item_path)
-                for item in os.listdir(current_dir):
-                    if item.startswith(".git") or item == ".plato-hub.json":
-                        continue
-                    src = os.path.join(current_dir, item)
-                    dst = os.path.join(".", item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-                    elif os.path.isdir(src):
-                        shutil.copytree(src, dst)
+                
+                # Copy files respecting .gitignore
+                copy_files_respecting_gitignore(
+                    current_dir, ".", exclude_files=[".plato-hub.json"]
+                )
                 git_cmd = ["git", command] + extra_args
                 result = subprocess.run(git_cmd, capture_output=False, text=True)
                 return GitResult(
@@ -1039,17 +1025,11 @@ class Hub:
                     )
                     return
                 current_dir = os.getcwd()
-                for item in os.listdir(current_dir):
-                    if item.startswith("."):
-                        continue
-                    src = os.path.join(current_dir, item)
-                    dst = os.path.join(temp_repo, item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-                    elif os.path.isdir(src):
-                        if os.path.exists(dst):
-                            shutil.rmtree(dst)
-                        shutil.copytree(src, dst)
+                
+                # Copy files respecting .gitignore
+                copy_files_respecting_gitignore(
+                    current_dir, temp_repo, exclude_files=[".plato-hub.json"]
+                )
                 os.chdir(temp_repo)
                 subprocess.run(["git", "add", "."], check=True)
                 status_result = subprocess.run(
@@ -1159,15 +1139,11 @@ class Hub:
                             os.remove(item_path)
                         elif os.path.isdir(item_path):
                             shutil.rmtree(item_path)
-                for item in os.listdir(current_dir):
-                    if item.startswith(".git") or item == ".plato-hub.json":
-                        continue
-                    src = os.path.join(current_dir, item)
-                    dst = os.path.join(".", item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-                    elif os.path.isdir(src):
-                        shutil.copytree(src, dst)
+                
+                # Copy files respecting .gitignore
+                copy_files_respecting_gitignore(
+                    current_dir, ".", exclude_files=[".plato-hub.json"]
+                )
                 git_cmd = ["git", command] + extra_args
                 subprocess.run(git_cmd, capture_output=False, text=True)
         except Exception as e:
