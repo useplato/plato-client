@@ -21,6 +21,7 @@ from plato.models.build_models import (
     SimConfigMetadata,
     SimConfigService,
 )
+from plato.hub import copy_files_respecting_gitignore
 
 
 class Repository(BaseModel):
@@ -46,14 +47,15 @@ class SandboxInfo(BaseModel):
     dataset_config: SimConfigDataset
     url: str
     ssh_url: str
-    chisel_port: int
     local_port: int
+    ssh_host: str
 
 
 class InitVMInfo(BaseModel):
     vm_job_uuid: str
     correlation_id: str
     url: str
+    job_group_id: str
 
 
 class SSHExecutionResult(BaseModel):
@@ -91,18 +93,110 @@ def get_authenticated_url(hub_config: PlatoHubConfig) -> str:
         )
 
 
+# =============================================================================
+# SSH Config Utilities
+# =============================================================================
+
+
+def read_ssh_config() -> str:
+    """Read SSH config file, return empty string if doesn't exist."""
+    ssh_config_path = os.path.join(os.path.expanduser("~/.ssh"), "config")
+    if os.path.exists(ssh_config_path):
+        with open(ssh_config_path, "r") as f:
+            return f.read()
+    return ""
+
+
+def host_exists_in_config(hostname: str, config_content: str) -> bool:
+    """Check if a hostname exists in SSH config."""
+    return f"Host {hostname}" in config_content
+
+
+def find_available_hostname(base_hostname: str, config_content: str) -> str:
+    """Find next available hostname by appending numbers if needed."""
+    hostname = base_hostname
+    counter = 1
+
+    while host_exists_in_config(hostname, config_content):
+        hostname = f"{base_hostname}-{counter}"
+        counter += 1
+
+    return hostname
+
+
+def remove_ssh_host_from_config(hostname: str, config_content: str) -> str:
+    """Remove a host entry from SSH config content."""
+    lines = config_content.split("\n")
+    new_lines = []
+    skip_block = False
+
+    for line in lines:
+        if line.strip() == f"Host {hostname}":
+            skip_block = True
+            continue
+        elif line.startswith("Host ") and skip_block:
+            skip_block = False
+            new_lines.append(line)
+        elif not skip_block:
+            new_lines.append(line)
+
+    return "\n".join(new_lines).rstrip()
+
+
+def write_ssh_config(config_content: str) -> None:
+    """Write SSH config content to file."""
+    ssh_config_dir = os.path.expanduser("~/.ssh")
+    os.makedirs(ssh_config_dir, exist_ok=True)
+    ssh_config_path = os.path.join(ssh_config_dir, "config")
+
+    with open(ssh_config_path, "w") as f:
+        if config_content:
+            f.write(config_content)
+            if not config_content.endswith("\n"):
+                f.write("\n")
+
+
+def append_ssh_host_entry(
+    hostname: str, port: int, key_path: str, job_group_id: str
+) -> None:
+    """Append a new SSH host entry to config."""
+    config_content = read_ssh_config()
+
+    proxytunnel_path = shutil.which("proxytunnel")
+
+    config_with_proxy = f"""Host {hostname}
+    HostName localhost
+    Port {port}
+    User root
+    IdentityFile {key_path}
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    ConnectTimeout 10
+    ProxyCommand {proxytunnel_path} -E -p proxy.plato.so:9000 -P '{job_group_id}@22:newpass' -d %h:%p --no-check-certificate
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+    """
+
+    if config_content:
+        config_content = config_content.rstrip() + "\n\n" + config_with_proxy
+    else:
+        config_content = config_with_proxy
+
+    write_ssh_config(config_content)
+
+
 class Sandbox:
     def __init__(self):
         self.sandbox_info = None
         self._vm_job_uuid: Optional[str] = None
-        self._chisel_process: Optional[subprocess.Popen] = None
 
     async def init(
         self,
         console: Console,
         dataset: str,
         plato_client: Plato,
-        chisel_port: int,
         plato_sandbox_sdk: PlatoSandboxSDK,
     ):
         self.console = console
@@ -226,17 +320,10 @@ class Sandbox:
                     check=True,
                 )
                 os.chdir(temp_repo)
-                for item in os.listdir(current_dir):
-                    if item.startswith(".git") or item == ".plato-hub.json":
-                        continue
-                    src = os.path.join(current_dir, item)
-                    dst = os.path.join(".", item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-                    elif os.path.isdir(src):
-                        if os.path.exists(dst):
-                            shutil.rmtree(dst)
-                        shutil.copytree(src, dst)
+                # Copy files respecting .gitignore
+                copy_files_respecting_gitignore(
+                    current_dir, ".", exclude_files=[".plato-hub.json"]
+                )
                 subprocess.run(["git", "add", "."], capture_output=True)
                 subprocess.run(
                     [
@@ -355,7 +442,7 @@ class Sandbox:
                 )
                 try:
                     self.console.print(
-                        f"[dim]DEBUG: setup_sandbox(public_id={public_id}, chisel_port={chisel_port})[/dim]"
+                        f"[dim]DEBUG: setup_sandbox(public_id={public_id})[/dim]"
                     )
                 except Exception:
                     pass
@@ -364,7 +451,6 @@ class Sandbox:
                     clone_url=clone_url,
                     dataset=dataset,
                     dataset_config=dataset_config,
-                    chisel_port=chisel_port,
                     local_public_key=local_public_key,
                 )
                 try:
@@ -386,63 +472,14 @@ class Sandbox:
             )
             self.console.print(sandbox_panel)
 
-            ##  Step 8: Setup local chisel client ##
-            from rich.progress import (
-                Progress as _Progress3,
-                SpinnerColumn as _SpinnerColumn3,
-                TextColumn as _TextColumn3,
-            )
+            # choose a random port between 2200 and 2299
+            import random
+            local_port = random.randint(2200, 2299)
 
-            with _Progress3(
-                _SpinnerColumn3(),
-                _TextColumn3("[progress.description]{task.description}"),
-                console=self.console,
-            ) as _progress3:
-                _task3 = _progress3.add_task(
-                    "[cyan]Establishing secure tunnel...", total=None
-                )
-                try:
-                    self.console.print(
-                        f"[dim]DEBUG: setup_chisel_client(ssh_url={sandbox_info.ssh_url})[/dim]"
-                    )
-                except Exception:
-                    pass
-                local_port = await self._setup_chisel_client(sandbox_info.ssh_url)
-                _progress3.update(
-                    _task3, description="[green]Tunnel established[/green]"
-                )
-            tunnel_panel = Panel.fit(
-                f"[green]Secure tunnel established successfully![/green]\n"
-                f"[cyan]Local SSH port:[/cyan] [bold]{local_port}[/bold]\n"
-                f"[dim]Your local machine can now connect securely to the remote sandbox[/dim]",
-                title="[bold green]✅ Tunnel Active[/bold green]",
-                border_style="green",
+            ## Step 8: Setup SSH config ##
+            ssh_host = await self._setup_ssh_config_with_password(
+                local_port, vm_info.job_group_id
             )
-            self.console.print(tunnel_panel)
-
-            ## Step 9: Setup SSH config with password ##
-            from rich.progress import (
-                Progress as _Progress4,
-                SpinnerColumn as _SpinnerColumn4,
-                TextColumn as _TextColumn4,
-            )
-
-            with _Progress4(
-                _SpinnerColumn4(),
-                _TextColumn4("[progress.description]{task.description}"),
-                console=self.console,
-            ) as _progress4:
-                _task4 = _progress4.add_task("[cyan]Writing SSH config...", total=None)
-                try:
-                    self.console.print(
-                        f"[dim]DEBUG: setup_ssh_config(local_port={local_port}, public_id={public_id})[/dim]"
-                    )
-                except Exception:
-                    pass
-                ssh_host = await self._setup_ssh_config_with_password(
-                    local_port, public_id
-                )
-                _progress4.update(_task4, description="[green]SSH ready[/green]")
             ssh_success_panel = Panel.fit(
                 f"[green]SSH configuration updated successfully![/green]\n"
                 f"[cyan]Connection command:[/cyan] [bold]ssh {ssh_host}[/bold]\n"
@@ -461,8 +498,8 @@ class Sandbox:
                 dataset_config=dataset_config,
                 url=vm_info.url,
                 ssh_url=sandbox_info.ssh_url,
-                chisel_port=chisel_port,
                 local_port=local_port,
+                ssh_host=ssh_host,
             )
 
         except Exception as e:
@@ -680,137 +717,54 @@ class Sandbox:
                 f"[yellow]⚠️  [yellow]Warning: Failed to setup SSH key: {e}[/yellow]"
             )
 
-    async def _setup_chisel_client(self, ssh_url: str) -> int:
-        import subprocess
-        import random
-
-        try:
-            chisel_path = shutil.which("chisel")
-            if not chisel_path:
-                self.console.print("📦 Installing chisel client...")
-                try:
-                    subprocess.run(
-                        [
-                            "curl",
-                            "-L",
-                            "https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz",
-                            "-o",
-                            "/tmp/chisel.gz",
-                        ],
-                        check=True,
-                        capture_output=True,
-                    )
-                    subprocess.run(
-                        ["gunzip", "/tmp/chisel.gz"], check=True, capture_output=True
-                    )
-                    subprocess.run(
-                        ["chmod", "+x", "/tmp/chisel"], check=True, capture_output=True
-                    )
-                    subprocess.run(
-                        ["sudo", "mv", "/tmp/chisel", "/usr/local/bin/chisel"],
-                        check=False,
-                        capture_output=True,
-                    )
-                except subprocess.CalledProcessError:
-                    raise Exception(
-                        "Failed to install chisel. Please install manually."
-                    )
-                except FileNotFoundError:
-                    raise Exception("curl not found. Please install chisel manually.")
-            if "/connect-job/" not in ssh_url:
-                raise Exception(f"Invalid SSH URL format: {ssh_url}")
-
-            # The SSH URL should be used directly as the chisel server URL
-            # Format: https://staging.plato.so/connect-job/{uuid}/{port}
-            chisel_server_url = ssh_url
-            local_ssh_port = random.randint(2200, 2299)
-            chisel_cmd = [
-                "chisel",
-                "client",
-                chisel_server_url,
-                f"{local_ssh_port}:127.0.0.1:22",
-            ]
-            # No panels printed here; panels are printed by caller after completion
-            chisel_process = subprocess.Popen(
-                chisel_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            self._chisel_process = chisel_process
-            time.sleep(3)
-            if chisel_process.poll() is None:
-                # No panels printed here; panels are printed by caller after completion
-                return local_ssh_port
-            else:
-                stdout, stderr = chisel_process.communicate()
-                raise Exception(f"Chisel client failed: {stderr.decode()}")
-        except Exception as e:
-            raise Exception(f"Error setting up chisel: {e}")
-
     async def _setup_ssh_config_with_password(
-        self, local_port: int, public_id: str
+        self, local_port: int, job_group_id: str
     ) -> str:
         try:
             ssh_config_dir = os.path.expanduser("~/.ssh")
             os.makedirs(ssh_config_dir, exist_ok=True)
             key_path = os.path.join(ssh_config_dir, "plato_sandbox_key")
-            ssh_host = f"plato-sandbox-{public_id[:8]}"
-            config_entry = (
-                f"Host {ssh_host}\n"
-                f"\tHostName localhost\n"
-                f"\tPort {local_port}\n"
-                f"\tUser root\n"
-                f"\tIdentityFile {key_path}\n"
-                f"\tIdentitiesOnly yes\n"
-                f"\tStrictHostKeyChecking no\n"
-                f"\tUserKnownHostsFile /dev/null\n"
-                f"\tConnectTimeout 10\n\n"
-            )
-            ssh_config_path = os.path.join(ssh_config_dir, "config")
-            existing_config = ""
-            if os.path.exists(ssh_config_path):
-                with open(ssh_config_path, "r") as f:
-                    existing_config = f.read()
-            if f"Host {ssh_host}" in existing_config:
-                lines = existing_config.split("\n")
-                new_lines = []
-                skip_block = False
-                for line in lines:
-                    if line.strip() == f"Host {ssh_host}":
-                        skip_block = True
-                        continue
-                    elif line.startswith("Host ") and skip_block:
-                        skip_block = False
-                        new_lines.append(line)
-                    elif not skip_block:
-                        new_lines.append(line)
-                existing_config = "\n".join(new_lines)
-            with open(ssh_config_path, "w") as f:
-                if existing_config:
-                    f.write(existing_config.rstrip())
-                    f.write("\n\n")  # Ensure proper spacing between entries
-                f.write(config_entry)
+
+            # Find next available sandbox hostname using utility
+            existing_config = read_ssh_config()
+            ssh_host = find_available_hostname("sandbox", existing_config)
+
+            # Add SSH host entry using utility
+            append_ssh_host_entry(ssh_host, local_port, key_path, job_group_id)
+
             # No panels printed here; panels are printed by caller after completion
             return ssh_host
         except Exception as e:
             raise Exception(f"Failed to setup SSH config: {e}")
 
     async def close(self) -> None:
-        # Never raise from cleanup; make idempotent
-        # Stop chisel client if running
-        if self._chisel_process and self._chisel_process.poll() is None:
+        # Delete SSH config entry if exists
+        if self.sandbox_info and hasattr(self.sandbox_info, "ssh_host"):
             try:
-                self._chisel_process.terminate()
-                try:
-                    self._chisel_process.wait(timeout=5)
-                except Exception:
-                    self._chisel_process.kill()
-            except Exception:
-                pass
-        self._chisel_process = None
+                self.console.print(
+                    f"🧹 Removing SSH config entry '{self.sandbox_info.ssh_host}'..."
+                )
+
+                # Read, remove host, and write back using utilities
+                existing_config = read_ssh_config()
+                if existing_config:
+                    updated_config = remove_ssh_host_from_config(
+                        self.sandbox_info.ssh_host, existing_config
+                    )
+                    write_ssh_config(updated_config)
+                    self.console.print(
+                        f"✅ SSH config entry '{self.sandbox_info.ssh_host}' removed"
+                    )
+            except Exception as e:
+                # Non-fatal: log but continue with other cleanup
+                self.console.print(
+                    f"[yellow]⚠️  Failed to remove SSH config: {e}[/yellow]"
+                )
 
         # Delete VM if exists
         vm_id = None
-        if self.sandbox_info and getattr(self.sandbox_info, "vm_job_uuid", None):
-            vm_id = self.sandbox_info.vm_job_uuid
+        if self.sandbox_info and getattr(self.sandbox_info, "public_id", None):
+            vm_id = self.sandbox_info.public_id
         elif self._vm_job_uuid:
             vm_id = self._vm_job_uuid
         if vm_id:

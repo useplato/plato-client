@@ -283,9 +283,17 @@ class PlatoSandboxSDK:
                 logger.info(f"<- {vm_response.status}")
             if vm_response.status == 200:
                 try:
-                    vm_data = CreateVMResponse.model_validate(await vm_response.json())
+                    response_json = await vm_response.json()
+                    if self._debug:
+                        logger.info(f"create_vm response: {response_json}")
+                    vm_data = CreateVMResponse.model_validate(response_json)
                     return vm_data
                 except Exception as e:
+                    # Print actual response for debugging
+                    try:
+                        logger.error(f"create_vm raw response: {response_json}")
+                    except:
+                        pass
                     raise PlatoClientError(
                         f"Failed to Validate create VM response: {e}"
                     )
@@ -299,7 +307,6 @@ class PlatoSandboxSDK:
         clone_url: str,
         dataset: str,
         dataset_config: SimConfigDataset,
-        chisel_port: int,
         local_public_key: str,
     ) -> SetupSandboxResponse:
         headers = {"X-API-Key": self.api_key}
@@ -313,8 +320,8 @@ class PlatoSandboxSDK:
                 dataset=dataset,
                 plato_dataset_config=dataset_config,
                 clone_url=clone_url,
-                chisel_port=chisel_port,
                 client_ssh_public_key=local_public_key,
+                chisel_port=6000,  # Legacy parameter required by backend, ignored by ProxyTunnel
             ).model_dump(mode="json"),
             headers=headers,
         ) as setup_response:

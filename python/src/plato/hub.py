@@ -48,6 +48,63 @@ class GitResult(BaseModel):
     error: Optional[str] = None
 
 
+def copy_files_respecting_gitignore(
+    source_dir: str, dest_dir: str, exclude_files: Optional[List[str]] = None
+) -> None:
+    """
+    Copy files from source_dir to dest_dir while respecting .gitignore rules.
+
+    Args:
+        source_dir: Source directory to copy from
+        dest_dir: Destination directory to copy to
+        exclude_files: Additional files to exclude (e.g., [".plato-hub.json"])
+    """
+    if exclude_files is None:
+        exclude_files = []
+
+    # First, copy .gitignore if it exists (for git check-ignore to work in dest)
+    gitignore_path = os.path.join(source_dir, ".gitignore")
+    if os.path.isfile(gitignore_path) and dest_dir != source_dir:
+        dest_gitignore = os.path.join(dest_dir, ".gitignore")
+        if not os.path.exists(dest_gitignore):
+            shutil.copy2(gitignore_path, dest_gitignore)
+
+    # Helper function to check if a path should be copied
+    def should_copy(path: str) -> bool:
+        # Always skip .git and any specified exclude files
+        basename = os.path.basename(path)
+        if basename.startswith(".git") or basename in exclude_files:
+            return False
+        # Use git check-ignore to respect .gitignore rules
+        check_result = subprocess.run(
+            ["git", "check-ignore", "-q", path],
+            cwd=source_dir,
+            capture_output=True
+        )
+        # git check-ignore returns 0 if path IS ignored, 1 if NOT ignored
+        return check_result.returncode != 0
+
+    # Copy files respecting .gitignore
+    for item in os.listdir(source_dir):
+        if not should_copy(item):
+            continue
+        src = os.path.join(source_dir, item)
+        dst = os.path.join(dest_dir, item)
+        if os.path.isfile(src):
+            shutil.copy2(src, dst)
+        elif os.path.isdir(src):
+            if os.path.exists(dst):
+                shutil.rmtree(dst)
+            # For directories, we need to respect .gitignore recursively
+            shutil.copytree(
+                src, dst,
+                ignore=lambda dir, files: [
+                    f for f in files
+                    if not should_copy(os.path.join(dir, f))
+                ]
+            )
+
+
 class Hub:
     """Service-style Hub with internal logging and structured results."""
 

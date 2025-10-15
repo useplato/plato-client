@@ -232,7 +232,7 @@ class VMManagementRequest(BaseModel):
 
 class VMManagementResponse(BaseModel):
     status: str = Field(..., description="Status")
-    timestamp: str = Field(..., description="Timestamp")
+    timestamp: Optional[str] = Field(None, description="Timestamp")
     correlation_id: str = Field(..., description="Correlation ID for tracking")
 
 
@@ -248,9 +248,10 @@ class CreateVMRequest(VMManagementRequest):
     alias: Optional[str] = Field(None, description="Optional alias for the VM")
     
 class CreateVMResponse(VMManagementResponse):
+    model_config = {"populate_by_name": True}
 
     url: str = Field(..., description="Public URL for the VM")
-    public_id: str = Field(..., description="Public job ID")
+    public_id: str = Field(..., description="Public job ID", alias="job_public_id")
     job_group_id: str = Field(..., description="Job group ID")
 
 
@@ -260,7 +261,7 @@ class SetupSandboxRequest(VMManagementRequest):
         None, description="Client's SSH public key for passwordless access"
     )
     chisel_port: int = Field(
-        default=6000, ge=1024, le=65535, description="Port for chisel server"
+        default=6000, ge=1024, le=65535, description="Port for chisel server (legacy, ignored by ProxyTunnel)"
     )
 
 class SetupSandboxResponse(VMManagementResponse):
