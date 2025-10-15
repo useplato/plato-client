@@ -1,26 +1,20 @@
-import asyncio  # noqa: F401
 import os
+import asyncio
 import shutil
 import tempfile
 from typing import Optional, Dict, Any
-
-import typer  # noqa: F401
 from rich.console import Console
-from rich.table import Table  # noqa: F401
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 from plato.sdk import Plato
+from plato.sandbox_sdk import PlatoSandboxSDK
 from pydantic import BaseModel
 import json
 import yaml
-import uuid
 import subprocess
 import base64
 import time
-import random
-import json  # noqa: F811
-from plato.models.config import (
+from plato.models.build_models import (
     SimConfig,
     SimConfigDataset,
     SimConfigCompute,
@@ -45,16 +39,16 @@ class PlatoHubConfig(BaseModel):
 
 
 class SandboxInfo(BaseModel):
-    vm_job_uuid: str
-    dev_branch: str
-    vm_url: str
-    ssh_url: str
-    local_port: int
+    public_id: str
+    job_group_id: str
     service: str
-    ssh_host: str
+    commit_hash: str
     dataset: str
     dataset_config: SimConfigDataset
-    clone_url: str  # For cleanup: deleting the dev branch
+    url: str
+    ssh_url: str
+    local_port: int
+    ssh_host: str
 
 
 class InitVMInfo(BaseModel):
@@ -170,8 +164,7 @@ def append_ssh_host_entry(
 
     proxytunnel_path = shutil.which("proxytunnel")
 
-    config_with_proxy = f""""
-Host {hostname}
+    config_with_proxy = f"""Host {hostname}
     HostName localhost
     Port {port}
     User root
@@ -199,14 +192,28 @@ class Sandbox:
         self.sandbox_info = None
         self._vm_job_uuid: Optional[str] = None
 
-    async def init(self, console: Console, dataset: str, plato_client: Plato):
+    async def init(
+        self,
+        console: Console,
+        dataset: str,
+        plato_client: Plato,
+        plato_sandbox_sdk: PlatoSandboxSDK,
+    ):
         self.console = console
         self.dataset = dataset
         self.client = plato_client
+        self.sandbox_sdk = plato_sandbox_sdk
 
-        vm_job_uuid = None
+        public_id = None
 
         try:
+            # Debug: show SDK target and key presence
+            try:
+                self.console.print(
+                    f"[dim]DEBUG: SandboxSDK base_url={getattr(plato_sandbox_sdk, 'base_url', 'unknown')} api_key_set={'yes' if getattr(plato_sandbox_sdk, 'api_key', None) else 'no'}[/dim]"
+                )
+            except Exception:
+                pass
             ## Step 1: Load hub configuration ##
             hub_config_file = ".plato-hub.json"
             if not os.path.exists(hub_config_file):
@@ -301,12 +308,8 @@ class Sandbox:
             )
             self.console.print(resources_panel)
 
-            ## Step 4: Create development branch ##
-            branch_uuid = str(uuid.uuid4())[:8]
-            dev_branch = f"dev-{branch_uuid}"
-
+            ## Step 4: Force push to main and save commit hash ##
             clone_url = get_authenticated_url(hub_cfg_obj)
-
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_repo = os.path.join(temp_dir, "temp_repo")
                 current_dir = os.getcwd()
@@ -317,11 +320,6 @@ class Sandbox:
                     check=True,
                 )
                 os.chdir(temp_repo)
-                subprocess.run(
-                    ["git", "checkout", "-b", dev_branch],
-                    capture_output=True,
-                    check=True,
-                )
                 # Copy files respecting .gitignore
                 copy_files_respecting_gitignore(
                     current_dir, ".", exclude_files=[".plato-hub.json"]
@@ -332,32 +330,85 @@ class Sandbox:
                         "git",
                         "commit",
                         "-m",
-                        f"Development snapshot for sandbox {branch_uuid}",
+                        "Development snapshot for sandbox",
                     ],
                     capture_output=True,
                 )
+                # Get commit hash before pushing
+                commit_result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                commit_hash = commit_result.stdout.strip()
+
                 subprocess.run(
-                    ["git", "push", "origin", dev_branch],
+                    ["git", "push", "--force", "origin", "main"],
                     capture_output=True,
                     text=True,
                     check=True,
                 )
                 os.chdir(current_dir)
-            branch_panel = Panel.fit(
-                f"[green]✅ Created and pushed development branch[/green]\n"
-                f"[cyan]Branch:[/cyan] {dev_branch}",
-                title="[bold green]✅ Branch Ready[/bold green]",
+            commit_panel = Panel.fit(
+                f"[green]✅ Force pushed to main branch[/green]\n"
+                f"[cyan]Commit hash:[/cyan] {commit_hash}",
+                title="[bold green]✅ Code Pushed[/bold green]",
                 border_style="green",
             )
-            self.console.print(branch_panel)
+            self.console.print(commit_panel)
 
             ## Step 5: Start VM with progress tracking ##
-            vm_info = await self._init_vm(sim_name, dataset_config)
-            vm_job_uuid = vm_info.vm_job_uuid
-            self._vm_job_uuid = vm_job_uuid
+            from rich.progress import (
+                Progress as _Progress,
+                SpinnerColumn as _SpinnerColumn,
+                TextColumn as _TextColumn,
+            )
+
+            with _Progress(
+                _SpinnerColumn(),
+                _TextColumn("[progress.description]{task.description}"),
+                console=self.console,
+            ) as _progress:
+                _task = _progress.add_task("[cyan]Starting VM...", total=None)
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: create_vm(service={sim_name}, dataset={dataset}, cpus={dataset_config.compute.cpus}, mem={dataset_config.compute.memory}, disk={dataset_config.compute.disk})[/dim]"
+                    )
+                except Exception:
+                    pass
+                # Apply strict client-side timeout to avoid hanging
+                vm_timeout = int(os.getenv("PLATO_SANDBOX_VM_TIMEOUT_SECS", "120"))
+                vm_wait = int(os.getenv("PLATO_SANDBOX_VM_WAIT_SECS", "60"))
+                try:
+                    vm_info = await asyncio.wait_for(
+                        self.sandbox_sdk.create_vm(
+                            sim_name,
+                            dataset_config,
+                            commit_hash,
+                            dataset,
+                            vm_timeout,
+                            vm_wait,
+                            "sandbox",
+                        ),
+                        timeout=vm_timeout + 15,
+                    )
+                except asyncio.TimeoutError:
+                    raise Exception(
+                        f"VM creation timed out after {vm_timeout}s (client-side)"
+                    )
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: create_vm response public_id={vm_info.public_id} job_group_id={vm_info.job_group_id} url={vm_info.url} corr={vm_info.correlation_id}[/dim]"
+                    )
+                except Exception:
+                    pass
+                _progress.update(_task, description="[green]VM started[/green]")
+            public_id = vm_info.public_id
+            self._vm_job_uuid = public_id
             vm_panel = Panel.fit(
                 f"[green]Virtual machine is now running![/green]\n"
-                f"[dim]UUID: {vm_job_uuid}[/dim]\n"
+                f"[dim]UUID: {public_id}[/dim]\n"
                 f"[dim]URL: {vm_info.url}[/dim]",
                 title="[bold green]🟢 VM Startup Complete[/bold green]",
                 border_style="green",
@@ -375,26 +426,57 @@ class Sandbox:
             self.console.print(ssh_panel)
 
             ## Step 7: Setup sandbox environment ##
-            ssh_url = await self._init_vm_sandbox(
-                vm_job_uuid,
-                dev_branch,
-                clone_url,
-                local_public_key,
+            from rich.progress import (
+                Progress as _Progress2,
+                SpinnerColumn as _SpinnerColumn2,
+                TextColumn as _TextColumn2,
             )
+
+            with _Progress2(
+                _SpinnerColumn2(),
+                _TextColumn2("[progress.description]{task.description}"),
+                console=self.console,
+            ) as _progress2:
+                _task2 = _progress2.add_task(
+                    "[cyan]Setting up sandbox on VM...", total=None
+                )
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: setup_sandbox(public_id={public_id})[/dim]"
+                    )
+                except Exception:
+                    pass
+                sandbox_info = await self.sandbox_sdk.setup_sandbox(
+                    public_id=public_id,
+                    clone_url=clone_url,
+                    dataset=dataset,
+                    dataset_config=dataset_config,
+                    local_public_key=local_public_key,
+                )
+                try:
+                    self.console.print(
+                        f"[dim]DEBUG: setup_sandbox ssh_url={sandbox_info.ssh_url} corr={sandbox_info.correlation_id}[/dim]"
+                    )
+                except Exception:
+                    pass
+                _progress2.update(
+                    _task2, description="[green]Sandbox configured[/green]"
+                )
             sandbox_panel = Panel.fit(
                 f"[green]🎉 Your development sandbox is now fully operational![/green]\n"
-                f"[cyan]• SSH URL:[/cyan] {ssh_url}\n"
+                f"[cyan]• SSH URL:[/cyan] {sandbox_info.ssh_url}\n"
                 f"[cyan]• Code location:[/cyan] [bold]/opt/plato[/bold]\n"
-                f"[cyan]• Development branch:[/cyan] [bold]{dev_branch}[/bold]",
+                f"[cyan]• Git hash:[/cyan] [bold]{commit_hash}[/bold]",
                 title="[bold green]🚀 Sandbox Ready[/bold green]",
                 border_style="green",
             )
             self.console.print(sandbox_panel)
 
             # choose a random port between 2200 and 2299
+            import random
             local_port = random.randint(2200, 2299)
 
-            ## Step 9: Setup SSH config with password ##
+            ## Step 8: Setup SSH config ##
             ssh_host = await self._setup_ssh_config_with_password(
                 local_port, vm_info.job_group_id
             )
@@ -408,16 +490,16 @@ class Sandbox:
             )
             self.console.print(ssh_success_panel)
             self.sandbox_info = SandboxInfo(
+                public_id=public_id,
+                job_group_id=vm_info.job_group_id,
                 service=sim_name,
-                vm_job_uuid=vm_job_uuid,
-                dev_branch=dev_branch,
-                vm_url=vm_info.url,
-                ssh_url=ssh_url,
-                local_port=local_port,
-                ssh_host=ssh_host,
+                commit_hash=commit_hash,
                 dataset=dataset,
                 dataset_config=dataset_config,
-                clone_url=clone_url,
+                url=vm_info.url,
+                ssh_url=sandbox_info.ssh_url,
+                local_port=local_port,
+                ssh_host=ssh_host,
             )
 
         except Exception as e:
@@ -448,668 +530,6 @@ class Sandbox:
             )
         self.sandbox_info.dataset_config = sim_config.datasets[self.dataset]
 
-    async def snapshot(
-        self, service: str, version: str, dataset: str, snapshot_name: str
-    ):
-        try:
-            if not self.sandbox_info:
-                raise Exception("Sandbox not initialized")
-
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=self.console,
-                transient=False,
-            ) as progress:
-                overall_task = progress.add_task(
-                    "[bold blue]📸 Creating VM snapshot...", total=100
-                )
-
-                # Build request and submit
-                progress.update(
-                    overall_task,
-                    advance=0,
-                    description="[bold blue]📸 Submitting snapshot request...",
-                )
-
-                snapshot_request = {
-                    "service": service,
-                    "version": version,
-                    "dataset": dataset,
-                    "timeout": 1800,
-                }
-                if snapshot_name:
-                    snapshot_request["snapshot_name"] = snapshot_name
-
-                self.console.print("📋 [cyan]Snapshot details:[/cyan]")
-                self.console.print(f"  • Service: {service}")
-                self.console.print(f"  • Version: {version}")
-                self.console.print(f"  • Dataset: {dataset}")
-                if snapshot_name:
-                    self.console.print(f"  • Name: {snapshot_name}")
-                self.console.print("  • Timeout: 1800 seconds")
-
-                snapshot_response = await self.client.http_session.post(
-                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/snapshot",
-                    json=snapshot_request,
-                    headers={"X-API-Key": self.client.api_key},
-                )
-
-                if snapshot_response.status == 200:
-                    response_data = await snapshot_response.json()
-                    progress.update(
-                        overall_task,
-                        advance=10,
-                        description="[bold green] Snapshot request submitted...",
-                    )
-
-                    self.console.print(
-                        f"🔗 [cyan]Snapshot request submitted:[/cyan] {response_data}"
-                    )
-
-                    correlation_id = response_data.get("correlation_id")
-                    if correlation_id:
-                        self.console.print(
-                            f"🔗 Monitoring via SSE: {self.client.base_url}/public-build/events/{correlation_id}"
-                        )
-                        success = await self._monitor_ssh_execution(
-                            self.client,
-                            correlation_id,
-                            "VM snapshot creation",
-                            timeout=1800,
-                        )
-                        if success:
-                            progress.update(
-                                overall_task,
-                                advance=90,
-                                description="[bold green]✅ Snapshot created successfully![/bold green]",
-                            )
-                        else:
-                            progress.update(
-                                overall_task,
-                                completed=100,
-                                description="[bold red]❌ Snapshot creation failed or timed out[/bold red]",
-                            )
-                            raise Exception("Snapshot creation failed or timed out")
-                    else:
-                        progress.update(
-                            overall_task,
-                            completed=100,
-                            description="[bold red]❌ No correlation_id received from snapshot response[/bold red]",
-                        )
-                        raise Exception(
-                            "No correlation_id received from snapshot response"
-                        )
-                else:
-                    error = await snapshot_response.text()
-                    progress.update(
-                        overall_task,
-                        completed=100,
-                        description=f"[bold red]❌ API Error: Failed to create snapshot: {error}[/bold red]",
-                    )
-                    raise Exception(f"API Error: Failed to create snapshot: {error}")
-        except Exception as e:
-            raise Exception(f"Error creating snapshot: {e}")
-
-    async def backup(self):
-        try:
-            if not self.sandbox_info:
-                raise Exception("Sandbox not initialized")
-
-            self.console.print("📦 [cyan] Getting job group id for backup...[/cyan]")
-            job_group_id = None
-            job = await self.client.http_session.get(
-                f"{self.client.base_url}/jobs/{self.sandbox_info.vm_job_uuid}",
-                headers={"X-API-Key": self.client.api_key},
-            )
-            job_json = await job.json()
-            job_group_id = job_json["job_group_id"]
-
-            self.console.print("📦 [cyan]Creating environment backup...[/cyan]")
-
-            backup_response = await self.client.http_session.post(
-                f"{self.client.base_url}/env/{job_group_id}/backup",
-                headers={"X-API-Key": self.client.api_key},
-            )
-            if backup_response.status == 200:
-                backup_response_json = await backup_response.json()
-                self.console.print(
-                    f"✅ [green]Environment backup completed successfully[/green] {backup_response_json}"
-                )
-                return backup_response_json
-            else:
-                error = await backup_response.text()
-                raise Exception(f"Failed to backup environment: {error}")
-        except Exception as e:
-            raise Exception(f"Error creating environment backup: {e}")
-
-    async def reset(self):
-        try:
-            if not self.sandbox_info:
-                raise Exception("Sandbox not initialized")
-
-            self.console.print("📦 [cyan] Getting job group id for reset...[/cyan]")
-            job_group_id = None
-            job = await self.client.http_session.get(
-                f"{self.client.base_url}/jobs/{self.sandbox_info.vm_job_uuid}",
-                headers={"X-API-Key": self.client.api_key},
-            )
-            job_json = await job.json()
-            job_group_id = job_json["job_group_id"]
-
-            self.console.print("📦 [cyan]Creating environment reset...[/cyan]")
-
-            reset_response = await self.client.http_session.post(
-                f"{self.client.base_url}/env/{job_group_id}/reset",
-                headers={"X-API-Key": self.client.api_key},
-                json={"load_browser_state": False},
-            )
-            if reset_response.status == 200:
-                reset_response_json = await reset_response.json()
-                # Handle both dict and object responses - sorry for being an idiot and not handling this properly
-                if isinstance(reset_response_json, dict):
-                    success = reset_response_json.get("success", False)
-                    error = reset_response_json.get("error")
-                else:
-                    success = getattr(reset_response_json, "success", False)
-                    error = getattr(reset_response_json, "error", None)
-
-                if success:
-                    self.console.print(
-                        f"✅ [green]Environment reset completed successfully[/green] {reset_response_json}"
-                    )
-                else:
-                    raise Exception(
-                        f"Failed to reset environment: {error or 'Unknown error'}"
-                    )
-            else:
-                error = await reset_response.text()
-                raise Exception(f"Failed to reset environment: {error}")
-        except Exception as e:
-            raise Exception(f"Error creating environment reset: {e}")
-
-    async def start_services(self, dataset: str, timeout: int) -> None:
-        """Start simulator services using the existing docker-compose in the repository."""
-        try:
-            if not self.sandbox_info:
-                raise Exception("Sandbox not initialized")
-
-            await self._reload_dataset_config()
-
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=self.console,
-                transient=False,
-            ) as progress:
-                overall_task = progress.add_task(
-                    "[bold blue]🚀 Starting services...", total=100
-                )
-                progress.update(
-                    overall_task,
-                    advance=0,
-                    description="[bold blue]🚀 Starting services...",
-                )
-
-                # Call the start-services endpoint with dataset + config
-                services_response = await self.client.http_session.post(
-                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/start-services",
-                    json={
-                        "dataset": dataset,
-                        "plato_dataset_config": self.sandbox_info.dataset_config.model_dump(),
-                        "timeout": timeout,
-                    },
-                    headers={"X-API-Key": self.client.api_key},
-                )
-
-                if services_response.status == 200:
-                    response_data = await services_response.json()
-                    progress.update(
-                        overall_task,
-                        advance=10,
-                        description="[bold green] Services submitted...",
-                    )
-                    correlation_id = response_data.get("correlation_id")
-                    if correlation_id:
-                        success = await self._monitor_ssh_execution(
-                            self.client,
-                            correlation_id,
-                            "Services startup",
-                            timeout=timeout,
-                        )
-                        if success:
-                            progress.update(
-                                overall_task,
-                                advance=100,
-                                description="[bold green]✅ Services started successfully![/bold green]",
-                            )
-                        else:
-                            progress.update(
-                                overall_task,
-                                advance=100,
-                                description="[bold red]❌ Services startup failed or timed out[/bold red]",
-                            )
-                            raise Exception("Services startup failed or timed out")
-                    else:
-                        progress.update(
-                            overall_task,
-                            advance=100,
-                            description="[bold red]❌ No correlation_id received from services response[/bold red]",
-                        )
-                        raise Exception(
-                            "No correlation_id received from services response"
-                        )
-                else:
-                    error = await services_response.text()
-                    progress.update(
-                        overall_task,
-                        advance=100,
-                        description=f"[bold red]❌ API Error: Failed to start services: {error}[/bold red]",
-                    )
-                return
-        except Exception as e:
-            raise Exception(f"Unknown error starting services: {e}")
-
-    async def start_listeners(self, dataset: str, timeout: int = 600) -> None:
-        """Start listeners and plato worker with the dataset configuration."""
-        try:
-            if not self.sandbox_info:
-                raise Exception("Sandbox not initialized")
-
-            await self._reload_dataset_config()
-
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=self.console,
-                transient=False,
-            ) as progress:
-                overall_task = progress.add_task(
-                    "[bold blue]🚀 Starting listeners...", total=100
-                )
-                progress.update(
-                    overall_task,
-                    advance=0,
-                    description="[bold blue]🚀 Starting listeners...",
-                )
-
-                # start listeners request
-                listeners_request = {
-                    "plato_worker_version": "prod-latest",
-                    "dataset": dataset,
-                    "plato_dataset_config": self.sandbox_info.dataset_config.model_dump(),
-                }
-                listeners_response = await self.client.http_session.post(
-                    f"{self.client.base_url}/public-build/vm/{self.sandbox_info.vm_job_uuid}/start-listeners",
-                    json=listeners_request,
-                    headers={"X-API-Key": self.client.api_key},
-                )
-
-                # check if listeners started successfully
-                if listeners_response.status == 200:
-                    response_data = await listeners_response.json()
-                    progress.update(
-                        overall_task,
-                        advance=10,
-                        description="[bold green] Listeners submitted...",
-                    )
-                    correlation_id = response_data.get("correlation_id")
-                    if correlation_id:
-                        success = await self._monitor_ssh_execution(
-                            self.client,
-                            correlation_id,
-                            "Listeners startup",
-                            timeout=timeout,
-                        )
-                        if success:
-                            progress.update(
-                                overall_task,
-                                advance=100,
-                                description="[bold green]✅ Listeners started successfully![/bold green]",
-                            )
-                        else:
-                            progress.update(
-                                overall_task,
-                                advance=100,
-                                description="[bold red]❌ Listeners startup failed or timed out[/bold red]",
-                            )
-                            raise Exception("Listeners startup failed or timed out")
-                    else:
-                        progress.update(
-                            overall_task,
-                            advance=100,
-                            description="[bold red]❌ No correlation_id received from listeners response[/bold red]",
-                        )
-                        raise Exception(
-                            "No correlation_id received from listeners response"
-                        )
-                else:
-                    error = await listeners_response.text()
-                    progress.update(
-                        overall_task,
-                        advance=100,
-                        description=f"[bold red]❌ API Error: Failed to start listeners: {error}[/bold red]",
-                    )
-                return
-        except Exception as e:
-            raise Exception(f"Unknown error starting listeners: {e}")
-
-    async def _init_vm(
-        self, sim_name: str, dataset_config: SimConfigDataset
-    ) -> InitVMInfo:
-        """Initialize VM with integrated progress tracking and startup monitoring."""
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=self.console,
-            transient=False,
-        ) as progress:
-            overall_task = progress.add_task(
-                "[bold blue]🚀 Starting sandbox VM...", total=100
-            )
-
-            # Step 1: Create VM instance (20% of progress)
-            progress.update(
-                overall_task,
-                advance=20,
-                description="[bold blue]🚀 Creating VM instance...",
-            )
-
-            try:
-                vm_response = await self.client.http_session.post(
-                    f"{self.client.base_url}/public-build/vm/create",
-                    json={
-                        "service": sim_name,
-                        "version": "sandbox",
-                        "plato_dataset_config": dataset_config.model_dump(mode="json"),
-                        "wait_time": 120,
-                        "vm_timeout": 1800,
-                        "alias": f"{sim_name}-sandbox",
-                    },
-                    headers={"X-API-Key": self.client.api_key},
-                )
-
-                if vm_response.status != 200:
-                    error = await vm_response.text()
-                    raise Exception(f"Failed to create VM: {error}")
-
-                vm_info = await vm_response.json()
-                vm_job_uuid = vm_info["uuid"]
-                correlation_id = vm_info["correlation_id"]
-
-            except Exception as e:
-                raise Exception(f"Error creating VM: {e}")
-
-            # Step 2: Wait for VM startup (70% of progress)
-            progress.update(
-                overall_task,
-                advance=10,
-                description="[bold yellow]⏳ Waiting for VM startup...",
-            )
-
-            # Monitor VM startup with progress updates
-            start_time = time.time()
-            timeout = 1800
-            startup_progress = 30  # Start at 30% total progress
-
-            try:
-                async with self.client.http_session.get(
-                    f"{self.client.base_url}/public-build/events/{correlation_id}",
-                    headers={"X-API-Key": self.client.api_key},
-                ) as response:
-                    if response.status != 200:
-                        raise Exception(
-                            f"Failed to connect to event stream: {response.status}"
-                        )
-
-                    async for line in response.content:
-                        if time.time() - start_time > timeout:
-                            raise Exception(
-                                f"VM startup timed out after {timeout} seconds"
-                            )
-
-                        line_str = line.decode("utf-8").strip()
-                        if line_str.startswith("data: "):
-                            try:
-                                encoded_data = line_str[6:]
-                                decoded_data = base64.b64decode(encoded_data).decode(
-                                    "utf-8"
-                                )
-                                event_data = json.loads(decoded_data)
-
-                                if event_data.get("event_type") == "completed":
-                                    # Complete the progress bar
-                                    progress.update(
-                                        overall_task,
-                                        completed=100,
-                                        description="[bold green]✅ VM startup complete!",
-                                    )
-
-                                    break
-                                elif event_data.get("event_type") == "failed":
-                                    error = event_data.get("error", "Unknown error")
-                                    raise Exception(f"VM startup failed: {error}")
-                                else:
-                                    # Update progress incrementally during startup
-                                    message = event_data.get("message", "")
-                                    if message:
-                                        # Gradually increase progress during startup phase
-                                        if startup_progress < 90:
-                                            startup_progress += 2
-                                            progress.update(
-                                                overall_task,
-                                                completed=startup_progress,
-                                                description=f"[bold yellow]⏳ {message}...",
-                                            )
-
-                                        # Only show significant startup events
-                                        if any(
-                                            keyword in message.lower()
-                                            for keyword in [
-                                                "starting",
-                                                "initializing",
-                                                "ready",
-                                                "allocated",
-                                                "configured",
-                                            ]
-                                        ):
-                                            self.console.print(
-                                                f"[dim]  {message}[/dim]"
-                                            )
-
-                            except Exception:
-                                # Skip malformed events
-                                continue
-
-            except Exception as e:
-                raise Exception(f"Error waiting for VM: {e}")
-
-            # No panels printed here; panels are printed by caller after completion
-
-            return InitVMInfo(
-                vm_job_uuid=vm_job_uuid,
-                correlation_id=correlation_id,
-                job_group_id=vm_info["job_group_id"],
-                url=vm_info["url"],
-            )
-
-    async def _init_vm_sandbox(
-        self,
-        vm_job_uuid: str,
-        dev_branch: str,
-        clone_url: str,
-        local_public_key: str,
-    ) -> str:
-        """Initialize sandbox environment with integrated progress tracking."""
-        import base64
-        import time
-        import json
-
-        try:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=self.console,
-                transient=False,
-            ) as progress:
-                overall_task = progress.add_task(
-                    "[bold blue]🔧 Setting up sandbox environment...", total=100
-                )
-
-                # Step 1: Send setup request (20% of progress)
-                progress.update(
-                    overall_task,
-                    advance=20,
-                    description="[bold blue]🔧 Sending setup request...",
-                )
-
-                setup_data = {
-                    "branch": dev_branch,
-                    "clone_url": clone_url,
-                    "timeout": 300,
-                }
-                if local_public_key:
-                    setup_data["client_ssh_public_key"] = local_public_key
-
-                try:
-                    setup_response = await self.client.http_session.post(
-                        f"{self.client.base_url}/public-build/vm/{vm_job_uuid}/setup-sandbox",
-                        json=setup_data,
-                        headers={"X-API-Key": self.client.api_key},
-                    )
-
-                    if setup_response.status != 200:
-                        error = await setup_response.text()
-                        raise Exception(f"Failed to setup sandbox: {error}")
-
-                    setup_response_data = await setup_response.json()
-                    if not setup_response_data:
-                        raise Exception("Failed to setup sandbox environment")
-
-                    ssh_url = setup_response_data["ssh_url"]
-                    # if running the api locally, replace the localhost:8080 with staging.plato.so
-                    ssh_url = ssh_url.replace(
-                        "http://localhost:8080", "https://staging.plato.so"
-                    )
-                    correlation_id = setup_response_data["correlation_id"]
-
-                except Exception as e:
-                    raise Exception(f"Error setting up sandbox: {e}")
-
-                # Step 2: Monitor setup progress (70% of progress)
-                progress.update(
-                    overall_task,
-                    advance=10,
-                    description="[bold yellow]⏳ Monitoring sandbox setup...",
-                )
-
-                # Monitor sandbox setup with progress updates
-                start_time = time.time()
-                timeout = 600
-                setup_progress = 30  # Start at 30% total progress
-
-                try:
-                    async with self.client.http_session.get(
-                        f"{self.client.base_url}/public-build/events/{correlation_id}",
-                        headers={"X-API-Key": self.client.api_key},
-                    ) as response:
-                        if response.status != 200:
-                            raise Exception(
-                                f"Failed to connect to setup stream: {response.status}"
-                            )
-
-                        async for line in response.content:
-                            if time.time() - start_time > timeout:
-                                raise Exception(
-                                    f"Sandbox setup timed out after {timeout} seconds"
-                                )
-
-                            line_str = line.decode("utf-8").strip()
-                            if line_str.startswith("data: "):
-                                try:
-                                    encoded_data = line_str[6:]
-                                    decoded_data = base64.b64decode(
-                                        encoded_data
-                                    ).decode("utf-8")
-                                    event_data = json.loads(decoded_data)
-
-                                    if event_data.get("event_type") == "completed":
-                                        # Complete the progress bar
-                                        progress.update(
-                                            overall_task,
-                                            completed=100,
-                                            description="[bold green]✅ Sandbox setup complete!",
-                                        )
-                                        # Sub-step completion log in gray
-                                        self.console.print(
-                                            "[dim]  ✅ Sandbox setup complete![/dim]"
-                                        )
-                                        break
-                                    elif event_data.get("event_type") == "failed":
-                                        error = event_data.get("error", "Unknown error")
-                                        message = event_data.get("message", "")
-                                        # Handle null values
-                                        stdout = event_data.get("stdout") or ""
-                                        stderr = event_data.get("stderr") or ""
-
-                                        error_details = f"Sandbox setup failed: {error}"
-                                        if message:
-                                            error_details += f" (Step: {message})"
-                                        if stdout and stdout.strip():
-                                            error_details += (
-                                                f" | Output: {stdout.strip()}"
-                                            )
-                                        if stderr and stderr.strip():
-                                            error_details += (
-                                                f" | Error: {stderr.strip()}"
-                                            )
-
-                                        raise Exception(error_details)
-                                    else:
-                                        # Update progress incrementally during setup
-                                        message = event_data.get("message", "")
-                                        if message:
-                                            # Gradually increase progress during setup phase
-                                            if setup_progress < 90:
-                                                setup_progress += 3
-                                                progress.update(
-                                                    overall_task,
-                                                    completed=setup_progress,
-                                                    description=f"[bold yellow]🔧 {message}...",
-                                                )
-
-                                            # Only show significant setup events
-                                            if any(
-                                                keyword in message.lower()
-                                                for keyword in [
-                                                    "cloning",
-                                                    "installing",
-                                                    "configuring",
-                                                    "starting",
-                                                    "ready",
-                                                    "completed",
-                                                ]
-                                            ):
-                                                self.console.print(
-                                                    f"[dim]  {message}[/dim]"
-                                                )
-
-                                except Exception:
-                                    # Skip malformed events
-                                    continue
-
-                except Exception as e:
-                    raise Exception(f"Error monitoring sandbox setup: {e}")
-
-                # No panels printed here; panels are printed by caller after completion
-
-                return ssh_url
-
-        except Exception as e:
-            # Re-raise with clean error message for higher-level handling
-            raise Exception(str(e))
-
     async def _monitor_ssh_execution(
         self,
         client: "Plato",
@@ -1133,9 +553,6 @@ class Sandbox:
         operation_name: str,
         timeout: int = 600,
     ) -> SSHExecutionResult:
-        import base64
-        import time
-
         def _filter_ssh_warnings(stderr: str) -> str:
             if not stderr:
                 return ""
@@ -1320,7 +737,8 @@ class Sandbox:
         except Exception as e:
             raise Exception(f"Failed to setup SSH config: {e}")
 
-    async def close(self) -> None:  # Delete SSH config entry if exists
+    async def close(self) -> None:
+        # Delete SSH config entry if exists
         if self.sandbox_info and hasattr(self.sandbox_info, "ssh_host"):
             try:
                 self.console.print(
@@ -1343,50 +761,10 @@ class Sandbox:
                     f"[yellow]⚠️  Failed to remove SSH config: {e}[/yellow]"
                 )
 
-        # Delete development branch if exists
-        if (
-            self.sandbox_info
-            and hasattr(self.sandbox_info, "dev_branch")
-            and hasattr(self.sandbox_info, "clone_url")
-        ):
-            try:
-                self.console.print(
-                    f"🧹 Deleting development branch '{self.sandbox_info.dev_branch}'..."
-                )
-                import subprocess
-
-                # Delete the remote branch using git push with delete flag
-                delete_result = subprocess.run(
-                    [
-                        "git",
-                        "push",
-                        self.sandbox_info.clone_url,
-                        "--delete",
-                        self.sandbox_info.dev_branch,
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if delete_result.returncode == 0:
-                    self.console.print(
-                        f"✅ Development branch '{self.sandbox_info.dev_branch}' deleted"
-                    )
-                else:
-                    # Non-fatal: branch might not exist or already deleted
-                    self.console.print(
-                        "[yellow]⚠️  Could not delete branch (may have been already deleted)[/yellow]"
-                    )
-            except subprocess.TimeoutExpired:
-                self.console.print("[yellow]⚠️  Branch deletion timed out[/yellow]")
-            except Exception as e:
-                # Non-fatal: log but continue with other cleanup
-                self.console.print(f"[yellow]⚠️  Failed to delete branch: {e}[/yellow]")
-
         # Delete VM if exists
         vm_id = None
-        if self.sandbox_info and getattr(self.sandbox_info, "vm_job_uuid", None):
-            vm_id = self.sandbox_info.vm_job_uuid
+        if self.sandbox_info and getattr(self.sandbox_info, "public_id", None):
+            vm_id = self.sandbox_info.public_id
         elif self._vm_job_uuid:
             vm_id = self._vm_job_uuid
         if vm_id:

@@ -53,7 +53,6 @@ def copy_files_respecting_gitignore(
 ) -> None:
     """
     Copy files from source_dir to dest_dir while respecting .gitignore rules.
-    
     Args:
         source_dir: Source directory to copy from
         dest_dir: Destination directory to copy to
@@ -61,14 +60,12 @@ def copy_files_respecting_gitignore(
     """
     if exclude_files is None:
         exclude_files = []
-    
     # First, copy .gitignore if it exists (for git check-ignore to work in dest)
     gitignore_path = os.path.join(source_dir, ".gitignore")
     if os.path.isfile(gitignore_path) and dest_dir != source_dir:
         dest_gitignore = os.path.join(dest_dir, ".gitignore")
         if not os.path.exists(dest_gitignore):
             shutil.copy2(gitignore_path, dest_gitignore)
-    
     # Helper function to check if a path should be copied
     def should_copy(path: str) -> bool:
         # Always skip .git and any specified exclude files
@@ -83,7 +80,6 @@ def copy_files_respecting_gitignore(
         )
         # git check-ignore returns 0 if path IS ignored, 1 if NOT ignored
         return check_result.returncode != 0
-    
     # Copy files respecting .gitignore
     for item in os.listdir(source_dir):
         if not should_copy(item):
@@ -99,10 +95,8 @@ def copy_files_respecting_gitignore(
             shutil.copytree(
                 src, dst,
                 ignore=lambda dir, files: [
-                    f for f in files 
-                    if not should_copy(os.path.relpath(
-                        os.path.join(dir, f), source_dir
-                    ))
+                    f for f in files
+                    if not should_copy(os.path.join(dir, f))
                 ]
             )
 
