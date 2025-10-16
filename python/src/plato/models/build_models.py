@@ -240,9 +240,9 @@ class CreateVMRequest(VMManagementRequest):
     service: str = Field(..., description="Service name for the VM")
     git_hash: str = Field(description="Git hash of the service")
     wait_time: int = Field(
-        default=120,
-        ge=30,
-        le=300,
+        default=60*30,
+        ge=60*1,
+        le=60*60*2,
         description="Wait time in seconds (limited for public usage)",
     )
     alias: Optional[str] = Field(None, description="Optional alias for the VM")
