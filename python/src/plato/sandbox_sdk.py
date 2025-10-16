@@ -262,7 +262,7 @@ class PlatoSandboxSDK:
         wait_time: int,
         alias: str,
     ) -> CreateVMResponse:
-        """Create a VM instance."""
+        """Create a VM instance and return the response for correlation monitoring."""
         headers = {"X-API-Key": self.api_key}
         if self._debug:
             logger.info(f"POST {self.base_url}/public-build/vm/create")
@@ -292,7 +292,7 @@ class PlatoSandboxSDK:
                     # Print actual response for debugging
                     try:
                         logger.error(f"create_vm raw response: {response_json}")
-                    except:
+                    except Exception:
                         pass
                     raise PlatoClientError(
                         f"Failed to Validate create VM response: {e}"
@@ -309,22 +309,25 @@ class PlatoSandboxSDK:
         dataset_config: SimConfigDataset,
         local_public_key: str,
     ) -> SetupSandboxResponse:
+        """Setup sandbox environment and return response for correlation monitoring."""
         headers = {"X-API-Key": self.api_key}
         if self._debug:
             logger.info(
                 f"POST {self.base_url}/public-build/vm/{public_id}/setup-sandbox"
             )
-        async with self.http_session.post(
-            f"{self.base_url}/public-build/vm/{public_id}/setup-sandbox",
-            json=SetupSandboxRequest(
-                dataset=dataset,
-                plato_dataset_config=dataset_config,
-                clone_url=clone_url,
-                client_ssh_public_key=local_public_key,
-                chisel_port=6000,  # Legacy parameter required by backend, ignored by ProxyTunnel
-            ).model_dump(mode="json"),
-            headers=headers,
-        ) as setup_response:
+        async with (
+            self.http_session.post(
+                f"{self.base_url}/public-build/vm/{public_id}/setup-sandbox",
+                json=SetupSandboxRequest(
+                    dataset=dataset,
+                    plato_dataset_config=dataset_config,
+                    clone_url=clone_url,
+                    client_ssh_public_key=local_public_key,
+                    chisel_port=6000,  # Legacy parameter required by backend, ignored by ProxyTunnel
+                ).model_dump(mode="json"),
+                headers=headers,
+            ) as setup_response
+        ):
             if self._debug:
                 logger.info(f"<- {setup_response.status}")
             if setup_response.status == 200:

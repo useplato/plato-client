@@ -1,5 +1,4 @@
 import os
-import asyncio
 import shutil
 import tempfile
 from typing import Optional, Dict, Any
@@ -377,26 +376,35 @@ class Sandbox:
                     )
                 except Exception:
                     pass
-                # Apply strict client-side timeout to avoid hanging
-                vm_timeout = int(os.getenv("PLATO_SANDBOX_VM_TIMEOUT_SECS", "120"))
-                vm_wait = int(os.getenv("PLATO_SANDBOX_VM_WAIT_SECS", "60"))
-                try:
-                    vm_info = await asyncio.wait_for(
-                        self.sandbox_sdk.create_vm(
-                            sim_name,
-                            dataset_config,
-                            commit_hash,
-                            dataset,
-                            vm_timeout,
-                            vm_wait,
-                            "sandbox",
-                        ),
-                        timeout=vm_timeout + 15,
-                    )
-                except asyncio.TimeoutError:
-                    raise Exception(
-                        f"VM creation timed out after {vm_timeout}s (client-side)"
-                    )
+                # Submit VM creation and monitor for completion
+                vm_timeout = int(os.getenv("PLATO_SANDBOX_VM_TIMEOUT_SECS", "1200"))
+                vm_wait = int(os.getenv("PLATO_SANDBOX_VM_WAIT_SECS", "600"))
+
+                # Submit VM creation request
+                vm_submit = await self.sandbox_sdk.create_vm(
+                    sim_name,
+                    dataset_config,
+                    commit_hash,
+                    dataset,
+                    vm_timeout,
+                    vm_wait,
+                    "sandbox",
+                )
+
+                # Monitor VM creation for completion
+                vm_result = await self._monitor_ssh_execution_with_data(
+                    self.client,
+                    vm_submit.correlation_id,
+                    "VM Creation",
+                    timeout=vm_timeout + 15,
+                )
+
+                if not vm_result.success:
+                    error_msg = vm_result.error or "Unknown error"
+                    raise Exception(f"VM creation failed: {error_msg}")
+
+                # Use the VM info from the initial response
+                vm_info = vm_submit
                 try:
                     self.console.print(
                         f"[dim]DEBUG: create_vm response public_id={vm_info.public_id} job_group_id={vm_info.job_group_id} url={vm_info.url} corr={vm_info.correlation_id}[/dim]"
@@ -446,13 +454,30 @@ class Sandbox:
                     )
                 except Exception:
                     pass
-                sandbox_info = await self.sandbox_sdk.setup_sandbox(
+
+                # Submit sandbox setup request
+                sandbox_submit = await self.sandbox_sdk.setup_sandbox(
                     public_id=public_id,
                     clone_url=clone_url,
                     dataset=dataset,
                     dataset_config=dataset_config,
                     local_public_key=local_public_key,
                 )
+
+                # Monitor sandbox setup for completion
+                setup_result = await self._monitor_ssh_execution_with_data(
+                    self.client,
+                    sandbox_submit.correlation_id,
+                    "Sandbox Setup",
+                    timeout=600,  # 10 minutes for sandbox setup
+                )
+
+                if not setup_result.success:
+                    error_msg = setup_result.error or "Unknown error"
+                    raise Exception(f"Sandbox setup failed: {error_msg}")
+
+                # Use the sandbox info from the initial response
+                sandbox_info = sandbox_submit
                 try:
                     self.console.print(
                         f"[dim]DEBUG: setup_sandbox ssh_url={sandbox_info.ssh_url} corr={sandbox_info.correlation_id}[/dim]"
@@ -474,6 +499,7 @@ class Sandbox:
 
             # choose a random port between 2200 and 2299
             import random
+
             local_port = random.randint(2200, 2299)
 
             ## Step 8: Setup SSH config ##

@@ -486,7 +486,9 @@ def _install_proxytunnel_noninteractive() -> bool:
                 return False
 
         elif system == "linux":
-            console.print("[cyan]🔧 Installing proxytunnel via system package manager...[/cyan]")
+            console.print(
+                "[cyan]🔧 Installing proxytunnel via system package manager...[/cyan]"
+            )
             # Try common package managers, preferring non-interactive with sudo -n
             if _is_command_available("apt-get"):
                 cmd = [
@@ -527,7 +529,9 @@ def _install_proxytunnel_noninteractive() -> bool:
 
         # Verify installation
         if not _is_command_available("proxytunnel"):
-            console.print("[red]❌ proxytunnel not found in PATH after installation[/red]")
+            console.print(
+                "[red]❌ proxytunnel not found in PATH after installation[/red]"
+            )
             return False
 
         # Quick sanity check
@@ -541,7 +545,6 @@ def _install_proxytunnel_noninteractive() -> bool:
     except Exception as e:
         console.print(f"[red]❌ Failed to install proxytunnel: {e}[/red]")
         return False
-
 
 
 @hub_app.command()
@@ -576,9 +579,7 @@ def sandbox(
                 task = progress.add_task(
                     "[cyan]Provisioning sandbox (VM, SSH, tunnel)...", total=None
                 )
-                await sandbox_service.init(
-                    console, dataset, sdk, sandbox_sdk
-                )
+                await sandbox_service.init(console, dataset, sdk, sandbox_sdk)
                 progress.update(task, description="[green]Sandbox ready[/green]")
 
             # Run interactive sandbox menu
@@ -978,8 +979,6 @@ async def handle_run_worker(sandbox: Sandbox):
         return
     except Exception as e:
         console.print(f"[red]❌ Error running worker: {e}[/red]")
-
-
 
 
 async def handle_create_snapshot(sandbox: Sandbox):
