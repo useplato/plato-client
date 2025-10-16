@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 from plato.sdk import Plato
 from dotenv import load_dotenv
 
@@ -15,20 +16,22 @@ async def main():
     running_sessions_count = await client.get_running_sessions_count()
     env = await client.make_environment(
         "espocrm",
-        fast=True,
         interface_type=None,
+        #tag="prod-latest"
         # dataset="wintergreen",
-        artifact_id="56f85a14-8e82-4053-a7df-8490c31a14e3",
+        #artifact_id="ef95b76e-fe89-479c-bd65-f9710be12f95",
+        #artifact_id = "d9ade9e4-73ab-4ba8-8f36-a6535ee9983e",
+        artifact_id = "64f92b80-3940-4a7e-9907-e6d6a7954573",
         # version="latest"
     )
-    tasks = await client.load_tasks("espocrm")
-    task = tasks[0]
+    #tasks = await client.load_tasks("espocrm")
+    #task = tasks[0]
     await env.wait_for_ready()
-    await env.reset(task=task)
     public_url = await env.get_public_url()
     print(public_url)
+    await asyncio.sleep(1000)
     input("Press Enter to continue...")
-
+    await env.reset()
     state = await env.get_state()
     print(state)
 
