@@ -12,7 +12,7 @@ async def main():
     client = Plato(base_url=BASE_URL, api_key=API_KEY)
     running_sessions_count = await client.get_running_sessions_count()
     env = await client.make_environment(
-        "doordash",
+        "linkedin",
         fast=True,
         interface_type=None,
         # tag="prod-latest"

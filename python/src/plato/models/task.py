@@ -90,6 +90,14 @@ class EvaluationResult(BaseModel):
     actual_mutations: Optional[List[Dict[str, Any]]] = None
 
 
+class PlatoTaskMetadata(BaseModel):
+    """Metadata for a Plato task."""
+    reasoning_level: Optional[Literal["level_1", "level_2", "level_3", "level_4", "level_5"]] = None
+    skills: Optional[List[str]] = None
+    capabilities: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    rejected: Optional[bool] = False
+
 class PlatoTask(BaseModel):
     """Represents a task in the Plato system.
 
@@ -116,6 +124,7 @@ class PlatoTask(BaseModel):
     output_schema: Optional[Dict[str, Any]] = None
     is_sample: Optional[bool] = False
     simulator_artifact_id: Optional[str] = None
+    metadata: Optional[PlatoTaskMetadata] = None
 
     @field_serializer('eval_config')
     def serialize_eval_config(self, eval_config: Optional[BasePlatoEvalConfig], _info):

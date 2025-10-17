@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
 from plato.config import get_config
-from plato.models import PlatoTask
+from plato.models import PlatoTask, PlatoTaskMetadata
 from plato.models.task import ScoringType
 from plato.exceptions import PlatoClientError
 from plato.models.task import EvaluationResult
@@ -11,6 +11,7 @@ import os
 import logging
 import time
 import requests
+
 
 logger = logging.getLogger(__name__)
 
@@ -497,6 +498,13 @@ class SyncPlato:
                 output_schema=t.get("outputSchema"),
                 is_sample=t.get("isSample", False),
                 simulator_artifact_id=t.get("simulatorArtifactId"),
+                metadata=PlatoTaskMetadata(
+                    reasoning_level=t.get("metadataConfig", {}).get("reasoningLevel"),
+                    skills=t.get("metadataConfig", {}).get("skills", []),
+                    capabilities=t.get("metadataConfig", {}).get("capabilities", []),
+                    tags=t.get("metadataConfig", {}).get("tags", []),
+                    rejected=t.get("metadataConfig", {}).get("rejected", False),
+                ) if t.get("metadataConfig") else None,
             )
             for t in test_cases
         ]
