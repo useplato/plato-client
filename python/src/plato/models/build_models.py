@@ -1,7 +1,6 @@
-from pydantic import BaseModel, Field
 from typing import List, Optional, Union, Dict, Any, Literal
 from abc import ABC
-from pydantic import BaseModel, model_validator, model_serializer
+from pydantic import BaseModel, model_validator, model_serializer, Field
 from pydantic_core import PydanticCustomError, ValidationError
 
 
@@ -84,19 +83,17 @@ class AdaptiveObject(BaseModel, ABC):
         return data
 
 
-
 class SimConfigCompute(BaseModel):
     """Compute resource configuration for a simulator."""
 
     cpus: int = Field(description="vCPUs", ge=1, le=8, default=1)
     memory: int = Field(description="Memory in MB", ge=512, le=16384, default=2048)
     disk: int = Field(description="Disk space in MB", ge=1024, le=102400, default=10240)
-    app_port: int = Field(
-        description="Application port", ge=0, le=65535, default=8080
-    )
+    app_port: int = Field(description="Application port", ge=0, le=65535, default=8080)
     plato_messaging_port: int = Field(
         description="Plato messaging port", ge=0, le=65535, default=7000
     )
+
 
 class SimConfigMetadata(BaseModel):
     """Metadata configuration for a simulator."""
@@ -119,10 +116,12 @@ class SimConfigMetadata(BaseModel):
     )
     flows_path: Optional[str] = Field(default=None, description="Flows path")
 
+
 class SimConfigService(AdaptiveObject, ABC):
     """Base class for simulator service configurations."""
 
     type: Literal["docker-compose", "docker"] = Field(description="Service type")
+
 
 class DockerComposeServiceConfig(SimConfigService):
     """Configuration for Docker Compose based services."""
@@ -142,10 +141,12 @@ class DockerComposeServiceConfig(SimConfigService):
         description="Timeout in seconds to wait for services to become healthy",
     )
 
+
 class SimConfigListener(AdaptiveObject, ABC):
     """Base class for mutation listener configurations."""
 
     type: Literal["db", "proxy", "file"] = Field(description="Listener type")
+
 
 class DatabaseMutationListenerConfig(SimConfigListener):
     """Configuration for database mutation listeners."""
@@ -173,6 +174,7 @@ class DatabaseMutationListenerConfig(SimConfigListener):
     )
     volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
 
+
 class ProxyMutationListenerConfig(SimConfigListener):
     """Configuration for proxy mutation listeners."""
 
@@ -189,6 +191,7 @@ class ProxyMutationListenerConfig(SimConfigListener):
     replay_sessions: List[Dict[str, Any]] = Field(
         default_factory=list, description="Replay sessions configuration"
     )
+
 
 class SimConfigFileMutationListener(SimConfigListener):
     """Configuration for file mutation listeners."""
@@ -208,6 +211,7 @@ class SimConfigFileMutationListener(SimConfigListener):
     )
     volumes: Optional[List[str]] = Field(default=None, description="Volumes to mount")
 
+
 class SimConfigDataset(BaseModel):
     """Configuration for a simulator dataset."""
 
@@ -216,10 +220,12 @@ class SimConfigDataset(BaseModel):
     services: Optional[dict[str, SimConfigService]] = Field(description="Services")
     listeners: Optional[dict[str, SimConfigListener]] = Field(description="Listeners")
 
+
 class SimConfig(BaseModel):
     """Root configuration model for simulators."""
 
     datasets: dict[str, SimConfigDataset] = Field(description="Datasets")
+
 
 class VMManagementRequest(BaseModel):
     dataset: str = Field(..., description="Dataset name")
@@ -230,6 +236,7 @@ class VMManagementRequest(BaseModel):
         default=600, ge=60, le=1800, description="SSH command timeout in seconds"
     )
 
+
 class VMManagementResponse(BaseModel):
     status: str = Field(..., description="Status")
     timestamp: Optional[str] = Field(None, description="Timestamp")
@@ -237,16 +244,16 @@ class VMManagementResponse(BaseModel):
 
 
 class CreateVMRequest(VMManagementRequest):
-    service: str = Field(..., description="Service name for the VM")
-    git_hash: str = Field(description="Git hash of the service")
+    artifact_id: Optional[str] = Field(default=None, description="Artifact ID for the VM")
     wait_time: int = Field(
-        default=60*30,
-        ge=60*1,
-        le=60*60*2,
+        default=1800,
+        ge=60,
+        le=7200,
         description="Wait time in seconds (limited for public usage)",
     )
     alias: Optional[str] = Field(None, description="Optional alias for the VM")
-    
+
+
 class CreateVMResponse(VMManagementResponse):
     model_config = {"populate_by_name": True}
 
@@ -257,13 +264,18 @@ class CreateVMResponse(VMManagementResponse):
 
 class SetupSandboxRequest(VMManagementRequest):
     clone_url: str = Field(..., description="Authenticated clone URL")
-    client_ssh_public_key: Optional[str] = Field(
-        None, description="Client's SSH public key for passwordless access"
-    )
+    commit_hash: str = Field(..., description="Commit hash to checkout")
     chisel_port: int = Field(
-        default=6000, ge=1024, le=65535, description="Port for chisel server (legacy, ignored by ProxyTunnel)"
+        default=6000,
+        ge=1024,
+        le=65535,
+        description="Port for chisel server (legacy, ignored by ProxyTunnel)",
     )
+    ssh_password: str = Field(
+        default="password",
+        description="SSH password for plato user (defaults to 'password')",
+    )
+
 
 class SetupSandboxResponse(VMManagementResponse):
     ssh_url: str = Field(..., description="SSH URL for connecting to sandbox")
- 
