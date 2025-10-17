@@ -232,6 +232,7 @@ export class Plato {
         'X-API-Key': this.apiKey,
         'Content-Type': 'application/json',
       },
+      withCredentials: true,
     });
   }
 
