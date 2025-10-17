@@ -9,6 +9,7 @@ from plato.sdk import Plato
 from plato.sandbox_sdk import PlatoSandboxSDK
 from pydantic import BaseModel
 import json
+from urllib.parse import urlparse
 import yaml
 import subprocess
 import base64
@@ -190,6 +191,8 @@ class Sandbox:
     def __init__(self):
         self.sandbox_info = None
         self._vm_job_uuid: Optional[str] = None
+        # Honor debug mode via environment, consistent with SDK
+        self._debug = bool(os.getenv("PLATO_DEBUG", "").strip())
 
     async def init(
         self,
@@ -197,6 +200,7 @@ class Sandbox:
         dataset: str,
         plato_client: Plato,
         plato_sandbox_sdk: PlatoSandboxSDK,
+        resume_artifact_id: Optional[str] = None,
     ):
         self.console = console
         self.dataset = dataset
@@ -307,7 +311,7 @@ class Sandbox:
             )
             self.console.print(resources_panel)
 
-            ## Step 4: Force push to main and save commit hash ##
+            ## Step 4: Snapshot current code and push (always compute commit for setup)
             clone_url = get_authenticated_url(hub_cfg_obj)
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_repo = os.path.join(temp_dir, "temp_repo")
@@ -372,7 +376,7 @@ class Sandbox:
                 _task = _progress.add_task("[cyan]Starting VM...", total=None)
                 try:
                     self.console.print(
-                        f"[dim]DEBUG: create_vm(service={sim_name}, dataset={dataset}, cpus={dataset_config.compute.cpus}, mem={dataset_config.compute.memory}, disk={dataset_config.compute.disk})[/dim]"
+                        f"[dim]DEBUG: create_vm(dataset={dataset}, cpus={dataset_config.compute.cpus}, mem={dataset_config.compute.memory}, disk={dataset_config.compute.disk}, resume={bool(resume_artifact_id)})[/dim]"
                     )
                 except Exception:
                     pass
@@ -382,17 +386,16 @@ class Sandbox:
 
                 # Submit VM creation request
                 vm_submit = await self.sandbox_sdk.create_vm(
-                    sim_name,
                     dataset_config,
-                    commit_hash,
                     dataset,
                     vm_timeout,
                     vm_wait,
                     "sandbox",
+                    artifact_id=resume_artifact_id,
                 )
 
                 # Monitor VM creation for completion
-                vm_result = await self._monitor_ssh_execution_with_data(
+                vm_result = await self._monitor_sse_stream_with_data(
                     self.client,
                     vm_submit.correlation_id,
                     "VM Creation",
@@ -414,24 +417,26 @@ class Sandbox:
                 _progress.update(_task, description="[green]VM started[/green]")
             public_id = vm_info.public_id
             self._vm_job_uuid = public_id
+            # Compute Job Group URL from Plato base_url and job_group_id
+            try:
+                _parsed = urlparse(self.client.base_url)
+                _scheme = _parsed.scheme or "https"
+                _host = _parsed.netloc
+                if _host.startswith("api."):
+                    _host = _host[len("api."):]
+                computed_vm_url = f"{_scheme}://{vm_info.job_group_id}.{_host}"
+            except Exception:
+                computed_vm_url = vm_info.url
+
             vm_panel = Panel.fit(
                 f"[green]Virtual machine is now running![/green]\n"
-                f"[dim]UUID: {public_id}[/dim]\n"
-                f"[dim]URL: {vm_info.url}[/dim]",
+                f"[dim]Job ID: {public_id}[/dim]\n"
+                f"[dim]Job Group ID: {vm_info.job_group_id}[/dim]\n"
+                f"[dim]URL: {computed_vm_url}[/dim]",
                 title="[bold green]🟢 VM Startup Complete[/bold green]",
                 border_style="green",
             )
             self.console.print(vm_panel)
-
-            ## Step 6: Setup Local SSH Key ##
-            local_key_path, local_public_key = await self._setup_local_ssh_key()
-            ssh_panel = Panel.fit(
-                f"[green]SSH key pair generated successfully![/green]\n"
-                f"[cyan]Path:[/cyan] {local_key_path}",
-                title="[bold green]✅ SSH Key Pair Generated[/bold green]",
-                border_style="green",
-            )
-            self.console.print(ssh_panel)
 
             ## Step 7: Setup sandbox environment ##
             from rich.progress import (
@@ -459,13 +464,13 @@ class Sandbox:
                 sandbox_submit = await self.sandbox_sdk.setup_sandbox(
                     public_id=public_id,
                     clone_url=clone_url,
+                    commit_hash=commit_hash,
                     dataset=dataset,
                     dataset_config=dataset_config,
-                    local_public_key=local_public_key,
                 )
 
                 # Monitor sandbox setup for completion
-                setup_result = await self._monitor_ssh_execution_with_data(
+                setup_result = await self._monitor_sse_stream_with_data(
                     self.client,
                     sandbox_submit.correlation_id,
                     "Sandbox Setup",
@@ -515,6 +520,17 @@ class Sandbox:
                 border_style="green",
             )
             self.console.print(ssh_success_panel)
+            # Recompute URL for sandbox info to keep consistent with panel
+            try:
+                _parsed2 = urlparse(self.client.base_url)
+                _scheme2 = _parsed2.scheme or "https"
+                _host2 = _parsed2.netloc
+                if _host2.startswith("api."):
+                    _host2 = _host2[len("api."):]
+                sandbox_url = f"{_scheme2}://{sandbox_info.job_group_id}.{_host2}"
+            except Exception:
+                sandbox_url = vm_info.url
+
             self.sandbox_info = SandboxInfo(
                 public_id=public_id,
                 job_group_id=vm_info.job_group_id,
@@ -522,7 +538,7 @@ class Sandbox:
                 commit_hash=commit_hash,
                 dataset=dataset,
                 dataset_config=dataset_config,
-                url=vm_info.url,
+                url=sandbox_url,
                 ssh_url=sandbox_info.ssh_url,
                 local_port=local_port,
                 ssh_host=ssh_host,
@@ -556,7 +572,7 @@ class Sandbox:
             )
         self.sandbox_info.dataset_config = sim_config.datasets[self.dataset]
 
-    async def _monitor_ssh_execution(
+    async def _monitor_sse_stream(
         self,
         client: "Plato",
         correlation_id: str,
@@ -564,7 +580,7 @@ class Sandbox:
         timeout: int = 600,
     ) -> bool:
         try:
-            result = await self._monitor_ssh_execution_with_data(
+            result = await self._monitor_sse_stream_with_data(
                 client, correlation_id, operation_name, timeout
             )
             return result.success
@@ -572,7 +588,7 @@ class Sandbox:
             raise Exception(f"Error monitoring {operation_name}: {e}")
             return False
 
-    async def _monitor_ssh_execution_with_data(
+    async def _monitor_sse_stream_with_data(
         self,
         client: "Plato",
         correlation_id: str,
@@ -622,126 +638,102 @@ class Sandbox:
                             decoded_data = base64.b64decode(encoded_data).decode(
                                 "utf-8"
                             )
-                            self.console.print(f"🔗 Decoded data: {decoded_data}")
+                            if self._debug:
+                                self.console.print(f"🔗 Decoded data: {decoded_data}")
                             event_data = __import__("json").loads(decoded_data)
-                            event_type = event_data.get("event_type", "unknown")
+                            event_type = event_data.get("type", "unknown")
 
-                            if event_type == "completed":
-                                # Handle null values from snapshot operations
-                                stdout = event_data.get("stdout") or ""
-                                stderr = event_data.get("stderr") or ""
-
-                                # Show only the final success line from stdout if available
-                                if stdout and "✅" in stdout:
-                                    success_lines = [
-                                        line
-                                        for line in stdout.strip().split("\n")
-                                        if "✅" in line
-                                    ]
-                                    if success_lines:
-                                        self.console.print(f"   {success_lines[-1]}")
-
-                                # Show only important errors (filtered)
-                                if stderr:
-                                    filtered_stderr = _filter_ssh_warnings(stderr)
-                                    if filtered_stderr and filtered_stderr.strip():
-                                        error_lines = [
-                                            line
-                                            for line in filtered_stderr.strip().split(
-                                                "\n"
-                                            )
-                                            if line.strip()
-                                            and not line.startswith("Warning:")
-                                        ]
-                                        if error_lines:
-                                            self.console.print(
-                                                "📤 [yellow]Errors:[/yellow]"
-                                            )
-                                            for line in error_lines:
-                                                self.console.print(f"   {line}")
-
+                            if event_type == "run_result":
                                 return SSHExecutionResult(
                                     success=True,
-                                    stdout=stdout,
-                                    stderr=stderr,
+                                    stdout=event_data.get("stdout", ""),
+                                    stderr=event_data.get("stderr", ""),
                                     event_data=event_data,
                                 )
+                            elif event_type == "ssh_result":
+                                success = event_data.get("success", False)
+                                if success:
+                                    # Handle null values from snapshot operations
+                                    stdout = event_data.get("stdout") or ""
+                                    stderr = event_data.get("stderr") or ""
 
-                            elif event_type == "failed":
-                                error = event_data.get("error", "Unknown error")
-                                # Handle null values from snapshot operations
-                                stdout = event_data.get("stdout") or ""
-                                stderr = event_data.get("stderr") or ""
-                                self.console.print(
-                                    f"❌ [red]{operation_name} failed: {error}[/red]"
-                                )
-                                if stdout and stdout.strip():
-                                    self.console.print(
-                                        "📤 [yellow]Command Output:[/yellow]"
+                                    # Show only the final success line from stdout if available
+                                    if stdout and "✅" in stdout:
+                                        success_lines = [
+                                            line
+                                            for line in stdout.strip().split("\n")
+                                            if "✅" in line
+                                        ]
+                                        if success_lines:
+                                            self.console.print(
+                                                f"   {success_lines[-1]}"
+                                            )
+
+                                    # Show only important errors (filtered)
+                                    if stderr:
+                                        filtered_stderr = _filter_ssh_warnings(stderr)
+                                        if filtered_stderr and filtered_stderr.strip():
+                                            error_lines = [
+                                                line
+                                                for line in filtered_stderr.strip().split(
+                                                    "\n"
+                                                )
+                                                if line.strip()
+                                                and not line.startswith("Warning:")
+                                            ]
+                                            if error_lines:
+                                                self.console.print(
+                                                    "📤 [yellow]Errors:[/yellow]"
+                                                )
+                                                for line in error_lines:
+                                                    self.console.print(f"   {line}")
+
+                                    return SSHExecutionResult(
+                                        success=True,
+                                        stdout=stdout,
+                                        stderr=stderr,
+                                        event_data=event_data,
                                     )
-                                    for line in stdout.strip().split("\n"):
-                                        self.console.print(f"   {line}")
-                                if stderr and stderr.strip():
-                                    filtered_stderr = _filter_ssh_warnings(stderr)
-                                    if filtered_stderr and filtered_stderr.strip():
-                                        self.console.print(
-                                            "📤 [red]Error Output:[/red]"
-                                        )
-                                        for line in filtered_stderr.strip().split("\n"):
-                                            self.console.print(f"   {line}")
 
-                                return SSHExecutionResult(
-                                    success=False,
-                                    stdout=stdout,
-                                    stderr=stderr,
-                                    event_data=event_data,
-                                    error=error,
-                                )
+                                else:
+                                    error = event_data.get("error", "Unknown error")
+                                    # Handle null values from snapshot operations
+                                    stdout = event_data.get("stdout") or ""
+                                    stderr = event_data.get("stderr") or ""
+                                    self.console.print(
+                                        f"❌ [red]{operation_name} failed: {error}[/red]"
+                                    )
+                                    if stdout and stdout.strip():
+                                        self.console.print(
+                                            "📤 [yellow]Command Output:[/yellow]"
+                                        )
+                                        for line in stdout.strip().split("\n"):
+                                            self.console.print(f"   {line}")
+                                    if stderr and stderr.strip():
+                                        filtered_stderr = _filter_ssh_warnings(stderr)
+                                        if filtered_stderr and filtered_stderr.strip():
+                                            self.console.print(
+                                                "📤 [red]Error Output:[/red]"
+                                            )
+                                            for line in filtered_stderr.strip().split(
+                                                "\n"
+                                            ):
+                                                self.console.print(f"   {line}")
+
+                                    return SSHExecutionResult(
+                                        success=False,
+                                        stdout=stdout,
+                                        stderr=stderr,
+                                        event_data=event_data,
+                                        error=error,
+                                    )
                         except Exception as e:
                             raise Exception(f"Error monitoring {operation_name}: {e}")
-                            continue
 
         except Exception as e:
             raise Exception(f"Error monitoring {operation_name}: {e}")
 
         raise Exception(f"{operation_name} stream ended without completion")
-
-    async def _setup_local_ssh_key(self) -> tuple[str, str]:
-        import subprocess
-
-        try:
-            ssh_dir = os.path.expanduser("~/.ssh")
-            os.makedirs(ssh_dir, exist_ok=True)
-            local_key_path = os.path.join(ssh_dir, "plato_sandbox_key")
-            if not os.path.exists(local_key_path):
-                subprocess.run(
-                    [
-                        "ssh-keygen",
-                        "-t",
-                        "rsa",
-                        "-b",
-                        "2048",
-                        "-f",
-                        local_key_path,
-                        "-N",
-                        "",
-                        "-C",
-                        "plato-sandbox-client",
-                    ],
-                    check=True,
-                    capture_output=True,
-                )
-                os.chmod(local_key_path, 0o600)
-                os.chmod(f"{local_key_path}.pub", 0o644)
-
-            with open(f"{local_key_path}.pub", "r") as f:
-                local_public_key = f.read().strip()
-
-            return local_key_path, local_public_key
-        except Exception as e:
-            raise Exception(
-                f"[yellow]⚠️  [yellow]Warning: Failed to setup SSH key: {e}[/yellow]"
-            )
 
     async def _setup_ssh_config_with_password(
         self, local_port: int, job_group_id: str

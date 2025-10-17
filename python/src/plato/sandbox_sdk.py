@@ -254,13 +254,12 @@ class PlatoSandboxSDK:
 
     async def create_vm(
         self,
-        sim_name: str,
         dataset_config: SimConfigDataset,
-        git_hash: str,
         dataset: str,
         timeout: int,
         wait_time: int,
         alias: str,
+        artifact_id: Optional[str] = None,
     ) -> CreateVMResponse:
         """Create a VM instance and return the response for correlation monitoring."""
         headers = {"X-API-Key": self.api_key}
@@ -272,10 +271,9 @@ class PlatoSandboxSDK:
                 dataset=dataset,
                 plato_dataset_config=dataset_config.model_dump(),
                 timeout=timeout,
-                service=sim_name,
-                git_hash=git_hash,
                 wait_time=wait_time,
                 alias=alias,
+                artifact_id=artifact_id,
             ).model_dump(mode="json"),
             headers=headers,
         ) as vm_response:
@@ -305,9 +303,9 @@ class PlatoSandboxSDK:
         self,
         public_id: str,
         clone_url: str,
+        commit_hash: str,
         dataset: str,
         dataset_config: SimConfigDataset,
-        local_public_key: str,
     ) -> SetupSandboxResponse:
         """Setup sandbox environment and return response for correlation monitoring."""
         headers = {"X-API-Key": self.api_key}
@@ -322,7 +320,7 @@ class PlatoSandboxSDK:
                     dataset=dataset,
                     plato_dataset_config=dataset_config,
                     clone_url=clone_url,
-                    client_ssh_public_key=local_public_key,
+                    commit_hash=commit_hash,
                     chisel_port=6000,  # Legacy parameter required by backend, ignored by ProxyTunnel
                 ).model_dump(mode="json"),
                 headers=headers,
