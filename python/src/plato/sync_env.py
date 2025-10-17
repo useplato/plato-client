@@ -295,7 +295,7 @@ class SyncPlatoEnvironment:
             )  # Wait up to 5 seconds for thread to stop
             self._heartbeat_thread = None
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self, merge_mutations: bool = False) -> Dict[str, Any]:
         """Get the current state of the environment.
 
         Returns:
@@ -306,9 +306,11 @@ class SyncPlatoEnvironment:
         """
         if not self._run_session_id:
             raise PlatoClientError("No active run session. Call reset() first.")
-        return self._client.get_environment_state(self.id)
+        return self._client.get_environment_state(self.id, merge_mutations)
 
-    def get_state_mutations(self) -> List[Dict[str, Any]]:
+    def get_state_mutations(
+        self, merge_mutations: bool = False
+    ) -> List[Dict[str, Any]]:
         """Get a list of state mutations that have occurred in the environment.
 
         Returns:
@@ -317,7 +319,7 @@ class SyncPlatoEnvironment:
         Raises:
             PlatoClientError: If no active run session exists.
         """
-        state = self.get_state()
+        state = self.get_state(merge_mutations)
         return state.get("mutations", [])
 
     def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:

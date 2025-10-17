@@ -278,11 +278,14 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
-    def get_environment_state(self, job_id: str) -> Dict[str, Any]:
+    def get_environment_state(
+        self, job_id: str, merge_mutations: bool = False
+    ) -> Dict[str, Any]:
         """Get the current state of an environment.
 
         Args:
             job_id (str): The ID of the job to get state for.
+            merge_mutations (bool): Whether to merge mutations into the state.
 
         Returns:
             Dict[str, Any]: The current state of the environment.
@@ -290,7 +293,10 @@ class SyncPlato:
         Raises:
             requests.RequestException: If the API request fails.
         """
-        response = self.http_session.get(f"{self.base_url}/env/{job_id}/state")
+        response = self.http_session.get(
+            f"{self.base_url}/env/{job_id}/state",
+            params={"merge_mutations": str(merge_mutations).lower()},
+        )
         self._handle_response_error(response)
         data = response.json()
         return data["data"]["state"]
