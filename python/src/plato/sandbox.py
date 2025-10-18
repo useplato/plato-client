@@ -1,4 +1,5 @@
 import os
+import asyncio
 import shutil
 import tempfile
 from typing import Optional, Dict, Any
@@ -191,8 +192,14 @@ class Sandbox:
     def __init__(self):
         self.sandbox_info = None
         self._vm_job_uuid: Optional[str] = None
+        self._job_group_id: Optional[str] = None
         # Honor debug mode via environment, consistent with SDK
         self._debug = bool(os.getenv("PLATO_DEBUG", "").strip())
+        # Heartbeat management
+        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._heartbeat_interval: int = int(
+            os.getenv("PLATO_SANDBOX_HEARTBEAT_SECS", "30")
+        )
 
     async def init(
         self,
@@ -376,7 +383,7 @@ class Sandbox:
                 _task = _progress.add_task("[cyan]Starting VM...", total=None)
                 try:
                     self.console.print(
-                        f"[dim]DEBUG: create_vm(dataset={dataset}, cpus={dataset_config.compute.cpus}, mem={dataset_config.compute.memory}, disk={dataset_config.compute.disk}, resume={bool(resume_artifact_id)})[/dim]"
+                        f"[dim]DEBUG: create_vm(dataset={dataset}, cpus={dataset_config.compute.cpus}, mem={dataset_config.compute.memory}, disk={dataset_config.compute.disk}, resume_artifact_id={resume_artifact_id})[/dim]"
                     )
                 except Exception:
                     pass
@@ -417,13 +424,14 @@ class Sandbox:
                 _progress.update(_task, description="[green]VM started[/green]")
             public_id = vm_info.public_id
             self._vm_job_uuid = public_id
+            self._job_group_id = vm_info.job_group_id
             # Compute Job Group URL from Plato base_url and job_group_id
             try:
                 _parsed = urlparse(self.client.base_url)
                 _scheme = _parsed.scheme or "https"
                 _host = _parsed.netloc
                 if _host.startswith("api."):
-                    _host = _host[len("api."):]
+                    _host = _host[len("api.") :]
                 computed_vm_url = f"{_scheme}://{vm_info.job_group_id}.{_host}"
             except Exception:
                 computed_vm_url = vm_info.url
@@ -437,6 +445,12 @@ class Sandbox:
                 border_style="green",
             )
             self.console.print(vm_panel)
+            # Start sending periodic heartbeats to keep VM alive
+            try:
+                await self._start_heartbeat()
+            except Exception:
+                # Non-fatal; continue even if heartbeat failed to start
+                pass
 
             ## Step 7: Setup sandbox environment ##
             from rich.progress import (
@@ -526,7 +540,7 @@ class Sandbox:
                 _scheme2 = _parsed2.scheme or "https"
                 _host2 = _parsed2.netloc
                 if _host2.startswith("api."):
-                    _host2 = _host2[len("api."):]
+                    _host2 = _host2[len("api.") :]
                 sandbox_url = f"{_scheme2}://{sandbox_info.job_group_id}.{_host2}"
             except Exception:
                 sandbox_url = vm_info.url
@@ -733,6 +747,7 @@ class Sandbox:
         except Exception as e:
             raise Exception(f"Error monitoring {operation_name}: {e}")
 
+        breakpoint()
         raise Exception(f"{operation_name} stream ended without completion")
 
     async def _setup_ssh_config_with_password(
@@ -756,6 +771,11 @@ class Sandbox:
             raise Exception(f"Failed to setup SSH config: {e}")
 
     async def close(self) -> None:
+        # Stop heartbeat first
+        try:
+            await self._stop_heartbeat()
+        except Exception:
+            pass
         # Delete SSH config entry if exists
         if self.sandbox_info and hasattr(self.sandbox_info, "ssh_host"):
             try:
@@ -838,3 +858,66 @@ class Sandbox:
             except Exception as cleanup_e:
                 self.console.print(f"[yellow]⚠️  Failed to cleanup VM: {cleanup_e}")
         self._vm_job_uuid = None
+
+    async def _heartbeat_loop(self) -> None:
+        """Background task that periodically sends heartbeats to keep the sandbox VM alive."""
+        while True:
+            try:
+                # Determine current job group id for heartbeats
+                job_id = None
+                if self.sandbox_info and getattr(
+                    self.sandbox_info, "job_group_id", None
+                ):
+                    job_id = self.sandbox_info.job_group_id
+                elif self._job_group_id:
+                    job_id = self._job_group_id
+
+                if not job_id:
+                    return
+
+                await self.client.send_heartbeat(job_id)
+                # Always show a lightweight heartbeat tick so users can see activity
+                try:
+                    self.console.print(
+                        f"[dim]💓 Heartbeat sent for job group {job_id}[/dim]"
+                    )
+                except Exception:
+                    pass
+            except Exception:
+                # Ignore heartbeat errors; will retry next tick
+                try:
+                    self.console.print(
+                        f"[dim]⚠️  Heartbeat error: {job_id} (will retry)[/dim]"
+                    )
+                except Exception:
+                    pass
+            await asyncio.sleep(self._heartbeat_interval)
+
+    async def _start_heartbeat(self) -> None:
+        """Start the heartbeat background task if not already running."""
+        await self._stop_heartbeat()
+        try:
+            # Always confirm once so users know heartbeats are active
+            self.console.print(
+                f"🫀 Heartbeats enabled: every {self._heartbeat_interval}s"
+            )
+        except Exception:
+            pass
+        if self._debug:
+            try:
+                self.console.print(
+                    f"[dim]Starting heartbeat task every {self._heartbeat_interval}s[/dim]"
+                )
+            except Exception:
+                pass
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+    async def _stop_heartbeat(self) -> None:
+        """Stop the heartbeat background task if it's running."""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except Exception:
+                pass
+        self._heartbeat_task = None
