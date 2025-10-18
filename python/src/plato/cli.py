@@ -840,15 +840,10 @@ async def handle_run_services(sandbox: Sandbox):
                 "Start Services",
                 timeout=900,
             )
-            start_obj = _parse_last_json(start_result.stdout or "")
-            if (
-                not start_result.success
-                or not start_obj
-                or start_obj.get("status") == "error"
-            ):
+            if not start_result.success:
                 progress.update(task, description="[red]Start-services failed[/red]")
                 console.print(
-                    f"[red]❌ Error starting services: {(start_result.error or (start_obj or {}).get('message') or 'unknown error')}[/red]"
+                    f"[red]❌ Error starting services: {start_result.error or 'unknown error'}[/red]"
                 )
                 return
             progress.update(task, description="[green]Start-services submitted[/green]")
@@ -951,6 +946,7 @@ async def handle_run_worker(sandbox: Sandbox):
                 or start_obj.get("status") == "error"
             ):
                 progress.update(task, description="[red]Start-worker failed[/red]")
+                breakpoint()
                 console.print(
                     f"[red]❌ Error starting worker: {(start_result.error or (start_obj or {}).get('message') or 'unknown error')}[/red]"
                 )
