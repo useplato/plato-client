@@ -15,82 +15,143 @@ flows:
 - name: login
   description: Complete login flow for Akaunting with verification
   steps:
-  - action: screenshot
-    description: Screenshot before login (initial page)
-    filename: 01_before_login.png
+  # No navigation needed - simulator starts on login page
   - action: wait
-    description: Wait for page to fully load
-    duration: 5000
+    duration: 3000
+    description: Wait for initial page load
+  - action: screenshot
+    filename: 01_login_page.png
+    description: Screenshot of login page
+
+  # Fill login credentials
   - action: wait_for_selector
-    description: Wait for email/username field
-    selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
+    selector: 'input[type="email"]'
     timeout: 15000
+    description: Wait for email field
   - action: fill
-    description: Fill email/username field
-    selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
+    selector: 'input[type="email"]'
     value: $username
-  - action: wait_for_selector
-    description: Wait for password field
-    selector: 'input[name="password"], input[type="password"], #password'
-    timeout: 5000
-  - action: fill
-    description: Fill password field
-    selector: 'input[name="password"], input[type="password"], #password'
-    value: $password
-  - action: screenshot
-    description: Screenshot after credentials entered, before submission
-    filename: 02_credentials_entered.png
-  - action: click
-    description: Click login submit button
-    selector: button[type="submit"], input[type="submit"], .btn-primary, .btn-success
+    description: Fill email field
   - action: wait
-    description: Wait for login to process
-    duration: 5000
+    duration: 500
+    description: Brief wait after filling username
+
+  - action: wait_for_selector
+    selector: 'input[type="password"]'
+    timeout: 5000
+    description: Wait for password field
+  - action: fill
+    selector: 'input[type="password"]'
+    value: $password
+    description: Fill password field
+  - action: wait
+    duration: 500
+    description: Brief wait after filling password
+
   - action: screenshot
-    description: Screenshot after login attempt
+    filename: 02_credentials_entered.png
+    description: Screenshot after credentials entered, before submission
+
+  # Submit login form
+  - action: wait_for_selector
+    selector: 'button[type="submit"]'
+    timeout: 5000
+    description: Wait for login button to be available
+  - action: wait
+    duration: 2000
+    description: Wait to ensure form is ready
+  - action: click
+    selector: 'button[type="submit"]'
+    description: Click login submit button
+  - action: wait
+    duration: 30000
+    description: Wait for login to process and page redirect
+
+  - action: screenshot
     filename: 03_after_login.png
-  - action: verify
-    description: Verify successful login by checking for main application interface
-    selector: .main-content, .dashboard, .content-wrapper, .main-wrapper, .sidebar, nav, [class*="dashboard"], [class*="main"], [id*="app"]
-    type: element_exists
+    description: Screenshot after login attempt
+
+  # Comprehensive authentication verification
+  - action: verify_url
+    url: /1
+    contains: true
+    description: Verify redirected to company dashboard after login
+
+  - action: screenshot
+    filename: 04_verified_logged_in.png
+    description: Screenshot of verified logged-in state
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  - action: screenshot
-    description: Screenshot before incorrect login attempt
-    filename: 01_before_incorrect_login.png
+  # No navigation needed - simulator starts on login page
   - action: wait
-    description: Wait for page to fully load
     duration: 3000
+    description: Wait for page to fully load
+  - action: screenshot
+    filename: 01_before_incorrect_login.png
+    description: Screenshot before incorrect login attempt
+
+  # Fill incorrect credentials
   - action: wait_for_selector
-    description: Wait for username/email field
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
     timeout: 15000
+    description: Wait for username/email field
   - action: fill
-    description: Fill username/email field with valid username
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
     value: $username
+    description: Fill username/email field with valid username
+  - action: wait
+    duration: 500
+    description: Brief wait after filling username
+
   - action: wait_for_selector
-    description: Wait for password field
     selector: 'input[name="password"], input[type="password"], #password'
     timeout: 5000
+    description: Wait for password field
   - action: fill
-    description: Fill password field with incorrect password
     selector: 'input[name="password"], input[type="password"], #password'
     value: $wrong_password
-  - action: screenshot
-    description: Screenshot after entering incorrect credentials
-    filename: 02_incorrect_credentials_entered.png
-  - action: click
-    description: Click login submit button
-    selector: button[type="submit"], input[type="submit"], .btn-primary, .btn-success
+    description: Fill password field with incorrect password
   - action: wait
-    description: Wait for login attempt to process
-    duration: 3000
+    duration: 500
+    description: Brief wait after filling password
+
   - action: screenshot
-    description: Screenshot after incorrect login attempt
+    filename: 02_incorrect_credentials_entered.png
+    description: Screenshot after entering incorrect credentials
+
+  # Submit form with incorrect credentials
+  - action: wait_for_selector
+    selector: 'button[type="submit"]'
+    timeout: 5000
+    description: Wait for login button to be available
+  - action: wait
+    duration: 2000
+    description: Wait to ensure form is ready
+  - action: click
+    selector: 'button[type="submit"]'
+    description: Click login submit button
+  - action: wait
+    duration: 3000
+    description: Wait for login attempt to process
+
+  - action: screenshot
     filename: 03_after_incorrect_login.png
+    description: Screenshot after incorrect login attempt
+
+  # Verify error message
   - action: verify
-    description: Verify error message is displayed
-    selector: div:has-text("These credentials do not match our records.")
     type: element_exists
+    selector: '.alert-danger, .error-message, [class*="error"], div:has-text("These credentials do not match our records."), div:has-text("Invalid credentials")'
+    description: Verify error message is displayed
+
+  # Verify still on login page
+  - action: verify_url
+    url: /auth/login
+    contains: true
+    description: Verify still on login page after failed attempt
+
+  - action: verify
+    type: element_exists
+    selector: 'input[type="email"]'
+    description: Verify login form is still present

@@ -108,6 +108,7 @@ class Plato:
         tag: Optional[str] = None,
         dataset: Optional[str] = None,
         artifact_id: Optional[str] = None,
+        feature_flags: Optional[Dict[str, Any]] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -152,6 +153,7 @@ class Plato:
                 "fast": fast,
                 "version": version,
             },
+            cookies={name: str(value) for name, value in (feature_flags or {}).items()},
             headers=headers,
         ) as response:
             await self._handle_response_error(response)

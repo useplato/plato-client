@@ -72,7 +72,11 @@ class SyncPlato:
             try:
                 # Try to get the error message from the response body
                 error_data = response.json()
-                error_message = error_data.get('error') or error_data.get('message') or str(error_data)
+                error_message = (
+                    error_data.get("error")
+                    or error_data.get("message")
+                    or str(error_data)
+                )
             except (ValueError, requests.exceptions.JSONDecodeError):
                 # Fallback to status text if we can't parse JSON
                 error_message = response.reason or f"HTTP {response.status_code}"
@@ -96,6 +100,7 @@ class SyncPlato:
         tag: Optional[str] = None,
         dataset: Optional[str] = None,
         artifact_id: Optional[str] = None,
+        feature_flags: Optional[Dict[str, Any]] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -139,6 +144,7 @@ class SyncPlato:
                 "dataset": dataset,
                 "artifact_id": artifact_id,
             },
+            cookies={name: str(value) for name, value in (feature_flags or {}).items()},
         )
         self._handle_response_error(response)
         data = response.json()
@@ -205,8 +211,6 @@ class SyncPlato:
         if data["error"] is not None:
             raise PlatoClientError(data["error"])
         return data["data"]["proxy_url"]
-
-
 
     def close_environment(self, job_id: str) -> Dict[str, Any]:
         """Close an environment.
@@ -367,11 +371,18 @@ class SyncPlato:
         Raises:
             requests.RequestException: If the API request fails.
         """
-        response = self.http_session.post(f"{self.base_url}/snapshot/process/{session_id}")
+        response = self.http_session.post(
+            f"{self.base_url}/snapshot/process/{session_id}"
+        )
         self._handle_response_error(response)
         return response.json()
 
-    def evaluate(self, session_id: str, value: Optional[Any] = None, agent_version: Optional[str] = None) -> Dict[str, Any]:
+    def evaluate(
+        self,
+        session_id: str,
+        value: Optional[Any] = None,
+        agent_version: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Evaluate the environment.
 
         Args:
@@ -498,9 +509,13 @@ class SyncPlato:
                 env_id=t["simulator"]["name"],
                 average_time=t.get("averageTimeTaken"),
                 average_steps=t.get("averageStepsTaken"),
-                num_validator_human_scores=t.get("defaultScoringConfig", {}).get("num_sessions_used", 0),
+                num_validator_human_scores=t.get("defaultScoringConfig", {}).get(
+                    "num_sessions_used", 0
+                ),
                 default_scoring_config=t.get("defaultScoringConfig", {}),
-                scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])] if t.get("scoringTypes") else None,
+                scoring_type=[ScoringType(st) for st in t.get("scoringTypes", [])]
+                if t.get("scoringTypes")
+                else None,
                 output_schema=t.get("outputSchema"),
                 is_sample=t.get("isSample", False),
                 simulator_artifact_id=t.get("simulatorArtifactId"),
@@ -544,6 +559,8 @@ class SyncPlato:
         Raises:
             requests.RequestException: If the API request fails.
         """
-        response = self.http_session.get(f"{self.base_url}/user/organization/running-sessions")
+        response = self.http_session.get(
+            f"{self.base_url}/user/organization/running-sessions"
+        )
         self._handle_response_error(response)
         return response.json()
