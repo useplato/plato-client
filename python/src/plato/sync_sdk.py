@@ -89,7 +89,7 @@ class SyncPlato:
         open_page_on_start: bool = False,
         viewport_width: int = 1920,
         viewport_height: int = 1080,
-        interface_type: Optional[Literal["browser"]] = "browser",
+        interface_type: Optional[str] = None,
         record_network_requests: bool = False,
         record_actions: bool = False,
         env_config: Optional[Dict[str, Any]] = None,
