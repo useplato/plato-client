@@ -25,18 +25,28 @@ class Plato:
     Attributes:
         api_key (str): The API key used for authentication with Plato API.
         base_url (str): The base URL of the Plato API.
+        feature_flags (Dict[str, Any]): Feature flags to include in all requests.
         http_session (Optional[aiohttp.ClientSession]): The aiohttp session for making HTTP requests.
     """
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        feature_flags: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize a new Plato.
 
         Args:
             api_key (Optional[str]): The API key for authentication. If not provided,
                 falls back to the key from config.
+            base_url (Optional[str]): The base URL for the Plato API. If not provided,
+                falls back to the URL from config.
+            feature_flags (Optional[Dict[str, Any]]): Feature flags to include in all requests.
         """
         self.api_key = api_key or config.api_key
         self.base_url = base_url or config.base_url
+        self.feature_flags = feature_flags or {}
         self._http_session: Optional[aiohttp.ClientSession] = None
 
     @property
@@ -58,7 +68,18 @@ class Plato:
                 sock_read=600,  # 10 minutes
                 sock_connect=60,
             )
-            self._http_session = aiohttp.ClientSession(timeout=timeout)
+            cookie_jar = aiohttp.CookieJar(unsafe=True)
+            self._http_session = aiohttp.ClientSession(
+                timeout=timeout, cookie_jar=cookie_jar
+            )
+            # Attach feature flags as default cookies for all requests, scoped to base_url
+            if self.feature_flags:
+                from yarl import URL
+
+                cookie_jar.update_cookies(
+                    {name: str(value) for name, value in self.feature_flags.items()},
+                    response_url=URL(self.base_url),
+                )
         return self._http_session
 
     async def close(self):
@@ -108,7 +129,6 @@ class Plato:
         tag: Optional[str] = None,
         dataset: Optional[str] = None,
         artifact_id: Optional[str] = None,
-        feature_flags: Optional[Dict[str, Any]] = None,
     ) -> PlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -133,27 +153,29 @@ class Plato:
             aiohttp.ClientError: If the API request fails.
         """
         headers = {"X-API-Key": self.api_key}
+        url = f"{self.base_url}/env/make2"
+        request_data = {
+            "interface_type": interface_type or "noop",
+            "interface_width": viewport_width,
+            "interface_height": viewport_height,
+            "source": "SDK",
+            "open_page_on_start": open_page_on_start,
+            "env_id": env_id,
+            "tag": tag,
+            "dataset": dataset,
+            "artifact_id": artifact_id,
+            "env_config": env_config or {},
+            "record_network_requests": record_network_requests,
+            "record_actions": record_actions,
+            "keepalive": keepalive,
+            "alias": alias,
+            "fast": fast,
+            "version": version,
+        }
+
         async with self.http_session.post(
-            f"{self.base_url}/env/make2",
-            json={
-                "interface_type": interface_type or "noop",
-                "interface_width": viewport_width,
-                "interface_height": viewport_height,
-                "source": "SDK",
-                "open_page_on_start": open_page_on_start,
-                "env_id": env_id,
-                "tag": tag,
-                "dataset": dataset,
-                "artifact_id": artifact_id,
-                "env_config": env_config or {},
-                "record_network_requests": record_network_requests,
-                "record_actions": record_actions,
-                "keepalive": keepalive,
-                "alias": alias,
-                "fast": fast,
-                "version": version,
-            },
-            cookies={name: str(value) for name, value in (feature_flags or {}).items()},
+            url,
+            json=request_data,
             headers=headers,
         ) as response:
             await self._handle_response_error(response)
@@ -538,12 +560,18 @@ class Plato:
                     is_sample=t.get("isSample", False),
                     simulator_artifact_id=t.get("simulatorArtifactId"),
                     metadata=PlatoTaskMetadata(
-                        reasoning_level=t.get("metadataConfig", {}).get("reasoningLevel"),
+                        reasoning_level=t.get("metadataConfig", {}).get(
+                            "reasoningLevel"
+                        ),
                         skills=t.get("metadataConfig", {}).get("skills", []),
-                        capabilities=t.get("metadataConfig", {}).get("capabilities", []),
+                        capabilities=t.get("metadataConfig", {}).get(
+                            "capabilities", []
+                        ),
                         tags=t.get("metadataConfig", {}).get("tags", []),
                         rejected=t.get("metadataConfig", {}).get("rejected", False),
-                    ) if t.get("metadataConfig") else None,
+                    )
+                    if t.get("metadataConfig")
+                    else None,
                 )
                 for t in test_cases
             ]

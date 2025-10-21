@@ -30,15 +30,24 @@ class SyncPlato:
         http_session (Optional[requests.Session]): The requests session for making HTTP requests.
     """
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        feature_flags: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize a new SyncPlato.
 
         Args:
             api_key (Optional[str]): The API key for authentication. If not provided,
                 falls back to the key from config.
+            base_url (Optional[str]): The base URL for the Plato API. If not provided,
+                falls back to the URL from config.
+            feature_flags (Optional[Dict[str, Any]]): Feature flags to include in all requests.
         """
         self.api_key = api_key or config.api_key
         self.base_url = base_url or config.base_url
+        self.feature_flags = feature_flags or {}
         self._http_session: Optional[requests.Session] = None
 
     @property
@@ -51,6 +60,10 @@ class SyncPlato:
         if self._http_session is None:
             self._http_session = requests.Session()
             self._http_session.headers.update({"X-API-Key": self.api_key})
+            # Attach feature flags as default cookies for all requests
+            if self.feature_flags:
+                for name, value in self.feature_flags.items():
+                    self._http_session.cookies.set(name, str(value))
         return self._http_session
 
     def close(self):
@@ -100,7 +113,6 @@ class SyncPlato:
         tag: Optional[str] = None,
         dataset: Optional[str] = None,
         artifact_id: Optional[str] = None,
-        feature_flags: Optional[Dict[str, Any]] = None,
     ) -> SyncPlatoEnvironment:
         """Create a new Plato environment for the given task.
 
@@ -144,7 +156,6 @@ class SyncPlato:
                 "dataset": dataset,
                 "artifact_id": artifact_id,
             },
-            cookies={name: str(value) for name, value in (feature_flags or {}).items()},
         )
         self._handle_response_error(response)
         data = response.json()
@@ -525,7 +536,9 @@ class SyncPlato:
                     capabilities=t.get("metadataConfig", {}).get("capabilities", []),
                     tags=t.get("metadataConfig", {}).get("tags", []),
                     rejected=t.get("metadataConfig", {}).get("rejected", False),
-                ) if t.get("metadataConfig") else None,
+                )
+                if t.get("metadataConfig")
+                else None,
             )
             for t in test_cases
         ]
