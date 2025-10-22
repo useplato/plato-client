@@ -114,6 +114,7 @@ class PlatoTask(BaseModel):
     prompt: str
     env_id: str
     start_url: str
+    start_path: Optional[str] = None
     dataset_name: Optional[str] = None
     eval_config: Optional[BasePlatoEvalConfig] = None
     average_time: Optional[float] = None

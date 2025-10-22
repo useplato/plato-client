@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoTaskMetadata, PlatoEnvironment
 from plato.models.task import ScoringType
@@ -546,6 +546,7 @@ class Plato:
                     name=t["name"],
                     prompt=t["prompt"],
                     start_url=t["startUrl"],
+                    start_path=t.get("startPath"),
                     env_id=t["simulator"]["name"],
                     average_time=t.get("averageTimeTaken"),
                     average_steps=t.get("averageStepsTaken"),
@@ -764,6 +765,38 @@ class Plato:
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.post(
             f"{self.base_url}/gitea/simulators/{simulator_id}/repo", headers=headers
+        ) as response:
+            await self._handle_response_error(response)
+            return await response.json()
+
+    async def get_simulator_start_path(
+        self, simulator_name: str, test_case_public_id: str
+    ) -> Dict[str, Any]:
+        """Get the start path for a simulator and test case.
+
+        Args:
+            simulator_name (str): The name of the simulator.
+            test_case_public_id (str): The public ID of the test case.
+
+        Returns:
+            Dict[str, Any]: Response containing start_path and source information.
+                - start_path (str | None): The start path, or None if not found
+                - source (str): "test_case", "simulator", or "not_found"
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            PlatoClientError: If the request fails.
+        """
+        headers = {"X-API-Key": self.api_key}
+        request_body = {
+            "simulator_name": simulator_name,
+            "test_case_public_id": test_case_public_id,
+        }
+
+        async with self.http_session.post(
+            f"{self.base_url}/simulators/start-path",
+            json=request_body,
+            headers=headers
         ) as response:
             await self._handle_response_error(response)
             return await response.json()

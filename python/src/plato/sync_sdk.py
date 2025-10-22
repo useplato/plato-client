@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoTaskMetadata
 from plato.models.task import ScoringType
@@ -517,6 +517,7 @@ class SyncPlato:
                 name=t["name"],
                 prompt=t["prompt"],
                 start_url=t["startUrl"],
+                start_path=t.get("startPath"),
                 env_id=t["simulator"]["name"],
                 average_time=t.get("averageTimeTaken"),
                 average_steps=t.get("averageStepsTaken"),
@@ -574,6 +575,36 @@ class SyncPlato:
         """
         response = self.http_session.get(
             f"{self.base_url}/user/organization/running-sessions"
+        )
+        self._handle_response_error(response)
+        return response.json()
+
+    def get_simulator_start_path(
+        self, simulator_name: str, test_case_public_id: str
+    ) -> Dict[str, Any]:
+        """Get the start path for a simulator and test case.
+
+        Args:
+            simulator_name (str): The name of the simulator.
+            test_case_public_id (str): The public ID of the test case.
+
+        Returns:
+            Dict[str, Any]: Response containing start_path and source information.
+                - start_path (str | None): The start path, or None if not found
+                - source (str): "test_case", "simulator", or "not_found"
+
+        Raises:
+            requests.RequestException: If the API request fails.
+            PlatoClientError: If the request fails.
+        """
+        request_body = {
+            "simulator_name": simulator_name,
+            "test_case_public_id": test_case_public_id,
+        }
+
+        response = self.http_session.post(
+            f"{self.base_url}/simulators/start-path",
+            json=request_body
         )
         self._handle_response_error(response)
         return response.json()

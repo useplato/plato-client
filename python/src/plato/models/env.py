@@ -567,6 +567,63 @@ class PlatoEnvironment:
         except Exception as e:
             raise PlatoClientError(str(e))
 
+    async def get_start_url(self) -> str:
+        """Get the start URL for this environment.
+
+        This method constructs the start URL by:
+        1. Getting the public URL as the base URL
+        2. Calling the /api/simulators/start-path endpoint to get the start path
+        3. Appending the start path to the base URL (or '/' if None)
+
+        Returns:
+            str: The start URL for this environment.
+
+        Raises:
+            PlatoClientError: If unable to determine the environment type or API call fails.
+        """
+        # Get the base public URL
+        base_url = await self.get_public_url()
+
+        # Get start path from API if we have a task
+        if self._current_task and self.env_id:
+            try:
+                response = await self._client.get_simulator_start_path(
+                    simulator_name=self.env_id,
+                    test_case_public_id=self._current_task.public_id
+                )
+                start_path = response.get("start_path")
+                source = response.get("source", "not_found")
+
+                logger.debug(f"Start path response: {start_path} (source: {source})")
+
+                # Use the start_path from the API, or default to '/' if None
+                if start_path is None:
+                    start_path = "/"
+
+                # Ensure proper URL joining
+                if base_url.endswith('/') and start_path.startswith('/'):
+                    return base_url + start_path[1:]
+                elif not base_url.endswith('/') and not start_path.startswith('/'):
+                    return base_url + '/' + start_path
+                else:
+                    return base_url + start_path
+
+            except Exception as e:
+                logger.warning(f"Failed to get start path from API: {e}")
+                # Fall back to using task.start_path if API fails
+                if self._current_task.start_path:
+                    start_path = self._current_task.start_path
+                    # Ensure proper URL joining
+                    if base_url.endswith('/') and start_path.startswith('/'):
+                        return base_url + start_path[1:]
+                    elif not base_url.endswith('/') and not start_path.startswith('/'):
+                        return base_url + '/' + start_path
+                    else:
+                        return base_url + start_path
+
+        # Return base URL if no task or API call fails
+        return base_url
+
     async def get_session_url(self) -> str:
         """Get the URL for accessing the session of the environment."""
         if not self._run_session_id:
