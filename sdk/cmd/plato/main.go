@@ -15,10 +15,10 @@ type NavigateMsg struct {
 }
 
 type navigateToVMInfoMsg struct {
-	sandbox  *models.Sandbox
-	dataset  string
-	sshURL   string
-	password string
+	sandbox *models.Sandbox
+	dataset string
+	sshURL  string
+	sshHost string
 }
 
 const (
@@ -71,7 +71,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Mark setup as complete and set SSH info
 		vmInfo.setupComplete = true
 		vmInfo.sshURL = navMsg.sshURL
-		vmInfo.sshPassword = navMsg.password
+		vmInfo.sshHost = navMsg.sshHost
 		m.vmInfo = vmInfo
 		m.currentView = ViewVMInfo
 		return m, m.vmInfo.Init()

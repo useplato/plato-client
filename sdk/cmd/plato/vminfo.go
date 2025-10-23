@@ -36,8 +36,8 @@ type VMInfoModel struct {
 	spinner        spinner.Model
 	statusMessages []string
 	statusChan     chan string
-	sshPassword    string
 	sshURL         string
+	sshHost        string
 	viewport       viewport.Model
 	viewportReady  bool
 	heartbeatStop  chan struct{}
@@ -53,9 +53,8 @@ func (v vmAction) Description() string { return v.description }
 func (v vmAction) FilterValue() string { return v.title }
 
 type sandboxSetupMsg struct {
-	sshURL   string
-	password string
-	err      error
+	sshURL string
+	err    error
 }
 
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string) VMInfoModel {
@@ -95,7 +94,6 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		setupComplete:  false,
 		spinner:        s,
 		statusMessages: []string{},
-		sshPassword:    "password", // Default SSH password
 		viewport:       vp,
 		viewportReady:  true,
 		heartbeatStop:  make(chan struct{}),
@@ -118,9 +116,8 @@ func setupSandbox(client *plato.PlatoClient, sandbox *models.Sandbox, dataset st
 			statusChan <- fmt.Sprintf("Setup failed: %v", err)
 			close(statusChan)
 			return sandboxSetupMsg{
-				sshURL:   "",
-				password: "",
-				err:      err,
+				sshURL: "",
+				err:    err,
 			}
 		}
 
@@ -132,23 +129,20 @@ func setupSandbox(client *plato.PlatoClient, sandbox *models.Sandbox, dataset st
 			statusChan <- fmt.Sprintf("Setup monitoring failed: %v", err)
 			close(statusChan)
 			return sandboxSetupMsg{
-				sshURL:   "",
-				password: "",
-				err:      fmt.Errorf("setup monitoring failed: %w", err),
+				sshURL: "",
+				err:    fmt.Errorf("setup monitoring failed: %w", err),
 			}
 		}
 
 		// Generate SSH connection info
 		sshURL := fmt.Sprintf("root@%s", sandbox.JobGroupID)
-		password := "password" // TODO: Get actual password from API response
 
 		statusChan <- "Sandbox setup complete!"
 		close(statusChan)
 
 		return sandboxSetupMsg{
-			sshURL:   sshURL,
-			password: password,
-			err:      nil,
+			sshURL: sshURL,
+			err:    nil,
 		}
 	}
 }
@@ -205,7 +199,6 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Setup failed: %v", msg.err))
 		} else {
 			m.sshURL = msg.sshURL
-			m.sshPassword = msg.password
 			m.statusMessages = append(m.statusMessages, "✓ Sandbox ready!")
 		}
 		return m, nil
@@ -267,8 +260,11 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	if m.setupComplete {
 		md.WriteString("---\n\n")
 		md.WriteString("## Connection Info\n\n")
-		md.WriteString(fmt.Sprintf("**SSH:** `%s`\n\n", m.sshURL))
-		md.WriteString(fmt.Sprintf("**Password:** `%s`\n\n", m.sshPassword))
+		if m.sshHost != "" {
+			md.WriteString(fmt.Sprintf("**SSH:** `ssh %s`\n\n", m.sshHost))
+		} else {
+			md.WriteString(fmt.Sprintf("**SSH:** `%s`\n\n", m.sshURL))
+		}
 	}
 
 	// Render markdown with glamour
@@ -302,6 +298,10 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	case "Close VM":
 		// Stop heartbeat goroutine
 		close(m.heartbeatStop)
+		// Cleanup SSH config entry if exists
+		if m.sshHost != "" {
+			_ = cleanupSSHConfig(m.sshHost)
+		}
 		// TODO: Implement VM cleanup API call
 		return m, func() tea.Msg {
 			return NavigateMsg{view: ViewMainMenu}
