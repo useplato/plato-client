@@ -28,35 +28,38 @@ const (
 	ViewVMConfig
 	ViewPlatoConfig
 	ViewSimSelector
+	ViewSimLaunchOptions
 	ViewArtifactID
 	ViewVMInfo
 )
 
 type Model struct {
-	currentView ViewState
-	mainMenu    MainMenuModel
-	config      ConfigModel
-	launch      LaunchModel
-	vmConfig    VMConfigModel
-	platoConfig PlatoConfigModel
-	simSelector SimSelectorModel
-	artifactID  ArtifactIDModel
-	vmInfo      VMInfoModel
-	quitting    bool
+	currentView      ViewState
+	mainMenu         MainMenuModel
+	config           ConfigModel
+	launch           LaunchModel
+	vmConfig         VMConfigModel
+	platoConfig      PlatoConfigModel
+	simSelector      SimSelectorModel
+	simLaunchOptions SimLaunchOptionsModel
+	artifactID       ArtifactIDModel
+	vmInfo           VMInfoModel
+	quitting         bool
 }
 
 func newModel() Model {
 	config := NewConfigModel()
 	return Model{
-		currentView: ViewMainMenu,
-		mainMenu:    NewMainMenuModel(),
-		config:      config,
-		launch:      NewLaunchModel(config.client),
-		vmConfig:    NewVMConfigModel(config.client),
-		platoConfig: NewPlatoConfigModel(config.client),
-		simSelector: NewSimSelectorModel(config.client),
-		artifactID:  NewArtifactIDModel(config.client),
-		quitting:    false,
+		currentView:      ViewMainMenu,
+		mainMenu:         NewMainMenuModel(),
+		config:           config,
+		launch:           NewLaunchModel(config.client),
+		vmConfig:         NewVMConfigModel(config.client),
+		platoConfig:      NewPlatoConfigModel(config.client),
+		simSelector:      NewSimSelectorModel(config.client),
+		simLaunchOptions: SimLaunchOptionsModel{}, // Will be initialized when simulator is selected
+		artifactID:       ArtifactIDModel{},       // Will be initialized when simulator is selected
+		quitting:         false,
 	}
 }
 
@@ -77,6 +80,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.vmInfo.Init()
 	}
 
+	// Handle navigation to sim launch options with simulator data
+	if navMsg, ok := msg.(navigateToSimLaunchOptionsMsg); ok {
+		m.simLaunchOptions = NewSimLaunchOptionsModel(m.config.client, navMsg.simulator)
+		m.currentView = ViewSimLaunchOptions
+		return m, m.simLaunchOptions.Init()
+	}
+
+	// Handle navigation to artifact ID with simulator data
+	if navMsg, ok := msg.(navigateToArtifactIDMsg); ok {
+		m.artifactID = NewArtifactIDModel(m.config.client, navMsg.simulator)
+		m.currentView = ViewArtifactID
+		return m, m.artifactID.Init()
+	}
+
 	// Handle navigation messages
 	if navMsg, ok := msg.(NavigateMsg); ok {
 		m.currentView = navMsg.view
@@ -90,6 +107,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.platoConfig.Init()
 		case ViewSimSelector:
 			return m, m.simSelector.Init()
+		case ViewSimLaunchOptions:
+			return m, m.simLaunchOptions.Init()
 		case ViewArtifactID:
 			return m, m.artifactID.Init()
 		case ViewVMInfo:
@@ -150,6 +169,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.platoConfig, cmd = m.platoConfig.Update(msg)
 	case ViewSimSelector:
 		m.simSelector, cmd = m.simSelector.Update(msg)
+	case ViewSimLaunchOptions:
+		m.simLaunchOptions, cmd = m.simLaunchOptions.Update(msg)
 	case ViewArtifactID:
 		m.artifactID, cmd = m.artifactID.Update(msg)
 	case ViewVMInfo:
@@ -178,6 +199,8 @@ func (m Model) View() string {
 		return m.platoConfig.View()
 	case ViewSimSelector:
 		return m.simSelector.View()
+	case ViewSimLaunchOptions:
+		return m.simLaunchOptions.View()
 	case ViewArtifactID:
 		return m.artifactID.View()
 	case ViewVMInfo:

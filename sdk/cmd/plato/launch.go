@@ -50,7 +50,6 @@ func NewLaunchModel(client *plato.PlatoClient) LaunchModel {
 		launchOption{title: "Blank VM", description: "Configure and launch a fresh virtual machine", disabled: false},
 		configOption,
 		launchOption{title: "By Sim Name", description: "Launch an existing environment by name", disabled: false},
-		launchOption{title: "By Artifact ID", description: "Launch an environment using artifact ID", disabled: false},
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 80, 15)
@@ -98,10 +97,6 @@ func (m LaunchModel) Update(msg tea.Msg) (LaunchModel, tea.Cmd) {
 				case "By Sim Name":
 					return m, func() tea.Msg {
 						return NavigateMsg{view: ViewSimSelector}
-					}
-				case "By Artifact ID":
-					return m, func() tea.Msg {
-						return NavigateMsg{view: ViewArtifactID}
 					}
 				}
 			}
