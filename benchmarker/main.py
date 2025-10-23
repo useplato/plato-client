@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from models.anthropic.agent import AnthropicAgent
 from models.anthropic.tools.computer_browser import ComputerBrowserTool20250124
 from models.openai.agent.agent import Agent as OpenAIAgent
+from models.gemini import run_gemini_cua_task
 
 from models.openai.computers.remote_playwright import RemotePlaywrightComputer
 
@@ -123,6 +124,11 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
         return None
 
 
+async def run_gemini_task(cdp_url, prompt, start_url, env: PlatoEnvironment):
+    final_message = await run_gemini_cua_task(cdp_url, prompt, start_url, env)
+    return final_message
+
+
 async def run_task(
     client: Plato,
     task: PlatoTask,
@@ -173,6 +179,8 @@ async def run_task(
             final_message = await run_openai_cua_task(cdp_url, prompt, public_url, env)
         elif "anthropic" in agent_version:
             final_message = await run_anthropic_cua_task(cdp_url, prompt, public_url, env)
+        elif "gemini" in agent_version:
+            final_message = await run_gemini_task(cdp_url, prompt, public_url, env)
 
         # evaluate the task
         try:
@@ -253,6 +261,7 @@ async def main():
             "browser_use",
             "anthropic",
             "openai_cua",
+            "gemini",
         ],
         help="Agent to use for the tasks",
     )
@@ -322,8 +331,9 @@ async def main():
         print("1. browser_use")
         print("2. anthropic")
         print("3. openai_cua")
+        print("4. gemini")
         agent_choice = int(input("Select agent (number): "))
-        agent_versions = ["browser_use", "anthropic", "openai_cua"]
+        agent_versions = ["browser_use", "anthropic", "openai_cua", "gemini"]
         agent_version = agent_versions[agent_choice-1]
 
     tag = args.tag or input("Enter optional tag for agent version (press enter to skip): ")
