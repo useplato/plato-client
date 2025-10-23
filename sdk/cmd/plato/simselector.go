@@ -40,6 +40,10 @@ type simulatorsLoadedMsg struct {
 	err        error
 }
 
+type navigateToSimLaunchOptionsMsg struct {
+	simulator *models.SimulatorListItem
+}
+
 func loadSimulators(client *plato.PlatoClient) tea.Cmd {
 	return func() tea.Msg {
 		sims, err := client.Simulator.List(context.Background())
@@ -136,9 +140,9 @@ func (m SimSelectorModel) Update(msg tea.Msg) (SimSelectorModel, tea.Cmd) {
 				if selectedItem != nil {
 					item := selectedItem.(simItem)
 					m.choice = item.sim
-					// TODO: Launch this simulator
+					// Navigate to launch options for this simulator
 					return m, func() tea.Msg {
-						return NavigateMsg{view: ViewMainMenu}
+						return navigateToSimLaunchOptionsMsg{simulator: item.sim}
 					}
 				}
 			}
