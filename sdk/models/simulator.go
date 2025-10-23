@@ -12,3 +12,10 @@ type SimulatorListItem struct {
 	VersionTag      string  `json:"version_tag"`
 	ImageURI        *string `json:"image_uri"`
 }
+
+type SimulatorVersion struct {
+	ArtifactID string `json:"artifact_id"`
+	Version    string `json:"version"`
+	Dataset    string `json:"dataset"`
+	CreatedAt  string `json:"created_at"`
+}
