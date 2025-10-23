@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 
 	plato "plato-sdk"
@@ -12,23 +13,21 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ArtifactVersion represents a simulator version/artifact
-type ArtifactVersion struct {
-	ArtifactID string
-	Version    string
-	Dataset    string
-	CreatedAt  string
-}
-
 type ArtifactIDModel struct {
 	client       *plato.PlatoClient
 	simulator    *models.SimulatorListItem
 	table        table.Model
 	filterInput  textinput.Model
-	allArtifacts []ArtifactVersion
+	allArtifacts []*models.SimulatorVersion
 	filtering    bool
+	loading      bool
 	err          error
 	starting     bool
+}
+
+type versionsLoadedMsg struct {
+	versions []*models.SimulatorVersion
+	err      error
 }
 
 var (
@@ -36,34 +35,14 @@ var (
 				Foreground(lipgloss.Color("#666666"))
 )
 
-func NewArtifactIDModel(client *plato.PlatoClient, simulator *models.SimulatorListItem) ArtifactIDModel {
-	// Hardcoded artifact data matching API format
-	artifacts := []ArtifactVersion{
-		{
-			ArtifactID: "artifact-abc123",
-			Version:    "v1.2.3",
-			Dataset:    "production-2024",
-			CreatedAt:  "2024-01-15T10:30:00Z",
-		},
-		{
-			ArtifactID: "artifact-def456",
-			Version:    "v1.2.2",
-			Dataset:    "staging-2024",
-			CreatedAt:  "2024-01-10T14:20:00Z",
-		},
-		{
-			ArtifactID: "artifact-ghi789",
-			Version:    "v1.2.1",
-			Dataset:    "production-2023",
-			CreatedAt:  "2023-12-20T09:15:00Z",
-		},
-		{
-			ArtifactID: "artifact-jkl012",
-			Version:    "v1.2.0",
-			Dataset:    "staging-2023",
-			CreatedAt:  "2023-12-15T16:45:00Z",
-		},
+func loadVersions(client *plato.PlatoClient, simulatorName string) tea.Cmd {
+	return func() tea.Msg {
+		versions, err := client.Simulator.GetVersions(context.Background(), simulatorName)
+		return versionsLoadedMsg{versions: versions, err: err}
 	}
+}
+
+func NewArtifactIDModel(client *plato.PlatoClient, simulator *models.SimulatorListItem) ArtifactIDModel {
 
 	// Define table columns
 	columns := []table.Column{
@@ -73,21 +52,10 @@ func NewArtifactIDModel(client *plato.PlatoClient, simulator *models.SimulatorLi
 		{Title: "Created At", Width: 22},
 	}
 
-	// Convert artifacts to table rows
-	rows := []table.Row{}
-	for _, artifact := range artifacts {
-		rows = append(rows, table.Row{
-			artifact.ArtifactID,
-			artifact.Version,
-			artifact.Dataset,
-			artifact.CreatedAt,
-		})
-	}
-
-	// Create table
+	// Create table with empty rows initially
 	t := table.New(
 		table.WithColumns(columns),
-		table.WithRows(rows),
+		table.WithRows([]table.Row{}),
 		table.WithFocused(true),
 		table.WithHeight(10),
 	)
@@ -116,14 +84,18 @@ func NewArtifactIDModel(client *plato.PlatoClient, simulator *models.SimulatorLi
 		simulator:    simulator,
 		table:        t,
 		filterInput:  filterInput,
-		allArtifacts: artifacts,
+		allArtifacts: []*models.SimulatorVersion{},
 		filtering:    false,
+		loading:      true,
 		err:          nil,
 		starting:     false,
 	}
 }
 
 func (m ArtifactIDModel) Init() tea.Cmd {
+	if m.simulator != nil {
+		return loadVersions(m.client, m.simulator.Name)
+	}
 	return nil
 }
 
@@ -131,7 +103,22 @@ func (m ArtifactIDModel) Update(msg tea.Msg) (ArtifactIDModel, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case versionsLoadedMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.allArtifacts = msg.versions
+		m.updateTableRows()
+		return m, nil
+
 	case tea.KeyMsg:
+		// Don't process keys while loading
+		if m.loading {
+			return m, nil
+		}
+
 		// If we're in filter mode, handle input differently
 		if m.filtering {
 			switch msg.String() {
@@ -228,11 +215,29 @@ func (m ArtifactIDModel) View() string {
 		Bold(true).
 		MarginLeft(2)
 
+	loadingStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#888888")).
+		MarginLeft(2)
+
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FF0000")).
+		MarginLeft(2)
+
 	content := header + "\n"
 
 	// Show selected simulator name if available
 	if m.simulator != nil {
 		content += titleStyle.Render("Simulator: "+m.simulator.Name) + "\n\n"
+	}
+
+	if m.loading {
+		content += loadingStyle.Render("Loading versions...")
+		return content
+	}
+
+	if m.err != nil {
+		content += errorStyle.Render("Error: " + m.err.Error())
+		return content
 	}
 
 	content += " Select an Artifact:\n\n"
