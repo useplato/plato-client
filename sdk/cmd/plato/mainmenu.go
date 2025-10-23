@@ -62,7 +62,7 @@ func (m MainMenuModel) Update(msg tea.Msg) (MainMenuModel, tea.Cmd) {
 					return m, func() tea.Msg {
 						return NavigateMsg{view: ViewConfig}
 					}
-				case "Exit":
+				case "Quit":
 					return m, tea.Quit
 				}
 			}
