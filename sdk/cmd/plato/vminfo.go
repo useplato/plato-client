@@ -78,7 +78,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	l.SetShowPagination(false)
 
 	// Initialize viewport immediately with wider width
-	vp := viewport.New(60, 18)
+	vp := viewport.New(100, 18)
 	vp.Style = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(vmInfoIndigo).
@@ -221,7 +221,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.width = vmInfoMaxWidth
 		}
 		// Viewport is already initialized, just update dimensions if needed
-		m.viewport.Width = 60
+		m.viewport.Width = 100
 		m.viewport.Height = 18
 
 	case tea.KeyMsg:
@@ -262,7 +262,7 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	md.WriteString("## VM Information\n\n")
 	md.WriteString(fmt.Sprintf("**Job ID:** `%s`\n\n", m.sandbox.PublicID))
 	md.WriteString(fmt.Sprintf("**Dataset:** `%s`\n\n", m.dataset))
-	md.WriteString(fmt.Sprintf("**URL:**\n%s\n\n", m.sandbox.URL))
+	md.WriteString(fmt.Sprintf("**URL:** %s\n\n", m.sandbox.URL))
 
 	if m.setupComplete {
 		md.WriteString("---\n\n")
@@ -274,7 +274,7 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	// Render markdown with glamour
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(56), // Account for padding and borders (60 - 4)
+		glamour.WithWordWrap(96), // Account for padding and borders (100 - 4)
 	)
 	if err != nil {
 		return md.String()
