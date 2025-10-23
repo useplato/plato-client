@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +33,7 @@ type VMConfigModel struct {
 	dataset        string
 	datasetConfig  models.SimConfigDataset
 	sshURL         string
-	sshPassword    string
+	sshHost        string
 }
 
 var (
@@ -45,9 +46,9 @@ type sandboxCreatedMsg struct {
 }
 
 type sandboxSetupCompleteMsg struct {
-	sshURL   string
-	password string
-	err      error
+	sshURL  string
+	sshHost string
+	err     error
 }
 
 type statusUpdateMsg struct {
@@ -95,9 +96,9 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:   "",
-				password: "",
-				err:      err,
+				sshURL:  "",
+				sshHost: "",
+				err:     err,
 			}
 		}
 
@@ -109,22 +110,38 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:   "",
-				password: "",
-				err:      fmt.Errorf("setup monitoring failed: %w", err),
+				sshURL:  "",
+				sshHost: "",
+				err:     fmt.Errorf("setup monitoring failed: %w", err),
+			}
+		}
+
+		statusChan <- "Configuring SSH access..."
+
+		// Choose a random port between 2200 and 2299
+		localPort := rand.Intn(100) + 2200
+
+		// Setup SSH config and get the hostname
+		sshHost, err := setupSSHConfig(localPort, sandbox.JobGroupID)
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:  "",
+				sshHost: "",
+				err:     fmt.Errorf("SSH config setup failed: %w", err),
 			}
 		}
 
 		// Generate SSH connection info
 		sshURL := fmt.Sprintf("root@%s", sandbox.JobGroupID)
-		password := "password"
 
+		statusChan <- fmt.Sprintf("SSH configured: ssh %s", sshHost)
 		close(statusChan)
 
 		return sandboxSetupCompleteMsg{
-			sshURL:   sshURL,
-			password: password,
-			err:      nil,
+			sshURL:  sshURL,
+			sshHost: sshHost,
+			err:     nil,
 		}
 	}
 }
@@ -311,16 +328,16 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		}
 		m.statusMessages = append(m.statusMessages, "✓ Sandbox setup complete!")
 		m.sshURL = msg.sshURL
-		m.sshPassword = msg.password
+		m.sshHost = msg.sshHost
 
 		// Wait a moment to show success, then navigate to VM info view
 		return m, func() tea.Msg {
 			time.Sleep(1 * time.Second)
 			return navigateToVMInfoMsg{
-				sandbox:  m.sandbox,
-				dataset:  m.dataset,
-				sshURL:   msg.sshURL,
-				password: msg.password,
+				sandbox: m.sandbox,
+				dataset: m.dataset,
+				sshURL:  msg.sshURL,
+				sshHost: msg.sshHost,
 			}
 		}
 
