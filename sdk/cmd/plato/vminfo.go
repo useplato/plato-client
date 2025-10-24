@@ -205,6 +205,45 @@ func (m VMInfoModel) startHeartbeat() {
 	}()
 }
 
+// wrapText wraps text to the specified width, breaking on word boundaries
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+
+	var result strings.Builder
+	var currentLine strings.Builder
+	currentLength := 0
+
+	words := strings.Fields(text)
+	for i, word := range words {
+		wordLen := len(word)
+
+		if currentLength == 0 {
+			// First word on the line
+			currentLine.WriteString(word)
+			currentLength = wordLen
+		} else if currentLength + 1 + wordLen <= width {
+			// Word fits on current line
+			currentLine.WriteString(" " + word)
+			currentLength += 1 + wordLen
+		} else {
+			// Word doesn't fit, start new line
+			result.WriteString(currentLine.String() + "\n")
+			currentLine.Reset()
+			currentLine.WriteString(word)
+			currentLength = wordLen
+		}
+
+		// If this is the last word, add remaining content
+		if i == len(words)-1 {
+			result.WriteString(currentLine.String())
+		}
+	}
+
+	return result.String()
+}
+
 func (m VMInfoModel) Init() tea.Cmd {
 	// Setup should already be done when we reach this view
 	// Start sending heartbeats to keep the VM alive
@@ -638,21 +677,14 @@ func mergeHubBranchToMain(client *plato.PlatoClient, serviceName string, branchN
 		return "", fmt.Errorf("failed to clone repo: %w\nOutput: %s", err, string(output))
 	}
 
-	// Checkout main branch
-	gitCheckoutMain := exec.Command("git", "checkout", "main")
-	gitCheckoutMain.Dir = tempRepo
-	if output, err := gitCheckoutMain.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed to checkout main: %w\nOutput: %s", err, string(output))
+	// Checkout the branch
+	gitCheckoutBranch := exec.Command("git", "checkout", branchName)
+	gitCheckoutBranch.Dir = tempRepo
+	if output, err := gitCheckoutBranch.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("failed to checkout branch: %w\nOutput: %s", err, string(output))
 	}
 
-	// Merge the branch into main
-	gitMerge := exec.Command("git", "merge", "--no-ff", "-m", fmt.Sprintf("Merge %s into main for snapshot", branchName), branchName)
-	gitMerge.Dir = tempRepo
-	if output, err := gitMerge.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed to merge branch: %w\nOutput: %s", err, string(output))
-	}
-
-	// Get the current commit hash
+	// Get the current commit hash from the branch
 	gitRevParse := exec.Command("git", "rev-parse", "HEAD")
 	gitRevParse.Dir = tempRepo
 	hashOutput, err := gitRevParse.Output()
@@ -661,11 +693,11 @@ func mergeHubBranchToMain(client *plato.PlatoClient, serviceName string, branchN
 	}
 	commitHash := strings.TrimSpace(string(hashOutput))
 
-	// Push main to remote
-	gitPush := exec.Command("git", "push", "origin", "main")
+	// Force push the branch to main (avoiding merge conflicts)
+	gitPush := exec.Command("git", "push", "origin", fmt.Sprintf("%s:main", branchName), "--force")
 	gitPush.Dir = tempRepo
 	if output, err := gitPush.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed to push main: %w\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to push to main: %w\nOutput: %s", err, string(output))
 	}
 
 	return commitHash, nil
@@ -1214,23 +1246,49 @@ func (m VMInfoModel) View() string {
 	// If setting up or running a command, show spinner and status
 	if m.settingUp || m.runningCommand {
 		statusMsgStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#CCCCCC")).
-			MarginLeft(2)
+			Foreground(lipgloss.Color("#CCCCCC"))
 
 		prevStatusStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888")).
-			MarginLeft(4)
+			Foreground(lipgloss.Color("#888888"))
 
-		var statusContent string
+		// Calculate max width for wrapping (accounting for margins and indentation)
+		maxWidth := m.width - 10
+		if maxWidth < 40 {
+			maxWidth = 40 // Minimum width
+		}
+
+		var statusContent strings.Builder
 		for i, msg := range m.statusMessages {
 			if i == len(m.statusMessages)-1 {
-				statusContent += statusMsgStyle.Render(fmt.Sprintf("  %s %s", m.spinner.View(), msg)) + "\n"
+				// Current status with spinner
+				text := fmt.Sprintf("%s %s", m.spinner.View(), msg)
+				wrapped := wrapText(text, maxWidth)
+				// Add indentation to each line
+				lines := strings.Split(wrapped, "\n")
+				for j, line := range lines {
+					if j == 0 {
+						statusContent.WriteString(statusMsgStyle.Render("  " + line) + "\n")
+					} else {
+						statusContent.WriteString(statusMsgStyle.Render("    " + line) + "\n")
+					}
+				}
 			} else {
-				statusContent += prevStatusStyle.Render(fmt.Sprintf("  ✓ %s", msg)) + "\n"
+				// Previous completed status
+				text := fmt.Sprintf("✓ %s", msg)
+				wrapped := wrapText(text, maxWidth)
+				// Add indentation to each line
+				lines := strings.Split(wrapped, "\n")
+				for j, line := range lines {
+					if j == 0 {
+						statusContent.WriteString(prevStatusStyle.Render("    " + line) + "\n")
+					} else {
+						statusContent.WriteString(prevStatusStyle.Render("      " + line) + "\n")
+					}
+				}
 			}
 		}
 
-		body := lipgloss.NewStyle().MarginTop(1).Render(statusContent)
+		body := lipgloss.NewStyle().MarginTop(1).Render(statusContent.String())
 		return RenderHeader() + "\n" + header + "\n" + body
 	}
 
