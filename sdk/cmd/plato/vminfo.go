@@ -275,6 +275,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		// Viewport is already initialized, just update dimensions if needed
 		m.viewport.Width = 100
 		m.viewport.Height = 24
+		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -509,15 +510,30 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		// Stop heartbeat goroutine
 		close(m.heartbeatStop)
 		// Kill all proxytunnel processes
-		for _, cmd := range m.proxytunnelProcesses {
+		for i, cmd := range m.proxytunnelProcesses {
 			if cmd.Process != nil {
-				logDebug("Killing proxytunnel process PID: %d", cmd.Process.Pid)
-				_ = cmd.Process.Kill()
+				pid := cmd.Process.Pid
+				logDebug("Killing proxytunnel process %d/%d (PID: %d)", i+1, len(m.proxytunnelProcesses), pid)
+				if err := cmd.Process.Kill(); err != nil {
+					logDebug("Error killing proxytunnel process PID %d: %v", pid, err)
+				} else {
+					logDebug("Successfully killed proxytunnel process PID: %d", pid)
+					// Wait for process to exit to avoid zombies
+					go cmd.Wait()
+				}
+			} else {
+				logDebug("Proxytunnel process %d/%d has no process handle", i+1, len(m.proxytunnelProcesses))
 			}
 		}
+		logDebug("Finished killing %d proxytunnel processes", len(m.proxytunnelProcesses))
+
 		// Cleanup SSH config entry if exists
 		if m.sshHost != "" {
-			_ = cleanupSSHConfig(m.sshHost)
+			if err := cleanupSSHConfig(m.sshHost); err != nil {
+				logDebug("Error cleaning up SSH config: %v", err)
+			} else {
+				logDebug("Successfully cleaned up SSH config for host: %s", m.sshHost)
+			}
 		}
 		// Call VM cleanup API
 		return m, func() tea.Msg {
@@ -525,6 +541,8 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			if err := m.client.Sandbox.DeleteVM(ctx, m.sandbox.PublicID); err != nil {
 				// Log error but still navigate away
 				logDebug("Warning: failed to delete VM: %v", err)
+			} else {
+				logDebug("Successfully deleted VM: %s", m.sandbox.PublicID)
 			}
 			return NavigateMsg{view: ViewMainMenu}
 		}
