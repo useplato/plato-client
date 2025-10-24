@@ -22,6 +22,10 @@ type navigateToVMInfoMsg struct {
 	fromExistingSim bool
 }
 
+type navigateToProxytunnelPortMsg struct {
+	publicID string
+}
+
 const (
 	ViewMainMenu ViewState = iota
 	ViewConfig
@@ -32,6 +36,7 @@ const (
 	ViewSimLaunchOptions
 	ViewArtifactID
 	ViewVMInfo
+	ViewProxytunnelPort
 )
 
 type Model struct {
@@ -45,6 +50,7 @@ type Model struct {
 	simLaunchOptions SimLaunchOptionsModel
 	artifactID       ArtifactIDModel
 	vmInfo           VMInfoModel
+	proxytunnelPort  ProxytunnelPortModel
 	quitting         bool
 }
 
@@ -79,6 +85,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vmInfo = vmInfo
 		m.currentView = ViewVMInfo
 		return m, m.vmInfo.Init()
+	}
+
+	// Handle navigation to proxytunnel port selector
+	if navMsg, ok := msg.(navigateToProxytunnelPortMsg); ok {
+		m.proxytunnelPort = NewProxytunnelPortModel(navMsg.publicID)
+		m.currentView = ViewProxytunnelPort
+		return m, m.proxytunnelPort.Init()
+	}
+
+	// Handle opening proxytunnel with selected port
+	if openMsg, ok := msg.(openTunnelMsg); ok {
+		logDebug("openTunnelMsg received in main, publicID=%s, remotePort=%d", openMsg.publicID, openMsg.remotePort)
+		// Open the tunnel and go back to VM info
+		m.currentView = ViewVMInfo
+		logDebug("Switched to ViewVMInfo and calling openProxytunnelWithPort")
+		return m, openProxytunnelWithPort(openMsg.publicID, openMsg.remotePort)
 	}
 
 	// Handle navigation to sim launch options with simulator data
@@ -121,6 +143,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.artifactID.Init()
 		case ViewVMInfo:
 			return m, m.vmInfo.Init()
+		case ViewProxytunnelPort:
+			return m, m.proxytunnelPort.Init()
 		}
 		return m, nil
 	}
@@ -183,6 +207,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.artifactID, cmd = m.artifactID.Update(msg)
 	case ViewVMInfo:
 		m.vmInfo, cmd = m.vmInfo.Update(msg)
+	case ViewProxytunnelPort:
+		m.proxytunnelPort, cmd = m.proxytunnelPort.Update(msg)
 	}
 
 	return m, cmd
@@ -213,12 +239,19 @@ func (m Model) View() string {
 		return m.artifactID.View()
 	case ViewVMInfo:
 		return m.vmInfo.View()
+	case ViewProxytunnelPort:
+		return m.proxytunnelPort.View()
 	default:
 		return "Unknown view\n"
 	}
 }
 
 func main() {
+	// Initialize debug logger
+	if err := initLogger(); err != nil {
+		fmt.Printf("Warning: failed to initialize logger: %v\n", err)
+	}
+
 	initialModel := newModel()
 	p := tea.NewProgram(initialModel)
 

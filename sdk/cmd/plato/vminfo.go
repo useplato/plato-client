@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -39,26 +41,33 @@ func logErrorToFile(filename, message string) error {
 	return err
 }
 
+type proxytunnelMapping struct {
+	localPort  int
+	remotePort int
+}
+
 type VMInfoModel struct {
-	client            *plato.PlatoClient
-	sandbox           *models.Sandbox
-	dataset           string
-	lg                *lipgloss.Renderer
-	width             int
-	actionList        list.Model
-	settingUp         bool
-	setupComplete     bool
-	spinner           spinner.Model
-	statusMessages    []string
-	statusChan        chan string
-	sshURL            string
-	sshHost           string
-	viewport          viewport.Model
-	viewportReady     bool
-	heartbeatStop     chan struct{}
-	fromExistingSim   bool
-	rootPasswordSetup bool
-	config            *models.PlatoConfig
+	client               *plato.PlatoClient
+	sandbox              *models.Sandbox
+	dataset              string
+	lg                   *lipgloss.Renderer
+	width                int
+	actionList           list.Model
+	settingUp            bool
+	setupComplete        bool
+	spinner              spinner.Model
+	statusMessages       []string
+	statusChan           chan string
+	sshURL               string
+	sshHost              string
+	viewport             viewport.Model
+	viewportReady        bool
+	heartbeatStop        chan struct{}
+	fromExistingSim      bool
+	rootPasswordSetup    bool
+	config               *models.PlatoConfig
+	proxytunnelProcesses []*exec.Cmd
+	proxytunnelMappings  []proxytunnelMapping
 }
 
 type vmAction struct {
@@ -84,6 +93,13 @@ type snapshotCreatedMsg struct {
 	response *models.CreateSnapshotResponse
 }
 
+type proxytunnelOpenedMsg struct {
+	localPort  int
+	remotePort int
+	cmd        *exec.Cmd
+	err        error
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -92,19 +108,12 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	items := []list.Item{
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
 		vmAction{title: "Connect via SSH", description: "Open SSH connection to VM"},
-	}
-
-	// Add "Setup Root SSH" action if launched from existing simulator
-	if fromExistingSim {
-		items = append(items, vmAction{title: "Setup Root SSH", description: "Configure root password for SSH access"})
-	}
-
-	items = append(items,
+		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
-	)
+	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 40, 18)
+	l := list.New(items, list.NewDefaultDelegate(), 40, 24)
 	l.Title = "Actions"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
@@ -112,28 +121,30 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	l.SetShowPagination(false)
 
 	// Initialize viewport immediately with wider width
-	vp := viewport.New(100, 18)
+	vp := viewport.New(100, 24)
 	vp.Style = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(vmInfoIndigo).
 		PaddingLeft(1)
 
 	return VMInfoModel{
-		client:            client,
-		sandbox:           sandbox,
-		dataset:           dataset,
-		lg:                lipgloss.DefaultRenderer(),
-		width:             vmInfoMaxWidth,
-		actionList:        l,
-		settingUp:         false,
-		setupComplete:     false,
-		spinner:           s,
-		statusMessages:    []string{},
-		viewport:          vp,
-		viewportReady:     true,
-		heartbeatStop:     make(chan struct{}),
-		fromExistingSim:   fromExistingSim,
-		rootPasswordSetup: false,
+		client:               client,
+		sandbox:              sandbox,
+		dataset:              dataset,
+		lg:                   lipgloss.DefaultRenderer(),
+		width:                vmInfoMaxWidth,
+		actionList:           l,
+		settingUp:            false,
+		setupComplete:        false,
+		spinner:              s,
+		statusMessages:       []string{},
+		viewport:             vp,
+		viewportReady:        true,
+		heartbeatStop:        make(chan struct{}),
+		fromExistingSim:      fromExistingSim,
+		rootPasswordSetup:    false,
+		proxytunnelProcesses: []*exec.Cmd{},
+		proxytunnelMappings:  []proxytunnelMapping{},
 	}
 }
 
@@ -194,6 +205,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		return m, nil
 
 	case rootPasswordSetupMsg:
+		logDebug("rootPasswordSetupMsg received, err: %v", msg.err)
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Root password setup failed: %v", msg.err))
 		} else {
@@ -235,6 +247,21 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		m.viewport.GotoBottom()
 		return m, nil
 
+	case proxytunnelOpenedMsg:
+		logDebug("proxytunnelOpenedMsg received, localPort=%d, remotePort=%d, err=%v", msg.localPort, msg.remotePort, msg.err)
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to open proxytunnel: %v", msg.err))
+		} else {
+			m.proxytunnelProcesses = append(m.proxytunnelProcesses, msg.cmd)
+			m.proxytunnelMappings = append(m.proxytunnelMappings, proxytunnelMapping{
+				localPort:  msg.localPort,
+				remotePort: msg.remotePort,
+			})
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("✓ Proxytunnel: localhost:%d → remote:%d", msg.localPort, msg.remotePort))
+			logDebug("Added to lists, now have %d processes and %d mappings", len(m.proxytunnelProcesses), len(m.proxytunnelMappings))
+		}
+		return m, nil
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -247,7 +274,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		}
 		// Viewport is already initialized, just update dimensions if needed
 		m.viewport.Width = 100
-		m.viewport.Height = 18
+		m.viewport.Height = 24
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -297,6 +324,15 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 		} else {
 			md.WriteString(fmt.Sprintf("**SSH:** `%s`\n\n", m.sshURL))
 		}
+
+		// Show active proxytunnel mappings
+		if len(m.proxytunnelMappings) > 0 {
+			md.WriteString("**Active Proxytunnels:**\n\n")
+			for _, mapping := range m.proxytunnelMappings {
+				md.WriteString(fmt.Sprintf("- `localhost:%d` → `remote:%d`\n", mapping.localPort, mapping.remotePort))
+			}
+			md.WriteString("\n")
+		}
 	}
 
 	// Show recent status messages if any
@@ -331,19 +367,6 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	return rendered
 }
 
-func setupRootPassword(client *plato.PlatoClient, publicID string) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		err := client.Sandbox.SetupRootPassword(ctx, publicID, "password")
-		if err != nil {
-			return rootPasswordSetupMsg{err: err}
-		}
-
-		return rootPasswordSetupMsg{err: nil}
-	}
-}
-
 func createSnapshot(client *plato.PlatoClient, publicID string, service string, dataset *string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -367,6 +390,83 @@ func createSnapshot(client *plato.PlatoClient, publicID string, service string, 
 	}
 }
 
+// findFreePort finds an available port on the local machine
+func findFreePort() (int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	listener.Close()
+	return port, nil
+}
+
+// findFreePortPreferred tries to use the preferred port, falls back to any free port
+func findFreePortPreferred(preferredPort int) (int, error) {
+	// Try preferred port first
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preferredPort))
+	if err == nil {
+		// Preferred port is available
+		listener.Close()
+		logDebug("Using preferred port: %d", preferredPort)
+		return preferredPort, nil
+	}
+
+	// Preferred port not available, find any free port
+	logDebug("Preferred port %d not available, finding alternative", preferredPort)
+	return findFreePort()
+}
+
+func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
+	return func() tea.Msg {
+		logDebug("openProxytunnelWithPort called, publicID=%s, remotePort=%d", publicID, remotePort)
+
+		// Try to use the same port as remote, fall back to any free port
+		localPort, err := findFreePortPreferred(remotePort)
+		if err != nil {
+			logDebug("Failed to find free port: %v", err)
+			return proxytunnelOpenedMsg{err: fmt.Errorf("failed to find free port: %w", err)}
+		}
+		logDebug("Found free local port: %d (requested: %d)", localPort, remotePort)
+
+		// Find proxytunnel path
+		proxytunnelPath, err := exec.LookPath("proxytunnel")
+		if err != nil {
+			logDebug("proxytunnel not found: %v", err)
+			return proxytunnelOpenedMsg{err: fmt.Errorf("proxytunnel not found in PATH: %w", err)}
+		}
+		logDebug("Found proxytunnel at: %s", proxytunnelPath)
+
+		// Build proxytunnel command
+		// proxytunnel -E -p proxy.plato.so:9000 -P '{publicID}@{remotePort}:newpass' -d 127.0.0.1:{remotePort} -a {localPort} -v --no-check-certificate
+		cmd := exec.Command(
+			proxytunnelPath,
+			"-E",
+			"-p", "proxy.plato.so:9000",
+			"-P", fmt.Sprintf("%s@%d:newpass", publicID, remotePort),
+			"-d", fmt.Sprintf("127.0.0.1:%d", remotePort),
+			"-a", fmt.Sprintf("%d", localPort),
+			"-v",
+			"--no-check-certificate",
+		)
+		logDebug("Starting proxytunnel command: %v", cmd.Args)
+
+		// Start the process
+		if err := cmd.Start(); err != nil {
+			logDebug("Failed to start proxytunnel: %v", err)
+			return proxytunnelOpenedMsg{err: fmt.Errorf("failed to start proxytunnel: %w", err)}
+		}
+		logDebug("Proxytunnel started successfully with PID: %d", cmd.Process.Pid)
+
+		return proxytunnelOpenedMsg{
+			localPort:  localPort,
+			remotePort: remotePort,
+			cmd:        cmd,
+			err:        nil,
+		}
+	}
+}
+
 func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	switch action.title {
 	case "Start Plato Worker":
@@ -375,13 +475,11 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	case "Connect via SSH":
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
-	case "Setup Root SSH":
-		if m.rootPasswordSetup {
-			m.statusMessages = append(m.statusMessages, "Root password already configured")
-			return m, nil
+	case "Open Proxytunnel":
+		// Navigate to port selector
+		return m, func() tea.Msg {
+			return navigateToProxytunnelPortMsg{publicID: m.sandbox.PublicID}
 		}
-		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
-		return m, setupRootPassword(m.client, m.sandbox.PublicID)
 	case "Snapshot VM":
 		m.statusMessages = append(m.statusMessages, "Creating snapshot...")
 
@@ -410,6 +508,13 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	case "Close VM":
 		// Stop heartbeat goroutine
 		close(m.heartbeatStop)
+		// Kill all proxytunnel processes
+		for _, cmd := range m.proxytunnelProcesses {
+			if cmd.Process != nil {
+				logDebug("Killing proxytunnel process PID: %d", cmd.Process.Pid)
+				_ = cmd.Process.Kill()
+			}
+		}
 		// Cleanup SSH config entry if exists
 		if m.sshHost != "" {
 			_ = cleanupSSHConfig(m.sshHost)
@@ -419,7 +524,7 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			ctx := context.Background()
 			if err := m.client.Sandbox.DeleteVM(ctx, m.sandbox.PublicID); err != nil {
 				// Log error but still navigate away
-				fmt.Printf("Warning: failed to delete VM: %v\n", err)
+				logDebug("Warning: failed to delete VM: %v", err)
 			}
 			return NavigateMsg{view: ViewMainMenu}
 		}
