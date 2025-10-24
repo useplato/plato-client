@@ -43,6 +43,7 @@ type VMInfoModel struct {
 	heartbeatStop     chan struct{}
 	fromExistingSim   bool
 	rootPasswordSetup bool
+	config            *models.PlatoConfig
 }
 
 type vmAction struct {
@@ -60,6 +61,10 @@ type sandboxSetupMsg struct {
 }
 
 type rootPasswordSetupMsg struct {
+	err error
+}
+
+type snapshotCreatedMsg struct {
 	err error
 }
 
@@ -178,12 +183,16 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Root password setup failed: %v", msg.err))
 		} else {
 			m.rootPasswordSetup = true
-			// Update SSH config with password
+			// Update SSH config with password and change user to root
 			if m.sshHost != "" {
 				fmt.Printf("DEBUG: Updating SSH config for host: %s\n", m.sshHost)
-				if err := updateSSHConfigPassword(m.sshHost, "password"); err != nil {
-					fmt.Printf("DEBUG: SSH config update error: %v\n", err)
-					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config: %v", err))
+				// First, update the username to root
+				if err := updateSSHConfigUser(m.sshHost, "root"); err != nil {
+					fmt.Printf("DEBUG: SSH config user update error: %v\n", err)
+					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config user: %v", err))
+				} else if err := updateSSHConfigPassword(m.sshHost, "password"); err != nil {
+					fmt.Printf("DEBUG: SSH config password update error: %v\n", err)
+					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config password: %v", err))
 				} else {
 					fmt.Printf("DEBUG: SSH config updated successfully\n")
 					m.statusMessages = append(m.statusMessages, "✓ Root SSH password configured!")
@@ -191,6 +200,14 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			} else {
 				m.statusMessages = append(m.statusMessages, "✓ Root password set!")
 			}
+		}
+		return m, nil
+
+	case snapshotCreatedMsg:
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Snapshot failed: %v", msg.err))
+		} else {
+			m.statusMessages = append(m.statusMessages, "✓ Snapshot created successfully!")
 		}
 		return m, nil
 
@@ -291,6 +308,24 @@ func setupRootPassword(client *plato.PlatoClient, publicID string) tea.Cmd {
 	}
 }
 
+func createSnapshot(client *plato.PlatoClient, publicID string, service string, dataset *string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		req := models.CreateSnapshotRequest{
+			Service: service,
+			Dataset: dataset,
+		}
+
+		err := client.Sandbox.CreateSnapshot(ctx, publicID, req)
+		if err != nil {
+			return snapshotCreatedMsg{err: err}
+		}
+
+		return snapshotCreatedMsg{err: nil}
+	}
+}
+
 func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	switch action.title {
 	case "Start Plato Worker":
@@ -308,8 +343,26 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
 		return m, setupRootPassword(m.client, m.sandbox.PublicID)
 	case "Snapshot VM":
-		// TODO: Implement snapshot
-		m.statusMessages = append(m.statusMessages, "Snapshot not implemented yet")
+		m.statusMessages = append(m.statusMessages, "Creating snapshot...")
+
+		// Load the config to get service and dataset
+		config, err := LoadPlatoConfig()
+		if err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err))
+			return m, nil
+		}
+
+		// Get service from config
+		service := config.Service
+		if service == "" {
+			m.statusMessages = append(m.statusMessages, "❌ Service not specified in plato-config.yml")
+			return m, nil
+		}
+
+		// Use the dataset from the model
+		datasetPtr := &m.dataset
+
+		return m, createSnapshot(m.client, m.sandbox.PublicID, service, datasetPtr)
 	case "Close VM":
 		// Stop heartbeat goroutine
 		close(m.heartbeatStop)

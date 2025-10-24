@@ -181,8 +181,8 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		// Choose a random port between 2200 and 2299
 		localPort := rand.Intn(100) + 2200
 
-		// Setup SSH config using PublicID
-		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID)
+		// Setup SSH config and get the hostname (use 'plato' user for blank VMs)
+		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -326,6 +326,12 @@ func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorList
 				Title("Dataset Name").
 				Description("Name for the dataset in plato-config.yml").
 				Placeholder("base"),
+
+			huh.NewInput().
+				Key("service").
+				Title("Service Name").
+				Description("Name of the service (e.g., my-app, api-service)").
+				Placeholder("my-service"),
 
 			huh.NewConfirm().
 				Key("save_config").
@@ -527,6 +533,10 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		if datasetVal == "" {
 			datasetVal = "base"
 		}
+		serviceVal := m.form.GetString("service")
+		if serviceVal == "" {
+			serviceVal = "my-service"
+		}
 
 		cpu, _ := strconv.Atoi(cpuVal)
 		memory, _ := strconv.Atoi(memVal)
@@ -539,6 +549,8 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		saveConfig := m.form.GetBool("save_config")
 		if saveConfig {
 			config := models.DefaultPlatoConfig(datasetVal)
+			// Set the service name
+			config.Service = serviceVal
 			// Update compute values by recreating the dataset
 			dataset := config.Datasets[datasetVal]
 			dataset.Compute.CPUs = cpu
