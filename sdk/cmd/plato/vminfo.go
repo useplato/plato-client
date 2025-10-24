@@ -317,8 +317,13 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		if m.sshHost != "" {
 			_ = cleanupSSHConfig(m.sshHost)
 		}
-		// TODO: Implement VM cleanup API call
+		// Call VM cleanup API
 		return m, func() tea.Msg {
+			ctx := context.Background()
+			if err := m.client.Sandbox.DeleteVM(ctx, m.sandbox.PublicID); err != nil {
+				// Log error but still navigate away
+				fmt.Printf("Warning: failed to delete VM: %v\n", err)
+			}
 			return NavigateMsg{view: ViewMainMenu}
 		}
 	}

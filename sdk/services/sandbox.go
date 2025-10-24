@@ -430,6 +430,27 @@ func (s *SandboxService) Delete(ctx context.Context, jobID string) error {
 	return nil
 }
 
+// DeleteVM deletes a VM by public ID using the public-build endpoint
+func (s *SandboxService) DeleteVM(ctx context.Context, publicID string) error {
+	req, err := s.client.NewRequest(ctx, "DELETE", fmt.Sprintf("/public-build/vm/%s", publicID), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete VM (%d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+
 // List retrieves all sandboxes
 func (s *SandboxService) List(ctx context.Context) ([]*models.Sandbox, error) {
 	req, err := s.client.NewRequest(ctx, "GET", "/sandboxes", nil)
