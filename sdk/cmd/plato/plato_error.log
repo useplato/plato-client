@@ -459,3 +459,65 @@
 [2025-10-24 16:49:08] API: POST /api/env/da20aeb8-e73c-481e-b4d0-d27d1438ef22/heartbeat - STATUS: 200
 [2025-10-24 16:49:33] API: POST /api/env/da20aeb8-e73c-481e-b4d0-d27d1438ef22/heartbeat - STATUS: 200
 [2025-10-24 16:49:38] API: POST /api/env/da20aeb8-e73c-481e-b4d0-d27d1438ef22/heartbeat - STATUS: 200
+[2025-10-24 10:19:35] API: GET /api/simulator/list - STATUS: 200
+[2025-10-24 10:19:37] API: GET /api/simulator/odooemployees/versions - STATUS: 200
+[2025-10-24 10:19:38] API: POST /api/public-build/vm/create - STATUS: 200
+[2025-10-24 10:19:38] API: GET /api/public-build/events/jb-c8f2bd13-d727-4ae2-840f-d4cc5a3596e8 - STATUS: 200
+[2025-10-24 10:19:38] API: POST /api/public-build/vm/c8f2bd13-d727-4ae2-840f-d4cc5a3596e8/setup-root-password - STATUS: 200
+[2025-10-24 10:19:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:20:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:20:39] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:21:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:21:39] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:22:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:22:46] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:23:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:23:46] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:24:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:24:46] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:25:09] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:25:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:26:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:26:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:27:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:27:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:28:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:28:39] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:29:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:29:39] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:30:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:30:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:31:09] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:31:39] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:32:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:32:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:33:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:33:46] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:34:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:34:46] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:35:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:35:39] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:36:10] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:36:39] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:37:09] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:37:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:38:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:38:46] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:39:16] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:39:46] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - ERROR: request failed after retries
+[2025-10-24 10:40:13] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:40:40] API: POST /api/env/9325d2b7-d8f8-4524-92f1-7e10ca2b950c/heartbeat - STATUS: 200
+[2025-10-24 10:40:46] API: DELETE /api/public-build/vm/c8f2bd13-d727-4ae2-840f-d4cc5a3596e8 - STATUS: 200
+[2025-10-24 10:41:25] API: GET /api/simulator/list - STATUS: 200
+[2025-10-24 10:41:33] API: GET /api/simulator/odooemployees/versions - STATUS: 200
+[2025-10-24 10:41:34] API: POST /api/public-build/vm/create - STATUS: 200
+[2025-10-24 10:41:34] API: GET /api/public-build/events/jb-411e0a7e-29a1-4cd8-b48c-e05629bffafd - STATUS: 200
+[2025-10-24 10:41:34] API: POST /api/public-build/vm/411e0a7e-29a1-4cd8-b48c-e05629bffafd/setup-root-password - STATUS: 200
+[2025-10-24 10:41:36] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
+[2025-10-24 10:42:06] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
+[2025-10-24 10:42:36] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
+[2025-10-24 10:43:06] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
+[2025-10-24 10:43:36] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
+[2025-10-24 10:44:06] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
+[2025-10-24 10:44:36] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
+[2025-10-24 10:44:43] API: DELETE /api/public-build/vm/411e0a7e-29a1-4cd8-b48c-e05629bffafd - STATUS: 200

@@ -130,7 +130,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
 		vmAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		vmAction{title: "Connect via SSH", description: "Open SSH connection to VM"},
-		vmAction{title: "Connect to Cursor", description: "Open Cursor editor connected to VM via SSH"},
+		vmAction{title: "Connect to Cursor/VSCode", description: "Open Cursor/VSCode editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
 		vmAction{title: "Push to Plato Hub", description: "Push code to hub.plato.so repository"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
@@ -998,30 +998,30 @@ func setupRootPassword(client *plato.PlatoClient, publicID string, sshHost strin
 
 func openCursor(sshHost string) tea.Cmd {
 	return func() tea.Msg {
-		logDebug("Opening Cursor for SSH host: %s", sshHost)
+		logDebug("Opening VS Code for SSH host: %s", sshHost)
 
-		// Find cursor command
-		cursorPath, err := exec.LookPath("cursor")
+		// Find code command
+		codePath, err := exec.LookPath("code")
 		if err != nil {
-			logDebug("cursor command not found: %v", err)
-			return cursorOpenedMsg{err: fmt.Errorf("cursor command not found in PATH. Please install Cursor: https://cursor.sh")}
+			logDebug("code command not found: %v", err)
+			return cursorOpenedMsg{err: fmt.Errorf("code command not found in PATH. Please install VS Code: https://code.visualstudio.com")}
 		}
-		logDebug("Found cursor at: %s", cursorPath)
+		logDebug("Found code at: %s", codePath)
 
-		// Build cursor command with SSH remote
-		// cursor --folder-uri vscode-remote://ssh-remote+{sshHost}/root
+		// Build code command with SSH remote
+		// code --folder-uri vscode-remote://ssh-remote+{sshHost}/root --remote-platform linux
 		folderURI := fmt.Sprintf("vscode-remote://ssh-remote+%s/root", sshHost)
-		cmd := exec.Command(cursorPath, "--folder-uri", folderURI)
+		cmd := exec.Command(codePath, "--folder-uri", folderURI, "--remote-platform", "linux")
 
-		logDebug("Starting cursor command: %v", cmd.Args)
+		logDebug("Starting code command: %v", cmd.Args)
 
-		// Start the cursor process (don't wait, let it run independently)
+		// Start the code process (don't wait, let it run independently)
 		if err := cmd.Start(); err != nil {
-			logDebug("Failed to start cursor: %v", err)
-			return cursorOpenedMsg{err: fmt.Errorf("failed to start cursor: %w", err)}
+			logDebug("Failed to start code: %v", err)
+			return cursorOpenedMsg{err: fmt.Errorf("failed to start code: %w", err)}
 		}
 
-		logDebug("Cursor started successfully with PID: %d", cmd.Process.Pid)
+		logDebug("VS Code started successfully with PID: %d", cmd.Process.Pid)
 
 		// Release the process so it continues independently
 		go cmd.Wait()
@@ -1080,13 +1080,13 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	case "Connect via SSH":
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
-	case "Connect to Cursor":
+	case "Connect to Cursor/VSCode":
 		if m.sshHost == "" {
 			m.statusMessages = append(m.statusMessages, "❌ SSH host not set up yet")
 			return m, nil
 		}
 
-		// Launch Cursor connected to the VM via SSH
+		// Launch VS Code connected to the VM via SSH
 		return m, openCursor(m.sshHost)
 	case "Open Proxytunnel":
 		// Navigate to port selector
