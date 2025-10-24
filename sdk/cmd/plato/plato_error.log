@@ -521,3 +521,14 @@
 [2025-10-24 10:44:06] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
 [2025-10-24 10:44:36] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
 [2025-10-24 10:44:43] API: DELETE /api/public-build/vm/411e0a7e-29a1-4cd8-b48c-e05629bffafd - STATUS: 200
+[2025-10-24 18:27:17] API: POST /api/public-build/vm/create - STATUS: 200
+[2025-10-24 18:27:17] API: GET /api/public-build/events/jb-ee9411d0-0c66-421a-a893-074da8f2b7f0 - STATUS: 200
+[2025-10-24 18:27:27] API: POST /api/public-build/vm/ee9411d0-0c66-421a-a893-074da8f2b7f0/setup-sandbox - STATUS: 200
+[2025-10-24 18:27:27] API: GET /api/public-build/events/03a9c781-76e7-4789-82a4-dfcd9686119e - STATUS: 200
+[2025-10-24 18:27:28] API: POST /api/env/1a0cf450-95da-4980-868d-d92a112e16be/heartbeat - STATUS: 404
+[2025-10-24 18:27:34] API: POST /api/public-build/vm/ee9411d0-0c66-421a-a893-074da8f2b7f0/start-worker - STATUS: 200
+[2025-10-24 18:27:34] API: GET /api/public-build/events/acf31e1f-e71c-4dd9-86c7-fa830e8d1425 - STATUS: 200
+[2025-10-24 18:27:37] API: POST /api/public-build/vm/ee9411d0-0c66-421a-a893-074da8f2b7f0/setup-root-password - STATUS: 200
+[2025-10-24 18:27:58] API: POST /api/env/1a0cf450-95da-4980-868d-d92a112e16be/heartbeat - STATUS: 404
+[2025-10-24 18:28:28] API: POST /api/env/1a0cf450-95da-4980-868d-d92a112e16be/heartbeat - STATUS: 404
+[2025-10-24 18:28:37] API: DELETE /api/public-build/vm/ee9411d0-0c66-421a-a893-074da8f2b7f0 - STATUS: 200
