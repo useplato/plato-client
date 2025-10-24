@@ -19,3 +19,10 @@ type Sandbox struct {
 	// Correlation ID for monitoring SSE events
 	CorrelationID string
 }
+
+// CreateSnapshotRequest represents a request to create a VM snapshot
+type CreateSnapshotRequest struct {
+	Service string  `json:"service,omitempty"`
+	GitHash *string `json:"git_hash,omitempty"`
+	Dataset *string `json:"dataset,omitempty"`
+}

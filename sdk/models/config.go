@@ -42,6 +42,7 @@ type SimConfigDataset struct {
 
 // PlatoConfig represents the complete plato-config.yml structure
 type PlatoConfig struct {
+	Service  string                      `json:"service,omitempty" yaml:"service,omitempty"`
 	Datasets map[string]SimConfigDataset `json:"datasets" yaml:"datasets"`
 }
 
