@@ -15,10 +15,11 @@ type NavigateMsg struct {
 }
 
 type navigateToVMInfoMsg struct {
-	sandbox *models.Sandbox
-	dataset string
-	sshURL  string
-	sshHost string
+	sandbox         *models.Sandbox
+	dataset         string
+	sshURL          string
+	sshHost         string
+	fromExistingSim bool
 }
 
 const (
@@ -72,7 +73,7 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle navigation to VM info with data
 	if navMsg, ok := msg.(navigateToVMInfoMsg); ok {
-		vmInfo := NewVMInfoModel(m.config.client, navMsg.sandbox, navMsg.dataset)
+		vmInfo := NewVMInfoModel(m.config.client, navMsg.sandbox, navMsg.dataset, navMsg.fromExistingSim)
 		// Mark setup as complete and set SSH info
 		vmInfo.setupComplete = true
 		vmInfo.sshURL = navMsg.sshURL

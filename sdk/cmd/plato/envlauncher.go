@@ -253,10 +253,11 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 				URL:        getPublicURL(m.client, m.environment),
 			}
 			return navigateToVMInfoMsg{
-				sandbox: sandbox,
-				dataset: m.dataset,
-				sshURL:  fmt.Sprintf("root@%s", m.environment.JobID),
-				sshHost: m.sshHost,
+				sandbox:         sandbox,
+				dataset:         m.dataset,
+				sshURL:          fmt.Sprintf("root@%s", m.environment.JobID),
+				sshHost:         m.sshHost,
+				fromExistingSim: true,
 			}
 		}
 

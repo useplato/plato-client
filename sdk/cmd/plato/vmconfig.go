@@ -334,10 +334,11 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		return m, func() tea.Msg {
 			time.Sleep(1 * time.Second)
 			return navigateToVMInfoMsg{
-				sandbox: m.sandbox,
-				dataset: m.dataset,
-				sshURL:  msg.sshURL,
-				sshHost: msg.sshHost,
+				sandbox:         m.sandbox,
+				dataset:         m.dataset,
+				sshURL:          msg.sshURL,
+				sshHost:         msg.sshHost,
+				fromExistingSim: false, // Blank VMs are not from existing sims
 			}
 		}
 

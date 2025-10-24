@@ -148,3 +148,68 @@ func cleanupSSHConfig(hostname string) error {
 	updatedConfig := removeSSHHostFromConfig(hostname, existingConfig)
 	return writeSSHConfig(updatedConfig)
 }
+
+// updateSSHConfigPassword updates an existing SSH host entry to enable password authentication
+func updateSSHConfigPassword(hostname, password string) error {
+	fmt.Printf("DEBUG: updateSSHConfigPassword called for hostname=%s, password=%s\n", hostname, password)
+
+	existingConfig, err := readSSHConfig()
+	if err != nil {
+		return err
+	}
+
+	if existingConfig == "" {
+		return fmt.Errorf("SSH config is empty")
+	}
+
+	if !hostExistsInConfig(hostname, existingConfig) {
+		return fmt.Errorf("host %s not found in SSH config", hostname)
+	}
+
+	fmt.Printf("DEBUG: Found host in SSH config, updating...\n")
+
+	lines := strings.Split(existingConfig, "\n")
+	var newLines []string
+	inTargetHost := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Check if we're entering the target host block
+		if trimmed == fmt.Sprintf("Host %s", hostname) {
+			inTargetHost = true
+			newLines = append(newLines, line)
+			// Add password comment right after Host line
+			newLines = append(newLines, fmt.Sprintf("    # Password: %s", password))
+			continue
+		}
+
+		// Check if we're entering a different host block
+		if strings.HasPrefix(trimmed, "Host ") && trimmed != fmt.Sprintf("Host %s", hostname) {
+			inTargetHost = false
+		}
+
+		// If we're in the target host and it's the IdentitiesOnly line, change it
+		if inTargetHost && strings.HasPrefix(trimmed, "IdentitiesOnly") {
+			newLines = append(newLines, "    IdentitiesOnly no")
+			continue
+		}
+
+		// Skip lines that we'll replace or that are already password comments
+		if inTargetHost && strings.HasPrefix(trimmed, "# Password:") {
+			continue
+		}
+
+		newLines = append(newLines, line)
+	}
+
+	updatedConfig := strings.Join(newLines, "\n")
+	fmt.Printf("DEBUG: Writing updated SSH config...\n")
+	err = writeSSHConfig(updatedConfig)
+	if err != nil {
+		fmt.Printf("DEBUG: Failed to write SSH config: %v\n", err)
+		return err
+	}
+	fmt.Printf("DEBUG: SSH config written successfully\n")
+	return nil
+}
