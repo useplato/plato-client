@@ -34,6 +34,7 @@ type PlatoClient struct {
 	Sandbox      *services.SandboxService
 	Organization *services.OrganizationService
 	Simulator    *services.SimulatorService
+	Environment  *services.EnvironmentService
 }
 
 // RetryConfig configures retry behavior for failed requests
@@ -72,6 +73,7 @@ func NewClient(apiKey string, opts ...ClientOption) *PlatoClient {
 	client.Sandbox = services.NewSandboxService(client)
 	client.Organization = services.NewOrganizationService(client)
 	client.Simulator = services.NewSimulatorService(client)
+	client.Environment = services.NewEnvironmentService(client)
 
 	return client
 }
