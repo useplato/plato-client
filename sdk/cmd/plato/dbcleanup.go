@@ -255,13 +255,13 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 				continue
 			}
 
-			// Try to truncate audit.audit_log (PostgreSQL)
-			_, err = db.ExecContext(ctx, "TRUNCATE TABLE audit.audit_log RESTART IDENTITY CASCADE")
+			// Try to truncate audit_log (PostgreSQL)
+			_, err = db.ExecContext(ctx, "TRUNCATE TABLE public.audit_log RESTART IDENTITY CASCADE")
 			if err == nil {
-				logDebug("Successfully truncated audit.audit_log from postgres db: %s", dbName)
+				logDebug("Successfully truncated audit_log from postgres db: %s", dbName)
 				return nil
 			}
-			logDebug("No audit.audit_log in %s (or error): %v", dbName, err)
+			logDebug("No audit_log in %s (or error): %v", dbName, err)
 			db.Close()
 		}
 	} else if dbConfig.DBType == "mysql" {
@@ -297,7 +297,7 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 
 			_, err = db.ExecContext(ctx, "DELETE FROM `audit_log`")
 			if err != nil {
-				logDebug("Failed to truncate audit.audit_log in %s: %v", dbName, err)
+				logDebug("Failed to truncate audit_log in %s: %v", dbName, err)
 				// Re-enable foreign key checks before continuing
 				db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1")
 				db.Close()
