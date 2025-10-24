@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"plato-sdk/services"
@@ -190,6 +191,26 @@ func (c *PlatoClient) NewRequest(ctx context.Context, method, path string, body 
 }
 
 // Do executes an HTTP request with retry logic
+// logAPICall logs API calls to plato_error.log
+func logAPICall(method, path string, statusCode int, err error) {
+	f, fileErr := os.OpenFile("plato_error.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if fileErr != nil {
+		return
+	}
+	defer f.Close()
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	var logMsg string
+	if err != nil {
+		logMsg = fmt.Sprintf("[%s] API: %s %s - ERROR: %v\n", timestamp, method, path, err)
+	} else if statusCode >= 400 {
+		logMsg = fmt.Sprintf("[%s] API: %s %s - STATUS: %d\n", timestamp, method, path, statusCode)
+	} else {
+		logMsg = fmt.Sprintf("[%s] API: %s %s - STATUS: %d\n", timestamp, method, path, statusCode)
+	}
+	f.WriteString(logMsg)
+}
+
 func (c *PlatoClient) Do(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	var err error
@@ -199,6 +220,8 @@ func (c *PlatoClient) Do(req *http.Request) (*http.Response, error) {
 
 		// Success or non-retryable error
 		if err == nil && resp.StatusCode < 500 {
+			// Log the API call
+			logAPICall(req.Method, req.URL.Path, resp.StatusCode, nil)
 			return resp, nil
 		}
 
@@ -206,6 +229,13 @@ func (c *PlatoClient) Do(req *http.Request) (*http.Response, error) {
 		if attempt < c.retryConfig.MaxRetries {
 			time.Sleep(c.retryConfig.RetryDelay * time.Duration(attempt+1))
 		}
+	}
+
+	// Log failed API call
+	if err != nil {
+		logAPICall(req.Method, req.URL.Path, 0, err)
+	} else if resp != nil {
+		logAPICall(req.Method, req.URL.Path, resp.StatusCode, fmt.Errorf("request failed after retries"))
 	}
 
 	return resp, err

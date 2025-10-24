@@ -103,7 +103,7 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config using PublicID
-		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID)
+		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID, "root")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{

@@ -478,8 +478,6 @@ func (s *SandboxService) List(ctx context.Context) ([]*models.Sandbox, error) {
 
 // SetupRootPassword sets up root password for SSH access
 func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, password string) error {
-	fmt.Printf("DEBUG: SetupRootPassword called with publicID=%s, password=%s\n", publicID, password)
-
 	payload := map[string]interface{}{
 		"root_password": password,
 	}
@@ -488,8 +486,6 @@ func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, passwo
 	if err != nil {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
-
-	fmt.Printf("DEBUG: Request body: %s\n", string(body))
 
 	req, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/public-build/vm/%s/setup-root-password", publicID), bytes.NewReader(body))
 	if err != nil {
@@ -502,10 +498,8 @@ func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, passwo
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	fmt.Printf("DEBUG: SetupRootPassword response (status %d): %s\n", resp.StatusCode, string(bodyBytes))
-
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -513,27 +507,32 @@ func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, passwo
 }
 
 // CreateSnapshot creates a snapshot of a VM
-func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, req models.CreateSnapshotRequest) error {
+func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, req models.CreateSnapshotRequest) (*models.CreateSnapshotResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	httpReq, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/public-build/vm/%s/snapshot", publicID), bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	return nil
+	var snapshotResp models.CreateSnapshotResponse
+	if err := json.NewDecoder(resp.Body).Decode(&snapshotResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &snapshotResp, nil
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -23,6 +24,20 @@ var (
 	vmInfoIndigo = lipgloss.AdaptiveColor{Light: "#5A56E0", Dark: "#7571F9"}
 	vmInfoGreen  = lipgloss.AdaptiveColor{Light: "#02BA84", Dark: "#02BF87"}
 )
+
+// logErrorToFile writes an error message to a log file with timestamp
+func logErrorToFile(filename, message string) error {
+	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	logMessage := fmt.Sprintf("[%s] %s\n", timestamp, message)
+	_, err = f.WriteString(logMessage)
+	return err
+}
 
 type VMInfoModel struct {
 	client            *plato.PlatoClient
@@ -65,7 +80,8 @@ type rootPasswordSetupMsg struct {
 }
 
 type snapshotCreatedMsg struct {
-	err error
+	err      error
+	response *models.CreateSnapshotResponse
 }
 
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool) VMInfoModel {
@@ -178,37 +194,45 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		return m, nil
 
 	case rootPasswordSetupMsg:
-		fmt.Printf("DEBUG: rootPasswordSetupMsg received, err: %v\n", msg.err)
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Root password setup failed: %v", msg.err))
 		} else {
 			m.rootPasswordSetup = true
 			// Update SSH config with password and change user to root
 			if m.sshHost != "" {
-				fmt.Printf("DEBUG: Updating SSH config for host: %s\n", m.sshHost)
 				// First, update the username to root
 				if err := updateSSHConfigUser(m.sshHost, "root"); err != nil {
-					fmt.Printf("DEBUG: SSH config user update error: %v\n", err)
 					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config user: %v", err))
 				} else if err := updateSSHConfigPassword(m.sshHost, "password"); err != nil {
-					fmt.Printf("DEBUG: SSH config password update error: %v\n", err)
 					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config password: %v", err))
 				} else {
-					fmt.Printf("DEBUG: SSH config updated successfully\n")
 					m.statusMessages = append(m.statusMessages, "✓ Root SSH password configured!")
 				}
 			} else {
 				m.statusMessages = append(m.statusMessages, "✓ Root password set!")
 			}
 		}
+		// Update viewport content and scroll to bottom
+		renderedMarkdown := m.renderVMInfoMarkdown()
+		m.viewport.SetContent(renderedMarkdown)
+		m.viewport.GotoBottom()
 		return m, nil
 
 	case snapshotCreatedMsg:
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Snapshot failed: %v", msg.err))
-		} else {
+		} else if msg.response != nil {
 			m.statusMessages = append(m.statusMessages, "✓ Snapshot created successfully!")
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Artifact ID: %s", msg.response.ArtifactID))
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
+			if msg.response.S3URI != "" {
+				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3URI))
+			}
 		}
+		// Update viewport content and scroll to bottom
+		renderedMarkdown := m.renderVMInfoMarkdown()
+		m.viewport.SetContent(renderedMarkdown)
+		m.viewport.GotoBottom()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -275,6 +299,21 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 		}
 	}
 
+	// Show recent status messages if any
+	if len(m.statusMessages) > 0 {
+		md.WriteString("---\n\n")
+		md.WriteString("## Status\n\n")
+		// Show last 5 messages
+		start := 0
+		if len(m.statusMessages) > 5 {
+			start = len(m.statusMessages) - 5
+		}
+		for _, msg := range m.statusMessages[start:] {
+			md.WriteString(fmt.Sprintf("- %s\n", msg))
+		}
+		md.WriteString("\n")
+	}
+
 	// Render markdown with glamour
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
@@ -294,16 +333,13 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 
 func setupRootPassword(client *plato.PlatoClient, publicID string) tea.Cmd {
 	return func() tea.Msg {
-		fmt.Printf("DEBUG: setupRootPassword called for publicID: %s\n", publicID)
 		ctx := context.Background()
 
 		err := client.Sandbox.SetupRootPassword(ctx, publicID, "password")
 		if err != nil {
-			fmt.Printf("DEBUG: SetupRootPassword error: %v\n", err)
 			return rootPasswordSetupMsg{err: err}
 		}
 
-		fmt.Printf("DEBUG: SetupRootPassword success\n")
 		return rootPasswordSetupMsg{err: nil}
 	}
 }
@@ -317,12 +353,17 @@ func createSnapshot(client *plato.PlatoClient, publicID string, service string, 
 			Dataset: dataset,
 		}
 
-		err := client.Sandbox.CreateSnapshot(ctx, publicID, req)
+		resp, err := client.Sandbox.CreateSnapshot(ctx, publicID, req)
 		if err != nil {
-			return snapshotCreatedMsg{err: err}
+			// Log error to file
+			logErr := logErrorToFile("plato_error.log", fmt.Sprintf("API: CreateSnapshot failed for %s: %v", publicID, err))
+			if logErr != nil {
+				fmt.Printf("Failed to write error log: %v\n", logErr)
+			}
+			return snapshotCreatedMsg{err: err, response: nil}
 		}
 
-		return snapshotCreatedMsg{err: nil}
+		return snapshotCreatedMsg{err: nil, response: resp}
 	}
 }
 
@@ -335,7 +376,6 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
 	case "Setup Root SSH":
-		fmt.Printf("DEBUG: Setup Root SSH action triggered\n")
 		if m.rootPasswordSetup {
 			m.statusMessages = append(m.statusMessages, "Root password already configured")
 			return m, nil
@@ -348,14 +388,18 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		// Load the config to get service and dataset
 		config, err := LoadPlatoConfig()
 		if err != nil {
-			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err))
+			errMsg := fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err)
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
 			return m, nil
 		}
 
 		// Get service from config
 		service := config.Service
 		if service == "" {
-			m.statusMessages = append(m.statusMessages, "❌ Service not specified in plato-config.yml")
+			errMsg := "❌ Service not specified in plato-config.yml"
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
 			return m, nil
 		}
 
