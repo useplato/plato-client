@@ -142,7 +142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle launch from plato config
 	if navMsg, ok := msg.(launchFromConfigMsg); ok {
-		m.vmConfig = NewVMConfigModelFromConfig(m.config.client, navMsg.datasetName, navMsg.datasetConfig)
+		m.vmConfig = NewVMConfigModelFromConfig(m.config.client, navMsg.datasetName, navMsg.datasetConfig, navMsg.service)
 		m.currentView = ViewVMConfig
 		return m, m.vmConfig.Init()
 	}

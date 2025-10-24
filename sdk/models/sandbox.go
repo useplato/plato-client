@@ -34,10 +34,12 @@ type CreateSnapshotResponse struct {
 	Timestamp     string `json:"timestamp"`
 	CorrelationID string `json:"correlation_id"`
 	S3URI         string `json:"s3_uri"`
+	GitHash       string `json:"git_hash,omitempty"`
 }
 
 // StartWorkerRequest represents a request to start the Plato worker
 type StartWorkerRequest struct {
+	Service            string            `json:"service,omitempty"`
 	Dataset            string            `json:"dataset"`
 	PlatoDatasetConfig SimConfigDataset  `json:"plato_dataset_config"`
 	Timeout            int               `json:"timeout,omitempty"`

@@ -23,6 +23,7 @@ type VMConfigModel struct {
 	simulator      *models.SimulatorListItem // Optional: for launching from existing sim
 	artifactID     *string                   // Optional: for launching with artifact
 	version        *string                   // Optional: version string for the artifact
+	service        string                    // Service name from config
 	form           *huh.Form
 	lg             *lipgloss.Renderer
 	creating       bool
@@ -61,7 +62,7 @@ type statusUpdateMsg struct {
 	message string
 }
 
-func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, dataset string, statusChan chan<- string, artifactID *string) tea.Cmd {
+func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, dataset string, statusChan chan<- string, artifactID *string, service string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
@@ -73,7 +74,7 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 			alias = config.Metadata.Name
 		}
 
-		sandbox, err := client.Sandbox.Create(ctx, config, dataset, alias, artifactID)
+		sandbox, err := client.Sandbox.Create(ctx, config, dataset, alias, artifactID, service)
 		if err != nil {
 			close(statusChan)
 			return sandboxCreatedMsg{sandbox: nil, err: err}
@@ -224,7 +225,7 @@ func waitForStatusUpdates(statusChan <-chan string) tea.Cmd {
 	}
 }
 
-func NewVMConfigModelFromConfig(client *plato.PlatoClient, datasetName string, datasetConfig models.SimConfigDataset) VMConfigModel {
+func NewVMConfigModelFromConfig(client *plato.PlatoClient, datasetName string, datasetConfig models.SimConfigDataset, service string) VMConfigModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -234,6 +235,7 @@ func NewVMConfigModelFromConfig(client *plato.PlatoClient, datasetName string, d
 		simulator:      nil,
 		artifactID:     nil,
 		version:        nil,
+		service:        service,
 		width:          80,
 		spinner:        s,
 		stopwatch:      NewStopwatch(),
@@ -401,7 +403,7 @@ func (m VMConfigModel) Init() tea.Cmd {
 		return tea.Batch(
 			m.spinner.Tick,
 			m.stopwatch.Start(),
-			createSandbox(m.client, m.datasetConfig, m.dataset, m.statusChan, m.artifactID),
+			createSandbox(m.client, m.datasetConfig, m.dataset, m.statusChan, m.artifactID, m.service),
 			waitForStatusUpdates(m.statusChan),
 		)
 	}
@@ -624,7 +626,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 
 		cmds = append(cmds, m.spinner.Tick)
 		cmds = append(cmds, m.stopwatch.Start())
-		cmds = append(cmds, createSandbox(m.client, datasetConfig, datasetVal, m.statusChan, nil))
+		cmds = append(cmds, createSandbox(m.client, datasetConfig, datasetVal, m.statusChan, nil, m.service))
 		cmds = append(cmds, waitForStatusUpdates(m.statusChan))
 	}
 

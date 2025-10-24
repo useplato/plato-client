@@ -23,6 +23,7 @@ type PlatoConfigModel struct {
 type launchFromConfigMsg struct {
 	datasetName   string
 	datasetConfig models.SimConfigDataset
+	service       string
 }
 
 type datasetItem struct {
@@ -113,6 +114,7 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 						return launchFromConfigMsg{
 							datasetName:   dataset.name,
 							datasetConfig: dataset.config,
+							service:       m.config.Service,
 						}
 					}
 				}

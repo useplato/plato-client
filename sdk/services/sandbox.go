@@ -18,6 +18,7 @@ import (
 // ClientInterface defines the methods needed from PlatoClient
 type ClientInterface interface {
 	NewRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error)
+	NewHubRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error)
 	Do(req *http.Request) (*http.Response, error)
 }
 
@@ -32,7 +33,7 @@ func NewSandboxService(client ClientInterface) *SandboxService {
 }
 
 // Create creates a new sandbox from a full SimConfigDataset configuration
-func (s *SandboxService) Create(ctx context.Context, config models.SimConfigDataset, dataset, alias string, artifactID *string) (*models.Sandbox, error) {
+func (s *SandboxService) Create(ctx context.Context, config models.SimConfigDataset, dataset, alias string, artifactID *string, service string) (*models.Sandbox, error) {
 	payload := map[string]interface{}{
 		"dataset":              dataset,
 		"plato_dataset_config": config,
@@ -43,6 +44,10 @@ func (s *SandboxService) Create(ctx context.Context, config models.SimConfigData
 
 	if artifactID != nil {
 		payload["artifact_id"] = *artifactID
+	}
+
+	if service != "" {
+		payload["service"] = service
 	}
 
 	body, err := json.Marshal(payload)
