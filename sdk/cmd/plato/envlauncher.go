@@ -258,6 +258,8 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 				sshURL:          fmt.Sprintf("root@%s", m.environment.JobID),
 				sshHost:         m.sshHost,
 				fromExistingSim: true,
+				artifactID:      nil, // Not available when launching from existing sim by name
+				version:         nil, // Not available when launching from existing sim by name
 			}
 		}
 

@@ -47,27 +47,29 @@ type proxytunnelMapping struct {
 }
 
 type VMInfoModel struct {
-	client               *plato.PlatoClient
-	sandbox              *models.Sandbox
-	dataset              string
-	lg                   *lipgloss.Renderer
-	width                int
-	actionList           list.Model
-	settingUp            bool
-	setupComplete        bool
-	spinner              spinner.Model
-	statusMessages       []string
-	statusChan           chan string
-	sshURL               string
-	sshHost              string
-	viewport             viewport.Model
-	viewportReady        bool
-	heartbeatStop        chan struct{}
-	fromExistingSim      bool
-	rootPasswordSetup    bool
-	config               *models.PlatoConfig
+	client            *plato.PlatoClient
+	sandbox           *models.Sandbox
+	dataset           string
+	artifactID        *string
+	version           *string
+	lg                *lipgloss.Renderer
+	width             int
+	actionList        list.Model
+	settingUp         bool
+	setupComplete     bool
+	spinner           spinner.Model
+	statusMessages    []string
+	statusChan        chan string
+	sshURL            string
+	sshHost           string
+	viewport          viewport.Model
+	viewportReady     bool
+	heartbeatStop     chan struct{}
+	fromExistingSim   bool
+	rootPasswordSetup bool
 	proxytunnelProcesses []*exec.Cmd
 	proxytunnelMappings  []proxytunnelMapping
+	config            *models.PlatoConfig
 }
 
 type vmAction struct {
@@ -100,7 +102,7 @@ type proxytunnelOpenedMsg struct {
 	err        error
 }
 
-func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool) VMInfoModel {
+func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -131,6 +133,8 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		client:               client,
 		sandbox:              sandbox,
 		dataset:              dataset,
+		artifactID:           artifactID,
+		version:              version,
 		lg:                   lipgloss.DefaultRenderer(),
 		width:                vmInfoMaxWidth,
 		actionList:           l,
@@ -482,8 +486,6 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			return navigateToProxytunnelPortMsg{publicID: m.sandbox.PublicID}
 		}
 	case "Snapshot VM":
-		m.statusMessages = append(m.statusMessages, "Creating snapshot...")
-
 		// Load the config to get service and dataset
 		config, err := LoadPlatoConfig()
 		if err != nil {
@@ -504,6 +506,13 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		// Use the dataset from the model
 		datasetPtr := &m.dataset
+
+		// Build info message showing service, dataset, and version
+		infoMsg := fmt.Sprintf("Creating snapshot for service: %s, dataset: %s", service, m.dataset)
+		if m.version != nil {
+			infoMsg += fmt.Sprintf(", version: %s", *m.version)
+		}
+		m.statusMessages = append(m.statusMessages, infoMsg)
 
 		return m, createSnapshot(m.client, m.sandbox.PublicID, service, datasetPtr)
 	case "Close VM":
