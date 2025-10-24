@@ -102,6 +102,11 @@ type proxytunnelOpenedMsg struct {
 	err        error
 }
 
+type workerStartedMsg struct {
+	err      error
+	response *models.StartWorkerResponse
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -244,6 +249,32 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			if msg.response.S3URI != "" {
 				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3URI))
 			}
+		}
+		// Update viewport content and scroll to bottom
+		renderedMarkdown := m.renderVMInfoMarkdown()
+		m.viewport.SetContent(renderedMarkdown)
+		m.viewport.GotoBottom()
+		return m, nil
+
+	case workerStartedMsg:
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Worker start failed: %v", msg.err))
+		} else if msg.response != nil {
+			m.statusMessages = append(m.statusMessages, "✓ Worker start initiated!")
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Monitoring progress via correlation ID: %s", msg.response.CorrelationID))
+			// Monitor the operation using SSE events
+			return m, tea.Batch(
+				func() tea.Msg {
+					ctx := context.Background()
+					err := m.client.Sandbox.MonitorOperation(ctx, msg.response.CorrelationID, 10*time.Minute)
+					if err != nil {
+						return workerStartedMsg{err: fmt.Errorf("worker setup failed: %w", err), response: nil}
+					}
+					// Success - add a final message
+					return statusUpdateMsg{message: "✓ Worker setup complete!"}
+				},
+			)
 		}
 		// Update viewport content and scroll to bottom
 		renderedMarkdown := m.renderVMInfoMarkdown()
@@ -395,6 +426,30 @@ func createSnapshot(client *plato.PlatoClient, publicID string, service string, 
 	}
 }
 
+func startWorker(client *plato.PlatoClient, publicID string, dataset string, datasetConfig models.SimConfigDataset) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		req := models.StartWorkerRequest{
+			Dataset:            dataset,
+			PlatoDatasetConfig: datasetConfig,
+			Timeout:            600, // 10 minutes timeout
+		}
+
+		resp, err := client.Sandbox.StartWorker(ctx, publicID, req)
+		if err != nil {
+			// Log error to file
+			logErr := logErrorToFile("plato_error.log", fmt.Sprintf("API: StartWorker failed for %s: %v", publicID, err))
+			if logErr != nil {
+				fmt.Printf("Failed to write error log: %v\n", logErr)
+			}
+			return workerStartedMsg{err: err, response: nil}
+		}
+
+		return workerStartedMsg{err: nil, response: resp}
+	}
+}
+
 // findFreePort finds an available port on the local machine
 func findFreePort() (int, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -475,8 +530,26 @@ func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
 func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	switch action.title {
 	case "Start Plato Worker":
-		// TODO: Implement Plato worker start
-		m.statusMessages = append(m.statusMessages, "Starting Plato worker not implemented yet")
+		// Load the config to get dataset configuration
+		config, err := LoadPlatoConfig()
+		if err != nil {
+			errMsg := fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err)
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+
+		// Get dataset config
+		datasetConfig, exists := config.Datasets[m.dataset]
+		if !exists {
+			errMsg := fmt.Sprintf("❌ Dataset '%s' not found in plato-config.yml", m.dataset)
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting Plato worker for dataset: %s", m.dataset))
+		return m, startWorker(m.client, m.sandbox.PublicID, m.dataset, datasetConfig)
 	case "Connect via SSH":
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")

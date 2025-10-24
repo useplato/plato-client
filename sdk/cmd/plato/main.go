@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"plato-sdk/models"
 
@@ -122,6 +123,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle environment launch with simulator and optional artifact ID
 	if navMsg, ok := msg.(launchEnvironmentMsg); ok {
 		m.vmConfig = NewVMConfigModel(m.config.client, navMsg.simulator, navMsg.artifactID, navMsg.version)
+		m.currentView = ViewVMConfig
+		return m, m.vmConfig.Init()
+	}
+
+	// Handle launch from plato config
+	if navMsg, ok := msg.(launchFromConfigMsg); ok {
+		m.vmConfig = NewVMConfigModelFromConfig(m.config.client, navMsg.datasetName, navMsg.datasetConfig)
 		m.currentView = ViewVMConfig
 		return m, m.vmConfig.Init()
 	}
@@ -249,6 +257,14 @@ func (m Model) View() string {
 }
 
 func main() {
+	// Handle version flag
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Printf("Plato CLI version %s\n", version)
+		fmt.Printf("Git commit: %s\n", gitCommit)
+		fmt.Printf("Built: %s\n", buildTime)
+		os.Exit(0)
+	}
+
 	// Initialize debug logger
 	if err := initLogger(); err != nil {
 		fmt.Printf("Warning: failed to initialize logger: %v\n", err)

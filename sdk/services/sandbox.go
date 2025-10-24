@@ -536,3 +536,34 @@ func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, re
 
 	return &snapshotResp, nil
 }
+
+// StartWorker starts the Plato worker and listeners on a VM
+func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req models.StartWorkerRequest) (*models.StartWorkerResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/public-build/vm/%s/start-worker", publicID), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var workerResp models.StartWorkerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&workerResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &workerResp, nil
+}

@@ -224,6 +224,41 @@ func waitForStatusUpdates(statusChan <-chan string) tea.Cmd {
 	}
 }
 
+func NewVMConfigModelFromConfig(client *plato.PlatoClient, datasetName string, datasetConfig models.SimConfigDataset) VMConfigModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	m := VMConfigModel{
+		client:         client,
+		simulator:      nil,
+		artifactID:     nil,
+		version:        nil,
+		width:          80,
+		spinner:        s,
+		stopwatch:      NewStopwatch(),
+		statusMessages: []string{fmt.Sprintf("Starting VM creation for dataset: %s...", datasetName)},
+		skipForm:       true,
+		dataset:        datasetName,
+		datasetConfig:  datasetConfig,
+		creating:       true,
+		started:        true,
+		statusChan:     make(chan string, 10),
+	}
+	m.lg = lipgloss.DefaultRenderer()
+
+	theme := huh.ThemeCharm()
+	theme.Focused.Base = theme.Focused.Base.BorderForeground(vmMagenta)
+	theme.Focused.Title = theme.Focused.Title.Foreground(vmMagenta)
+	theme.Focused.TextInput.Cursor = theme.Focused.TextInput.Cursor.Foreground(vmMagenta)
+	theme.Focused.TextInput.Prompt = theme.Focused.TextInput.Prompt.Foreground(vmMagenta)
+
+	m.form = huh.NewForm()
+	m.form.WithTheme(theme)
+
+	return m
+}
+
 func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorListItem, artifactID *string, version *string) VMConfigModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
