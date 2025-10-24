@@ -77,7 +77,7 @@ func writeSSHConfig(configContent string) error {
 }
 
 // appendSSHHostEntry appends a new SSH host entry to config
-func appendSSHHostEntry(hostname string, port int, jobGroupID string) error {
+func appendSSHHostEntry(hostname string, port int, publicID string) error {
 	configContent, err := readSSHConfig()
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func appendSSHHostEntry(hostname string, port int, jobGroupID string) error {
     ServerAliveInterval 30
     ServerAliveCountMax 3
     TCPKeepAlive yes
-    `, hostname, port, proxytunnelPath, jobGroupID)
+    `, hostname, port, proxytunnelPath, publicID)
 
 	if configContent != "" {
 		configContent = strings.TrimRight(configContent, "\n") + "\n\n" + configWithProxy
@@ -112,7 +112,8 @@ func appendSSHHostEntry(hostname string, port int, jobGroupID string) error {
 }
 
 // setupSSHConfig sets up SSH config with available hostname and returns the hostname
-func setupSSHConfig(localPort int, jobPublicID string) (string, error) {
+// publicID is the job_public_id used in the ProxyCommand
+func setupSSHConfig(localPort int, publicID string) (string, error) {
 	sshConfigDir := filepath.Join(os.Getenv("HOME"), ".ssh")
 	if err := os.MkdirAll(sshConfigDir, 0700); err != nil {
 		return "", err
@@ -127,7 +128,7 @@ func setupSSHConfig(localPort int, jobPublicID string) (string, error) {
 	sshHost := findAvailableHostname("sandbox", existingConfig)
 
 	// Add SSH host entry
-	if err := appendSSHHostEntry(sshHost, localPort, jobPublicID); err != nil {
+	if err := appendSSHHostEntry(sshHost, localPort, publicID); err != nil {
 		return "", fmt.Errorf("failed to append SSH host entry: %w", err)
 	}
 
