@@ -145,41 +145,6 @@ func (s *EnvironmentService) Make(ctx context.Context, envID string, opts *MakeO
 	return env, nil
 }
 
-// GetJobStatus retrieves the status of a job
-func (s *EnvironmentService) GetJobStatus(ctx context.Context, jobID string) (*models.JobStatus, error) {
-	req, err := s.client.NewRequest(ctx, "GET", fmt.Sprintf("/env/%s/status", jobID), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response body for logging
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	fmt.Printf("GetJobStatus response (status %d): %s\n", resp.StatusCode, string(bodyBytes))
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var status models.JobStatus
-	if err := json.Unmarshal(bodyBytes, &status); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	fmt.Printf("Job status: %s\n", status.Status)
-
-	return &status, nil
-}
-
 // GetWorkerReady checks if the worker for a job is ready
 func (s *EnvironmentService) GetWorkerReady(ctx context.Context, jobID string) (*models.WorkerStatus, error) {
 	req, err := s.client.NewRequest(ctx, "GET", fmt.Sprintf("/env/%s/worker_ready", jobID), nil)
