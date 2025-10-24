@@ -20,6 +20,8 @@ type navigateToVMInfoMsg struct {
 	sshURL          string
 	sshHost         string
 	fromExistingSim bool
+	artifactID      *string
+	version         *string
 }
 
 type navigateToProxytunnelPortMsg struct {
@@ -61,7 +63,7 @@ func newModel() Model {
 		mainMenu:         NewMainMenuModel(),
 		config:           config,
 		launch:           NewLaunchModel(config.client),
-		vmConfig:         NewVMConfigModel(config.client, nil, nil), // Blank VM - no simulator, no artifact
+		vmConfig:         NewVMConfigModel(config.client, nil, nil, nil), // Blank VM - no simulator, no artifact, no version
 		platoConfig:      NewPlatoConfigModel(config.client),
 		simSelector:      NewSimSelectorModel(config.client),
 		simLaunchOptions: SimLaunchOptionsModel{}, // Will be initialized when simulator is selected
@@ -77,7 +79,7 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle navigation to VM info with data
 	if navMsg, ok := msg.(navigateToVMInfoMsg); ok {
-		vmInfo := NewVMInfoModel(m.config.client, navMsg.sandbox, navMsg.dataset, navMsg.fromExistingSim)
+		vmInfo := NewVMInfoModel(m.config.client, navMsg.sandbox, navMsg.dataset, navMsg.fromExistingSim, navMsg.artifactID, navMsg.version)
 		// Mark setup as complete and set SSH info
 		vmInfo.setupComplete = true
 		vmInfo.sshURL = navMsg.sshURL
@@ -119,7 +121,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle environment launch with simulator and optional artifact ID
 	if navMsg, ok := msg.(launchEnvironmentMsg); ok {
-		m.vmConfig = NewVMConfigModel(m.config.client, navMsg.simulator, navMsg.artifactID)
+		m.vmConfig = NewVMConfigModel(m.config.client, navMsg.simulator, navMsg.artifactID, navMsg.version)
 		m.currentView = ViewVMConfig
 		return m, m.vmConfig.Init()
 	}

@@ -22,6 +22,7 @@ type VMConfigModel struct {
 	client         *plato.PlatoClient
 	simulator      *models.SimulatorListItem // Optional: for launching from existing sim
 	artifactID     *string                   // Optional: for launching with artifact
+	version        *string                   // Optional: version string for the artifact
 	form           *huh.Form
 	lg             *lipgloss.Renderer
 	creating       bool
@@ -222,7 +223,7 @@ func waitForStatusUpdates(statusChan <-chan string) tea.Cmd {
 	}
 }
 
-func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorListItem, artifactID *string) VMConfigModel {
+func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorListItem, artifactID *string, version *string) VMConfigModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -234,6 +235,7 @@ func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorList
 		client:         client,
 		simulator:      simulator,
 		artifactID:     artifactID,
+		version:        version,
 		width:          80,
 		spinner:        s,
 		statusMessages: []string{},
@@ -478,6 +480,8 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 				sshURL:          msg.sshURL,
 				sshHost:         msg.sshHost,
 				fromExistingSim: m.artifactID != nil, // True if launched with artifact ID
+				artifactID:      m.artifactID,
+				version:         m.version,
 			}
 		}
 

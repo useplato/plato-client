@@ -156,11 +156,12 @@ func (m ArtifactIDModel) Update(msg tea.Msg) (ArtifactIDModel, tea.Cmd) {
 			selectedRow := m.table.SelectedRow()
 			if len(selectedRow) > 0 {
 				artifactID := selectedRow[0] // First column is ArtifactID
+				version := selectedRow[1]     // Second column is Version
 				m.starting = true
 				m.err = nil
-				// Launch environment with the selected artifact ID
+				// Launch environment with the selected artifact ID and version
 				return m, func() tea.Msg {
-					return launchEnvironmentMsg{simulator: m.simulator, artifactID: &artifactID}
+					return launchEnvironmentMsg{simulator: m.simulator, artifactID: &artifactID, version: &version}
 				}
 			}
 			return m, nil
