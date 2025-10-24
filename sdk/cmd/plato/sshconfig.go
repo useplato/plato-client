@@ -151,6 +151,8 @@ func cleanupSSHConfig(hostname string) error {
 
 // updateSSHConfigPassword updates an existing SSH host entry to enable password authentication
 func updateSSHConfigPassword(hostname, password string) error {
+	logDebug("updateSSHConfigPassword called for hostname=%s, password=%s", hostname, password)
+
 	existingConfig, err := readSSHConfig()
 	if err != nil {
 		return err
@@ -163,6 +165,8 @@ func updateSSHConfigPassword(hostname, password string) error {
 	if !hostExistsInConfig(hostname, existingConfig) {
 		return fmt.Errorf("host %s not found in SSH config", hostname)
 	}
+
+	logDebug("Found host in SSH config, updating...")
 
 	lines := strings.Split(existingConfig, "\n")
 	var newLines []string
