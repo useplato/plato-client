@@ -122,7 +122,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname
-		sshHost, err := setupSSHConfig(localPort, sandbox.JobGroupID)
+		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID)
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{

@@ -112,7 +112,7 @@ func appendSSHHostEntry(hostname string, port int, jobGroupID string) error {
 }
 
 // setupSSHConfig sets up SSH config with available hostname and returns the hostname
-func setupSSHConfig(localPort int, jobGroupID string) (string, error) {
+func setupSSHConfig(localPort int, jobPublicID string) (string, error) {
 	sshConfigDir := filepath.Join(os.Getenv("HOME"), ".ssh")
 	if err := os.MkdirAll(sshConfigDir, 0700); err != nil {
 		return "", err
@@ -127,7 +127,7 @@ func setupSSHConfig(localPort int, jobGroupID string) (string, error) {
 	sshHost := findAvailableHostname("sandbox", existingConfig)
 
 	// Add SSH host entry
-	if err := appendSSHHostEntry(sshHost, localPort, jobGroupID); err != nil {
+	if err := appendSSHHostEntry(sshHost, localPort, jobPublicID); err != nil {
 		return "", fmt.Errorf("failed to append SSH host entry: %w", err)
 	}
 
