@@ -455,6 +455,12 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	output.WriteString(strings.Repeat("─", 50) + "\n\n")
 	output.WriteString(fmt.Sprintf("Job ID:   %s\n", m.sandbox.PublicID))
 	output.WriteString(fmt.Sprintf("Dataset:  %s\n", m.dataset))
+	if m.artifactID != nil {
+		output.WriteString(fmt.Sprintf("Artifact: %s\n", *m.artifactID))
+	}
+	if m.version != nil {
+		output.WriteString(fmt.Sprintf("Version:  %s\n", *m.version))
+	}
 	output.WriteString(fmt.Sprintf("URL:      %s\n", m.sandbox.URL))
 
 	if m.setupComplete {
@@ -1131,7 +1137,7 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		m.runningCommand = true
 		return m, tea.Batch(m.spinner.Tick, pushToHub(m.client, service))
 	case "Snapshot VM":
-		// Load the config to get service and dataset
+		// Load the config to get service
 		config, err := LoadPlatoConfig()
 		if err != nil {
 			errMsg := fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err)
@@ -1149,34 +1155,15 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			return m, nil
 		}
 
-		// Check if DB config exists for this service
-		_, hasConfig := getDBConfig(service)
-		if !hasConfig {
-			// Navigate to DB entry view
-			logDebug("No DB config for service %s, navigating to DB entry", service)
-			return m, func() tea.Msg {
-				return navigateToDBEntryMsg{service: service}
+		// Navigate to dataset selector to let user choose which dataset to snapshot as
+		return m, func() tea.Msg {
+			return navigateToDatasetSelectorMsg{
+				service:          service,
+				publicID:         m.sandbox.PublicID,
+				jobGroupID:       m.sandbox.JobGroupID,
+				lastPushedBranch: m.lastPushedBranch,
 			}
 		}
-
-		// DB config exists, proceed with snapshot
-		m.statusMessages = append(m.statusMessages, "Preparing snapshot...")
-
-		// Use the dataset from the model
-		datasetPtr := &m.dataset
-
-		// Build info message showing service, dataset, and version
-		infoMsg := fmt.Sprintf("Creating snapshot for service: %s, dataset: %s", service, m.dataset)
-		if m.version != nil {
-			infoMsg += fmt.Sprintf(", version: %s", *m.version)
-		}
-		if m.lastPushedBranch != "" {
-			infoMsg += fmt.Sprintf(", merging branch: %s", m.lastPushedBranch)
-		}
-		m.statusMessages = append(m.statusMessages, infoMsg)
-
-		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, createSnapshotWithCleanup(m.client, m.sandbox.PublicID, m.sandbox.JobGroupID, service, datasetPtr, m.lastPushedBranch))
 	case "Close VM":
 		// Stop heartbeat goroutine (only if not already stopped)
 		if !m.heartbeatStopped {

@@ -1,1 +1,1 @@
-Sandbox setup failed: cpus: Input should be greater than or equal to 1
+Sandbox setup failed: root password setup failed: API error (405): {"detail":"Method Not Allowed"}
