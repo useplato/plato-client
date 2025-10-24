@@ -26,3 +26,12 @@ type CreateSnapshotRequest struct {
 	GitHash *string `json:"git_hash,omitempty"`
 	Dataset *string `json:"dataset,omitempty"`
 }
+
+// CreateSnapshotResponse represents the response from creating a VM snapshot
+type CreateSnapshotResponse struct {
+	ArtifactID    string `json:"artifact_id"`
+	Status        string `json:"status"`
+	Timestamp     string `json:"timestamp"`
+	CorrelationID string `json:"correlation_id"`
+	S3URI         string `json:"s3_uri"`
+}
