@@ -158,11 +158,9 @@ func (m ArtifactIDModel) Update(msg tea.Msg) (ArtifactIDModel, tea.Cmd) {
 				artifactID := selectedRow[0] // First column is ArtifactID
 				m.starting = true
 				m.err = nil
-				// TODO: Actually launch with artifact ID
-				// For now, just go back to main menu
-				_ = artifactID // Use the artifact ID when implementing launch
+				// Launch environment with the selected artifact ID
 				return m, func() tea.Msg {
-					return NavigateMsg{view: ViewMainMenu}
+					return launchEnvironmentMsg{simulator: m.simulator, artifactID: &artifactID}
 				}
 			}
 			return m, nil
