@@ -29,6 +29,10 @@ type navigateToProxytunnelPortMsg struct {
 	publicID string
 }
 
+type navigateToDBEntryMsg struct {
+	service string
+}
+
 const (
 	ViewMainMenu ViewState = iota
 	ViewConfig
@@ -40,6 +44,7 @@ const (
 	ViewArtifactID
 	ViewVMInfo
 	ViewProxytunnelPort
+	ViewDBEntry
 )
 
 type Model struct {
@@ -54,6 +59,7 @@ type Model struct {
 	artifactID       ArtifactIDModel
 	vmInfo           VMInfoModel
 	proxytunnelPort  ProxytunnelPortModel
+	dbEntry          DBEntryModel
 	quitting         bool
 }
 
@@ -95,6 +101,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.proxytunnelPort = NewProxytunnelPortModel(navMsg.publicID)
 		m.currentView = ViewProxytunnelPort
 		return m, m.proxytunnelPort.Init()
+	}
+
+	// Handle navigation to DB entry
+	if navMsg, ok := msg.(navigateToDBEntryMsg); ok {
+		m.dbEntry = NewDBEntryModel(navMsg.service)
+		m.currentView = ViewDBEntry
+		return m, m.dbEntry.Init()
 	}
 
 	// Handle opening proxytunnel with selected port
@@ -155,8 +168,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.vmInfo.Init()
 		case ViewProxytunnelPort:
 			return m, m.proxytunnelPort.Init()
+		case ViewDBEntry:
+			return m, m.dbEntry.Init()
 		}
 		return m, nil
+	}
+
+	// Handle DB config entered message - trigger snapshot with the entered config
+	if dbMsg, ok := msg.(dbConfigEnteredMsg); ok {
+		logDebug("DB config entered for service: %s", dbMsg.service)
+		m.currentView = ViewVMInfo
+
+		// Get dataset pointer
+		datasetPtr := &m.vmInfo.dataset
+
+		// Trigger snapshot with the user-provided DB config
+		return m, createSnapshotWithConfig(
+			m.config.client,
+			m.vmInfo.sandbox.PublicID,
+			m.vmInfo.sandbox.JobGroupID,
+			dbMsg.service,
+			datasetPtr,
+			dbMsg.config,
+		)
 	}
 
 	// Handle global key commands
@@ -219,6 +253,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vmInfo, cmd = m.vmInfo.Update(msg)
 	case ViewProxytunnelPort:
 		m.proxytunnelPort, cmd = m.proxytunnelPort.Update(msg)
+	case ViewDBEntry:
+		m.dbEntry, cmd = m.dbEntry.Update(msg)
 	}
 
 	return m, cmd
@@ -251,6 +287,8 @@ func (m Model) View() string {
 		return m.vmInfo.View()
 	case ViewProxytunnelPort:
 		return m.proxytunnelPort.View()
+	case ViewDBEntry:
+		return m.dbEntry.View()
 	default:
 		return "Unknown view\n"
 	}

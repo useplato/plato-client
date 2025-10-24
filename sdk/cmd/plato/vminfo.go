@@ -47,29 +47,30 @@ type proxytunnelMapping struct {
 }
 
 type VMInfoModel struct {
-	client            *plato.PlatoClient
-	sandbox           *models.Sandbox
-	dataset           string
-	artifactID        *string
-	version           *string
-	lg                *lipgloss.Renderer
-	width             int
-	actionList        list.Model
-	settingUp         bool
-	setupComplete     bool
-	spinner           spinner.Model
-	statusMessages    []string
-	statusChan        chan string
-	sshURL            string
-	sshHost           string
-	viewport          viewport.Model
-	viewportReady     bool
-	heartbeatStop     chan struct{}
-	fromExistingSim   bool
-	rootPasswordSetup bool
+	client               *plato.PlatoClient
+	sandbox              *models.Sandbox
+	dataset              string
+	artifactID           *string
+	version              *string
+	lg                   *lipgloss.Renderer
+	width                int
+	actionList           list.Model
+	settingUp            bool
+	setupComplete        bool
+	spinner              spinner.Model
+	statusMessages       []string
+	statusChan           chan string
+	sshURL               string
+	sshHost              string
+	viewport             viewport.Model
+	viewportReady        bool
+	heartbeatStop        chan struct{}
+	heartbeatStopped     bool
+	fromExistingSim      bool
+	rootPasswordSetup    bool
 	proxytunnelProcesses []*exec.Cmd
 	proxytunnelMappings  []proxytunnelMapping
-	config            *models.PlatoConfig
+	config               *models.PlatoConfig
 }
 
 type vmAction struct {
@@ -107,6 +108,10 @@ type workerStartedMsg struct {
 	response *models.StartWorkerResponse
 }
 
+type cursorOpenedMsg struct {
+	err error
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -115,6 +120,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	items := []list.Item{
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
 		vmAction{title: "Connect via SSH", description: "Open SSH connection to VM"},
+		vmAction{title: "Connect to Cursor", description: "Open Cursor editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
@@ -150,6 +156,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		viewport:             vp,
 		viewportReady:        true,
 		heartbeatStop:        make(chan struct{}),
+		heartbeatStopped:     false,
 		fromExistingSim:      fromExistingSim,
 		rootPasswordSetup:    false,
 		proxytunnelProcesses: []*exec.Cmd{},
@@ -297,6 +304,15 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case cursorOpenedMsg:
+		logDebug("cursorOpenedMsg received, err=%v", msg.err)
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to open Cursor: %v", msg.err))
+		} else {
+			m.statusMessages = append(m.statusMessages, "✓ Cursor opened successfully")
+		}
+		return m, nil
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -403,18 +419,35 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	return rendered
 }
 
-func createSnapshot(client *plato.PlatoClient, publicID string, service string, dataset *string) tea.Cmd {
+func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
+		// Step 1: Perform pre-snapshot cleanup
+		logDebug("Starting pre-snapshot cleanup for service: %s", service)
+		needsDBConfig, err := preSnapshotCleanup(client, publicID, jobGroupID, service)
+		if err != nil {
+			logDebug("Pre-snapshot cleanup failed: %v", err)
+			// Don't fail the snapshot if cleanup fails, just log it
+		}
+		if needsDBConfig {
+			// This shouldn't happen here since we check before calling this function
+			logDebug("Warning: DB config needed but not provided")
+		}
+
+		// Step 2: Create the snapshot
+		// Use a timeout context to prevent hanging (snapshots can take a while)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
 		req := models.CreateSnapshotRequest{
 			Service: service,
 			Dataset: dataset,
 		}
 
+		logDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
 		resp, err := client.Sandbox.CreateSnapshot(ctx, publicID, req)
 		if err != nil {
 			// Log error to file
+			logDebug("CreateSnapshot failed: %v", err)
 			logErr := logErrorToFile("plato_error.log", fmt.Sprintf("API: CreateSnapshot failed for %s: %v", publicID, err))
 			if logErr != nil {
 				fmt.Printf("Failed to write error log: %v\n", logErr)
@@ -422,6 +455,43 @@ func createSnapshot(client *plato.PlatoClient, publicID string, service string, 
 			return snapshotCreatedMsg{err: err, response: nil}
 		}
 
+		logDebug("Snapshot created successfully: %s", resp.ArtifactID)
+		return snapshotCreatedMsg{err: nil, response: resp}
+	}
+}
+
+func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string, dbConfig DBConfig) tea.Cmd {
+	return func() tea.Msg {
+		// Step 1: Perform pre-snapshot cleanup with provided config
+		logDebug("Starting pre-snapshot cleanup with provided DB config for service: %s", service)
+		if err := preSnapshotCleanupWithConfig(client, publicID, jobGroupID, dbConfig); err != nil {
+			logDebug("Pre-snapshot cleanup failed: %v", err)
+			// Don't fail the snapshot if cleanup fails, just log it
+		}
+
+		// Step 2: Create the snapshot
+		// Use a timeout context to prevent hanging (snapshots can take a while)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		req := models.CreateSnapshotRequest{
+			Service: service,
+			Dataset: dataset,
+		}
+
+		logDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
+		resp, err := client.Sandbox.CreateSnapshot(ctx, publicID, req)
+		if err != nil {
+			// Log error to file
+			logDebug("CreateSnapshot failed: %v", err)
+			logErr := logErrorToFile("plato_error.log", fmt.Sprintf("API: CreateSnapshot failed for %s: %v", publicID, err))
+			if logErr != nil {
+				fmt.Printf("Failed to write error log: %v\n", logErr)
+			}
+			return snapshotCreatedMsg{err: err, response: nil}
+		}
+
+		logDebug("Snapshot created successfully: %s", resp.ArtifactID)
 		return snapshotCreatedMsg{err: nil, response: resp}
 	}
 }
@@ -527,6 +597,40 @@ func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
 	}
 }
 
+func openCursor(sshHost string) tea.Cmd {
+	return func() tea.Msg {
+		logDebug("Opening Cursor for SSH host: %s", sshHost)
+
+		// Find cursor command
+		cursorPath, err := exec.LookPath("cursor")
+		if err != nil {
+			logDebug("cursor command not found: %v", err)
+			return cursorOpenedMsg{err: fmt.Errorf("cursor command not found in PATH. Please install Cursor: https://cursor.sh")}
+		}
+		logDebug("Found cursor at: %s", cursorPath)
+
+		// Build cursor command with SSH remote
+		// cursor --folder-uri vscode-remote://ssh-remote+{sshHost}/root
+		folderURI := fmt.Sprintf("vscode-remote://ssh-remote+%s/root", sshHost)
+		cmd := exec.Command(cursorPath, "--folder-uri", folderURI)
+
+		logDebug("Starting cursor command: %v", cmd.Args)
+
+		// Start the cursor process (don't wait, let it run independently)
+		if err := cmd.Start(); err != nil {
+			logDebug("Failed to start cursor: %v", err)
+			return cursorOpenedMsg{err: fmt.Errorf("failed to start cursor: %w", err)}
+		}
+
+		logDebug("Cursor started successfully with PID: %d", cmd.Process.Pid)
+
+		// Release the process so it continues independently
+		go cmd.Wait()
+
+		return cursorOpenedMsg{err: nil}
+	}
+}
+
 func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	switch action.title {
 	case "Start Plato Worker":
@@ -553,6 +657,14 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	case "Connect via SSH":
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
+	case "Connect to Cursor":
+		if m.sshHost == "" {
+			m.statusMessages = append(m.statusMessages, "❌ SSH host not set up yet")
+			return m, nil
+		}
+
+		// Launch Cursor connected to the VM via SSH
+		return m, openCursor(m.sshHost)
 	case "Open Proxytunnel":
 		// Navigate to port selector
 		return m, func() tea.Msg {
@@ -577,6 +689,19 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			return m, nil
 		}
 
+		// Check if DB config exists for this service
+		_, hasConfig := getDBConfig(service)
+		if !hasConfig {
+			// Navigate to DB entry view
+			logDebug("No DB config for service %s, navigating to DB entry", service)
+			return m, func() tea.Msg {
+				return navigateToDBEntryMsg{service: service}
+			}
+		}
+
+		// DB config exists, proceed with snapshot
+		m.statusMessages = append(m.statusMessages, "Preparing snapshot...")
+
 		// Use the dataset from the model
 		datasetPtr := &m.dataset
 
@@ -587,10 +712,14 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		}
 		m.statusMessages = append(m.statusMessages, infoMsg)
 
-		return m, createSnapshot(m.client, m.sandbox.PublicID, service, datasetPtr)
+		return m, createSnapshotWithCleanup(m.client, m.sandbox.PublicID, m.sandbox.JobGroupID, service, datasetPtr)
 	case "Close VM":
-		// Stop heartbeat goroutine
-		close(m.heartbeatStop)
+		// Stop heartbeat goroutine (only if not already stopped)
+		if !m.heartbeatStopped {
+			close(m.heartbeatStop)
+			m.heartbeatStopped = true
+			logDebug("Stopped heartbeat goroutine")
+		}
 		// Kill all proxytunnel processes
 		for i, cmd := range m.proxytunnelProcesses {
 			if cmd.Process != nil {
@@ -619,7 +748,11 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		}
 		// Call VM cleanup API
 		return m, func() tea.Msg {
-			ctx := context.Background()
+			// Use a timeout context to prevent hanging
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			logDebug("Calling DeleteVM for: %s", m.sandbox.PublicID)
 			if err := m.client.Sandbox.DeleteVM(ctx, m.sandbox.PublicID); err != nil {
 				// Log error but still navigate away
 				logDebug("Warning: failed to delete VM: %v", err)
