@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"time"
 
 	plato "plato-sdk"
 	"plato-sdk/models"
@@ -18,9 +16,13 @@ type PlatoConfigModel struct {
 	config      *models.PlatoConfig
 	datasetList list.Model
 	loading     bool
-	creating    bool
 	err         error
 	width       int
+}
+
+type launchFromConfigMsg struct {
+	datasetName   string
+	datasetConfig models.SimConfigDataset
 }
 
 type datasetItem struct {
@@ -39,10 +41,9 @@ func (d datasetItem) FilterValue() string { return d.name }
 
 func NewPlatoConfigModel(client *plato.PlatoClient) PlatoConfigModel {
 	return PlatoConfigModel{
-		client:   client,
-		loading:  true,
-		creating: false,
-		width:    80,
+		client:  client,
+		loading: true,
+		width:   80,
 	}
 }
 
@@ -61,26 +62,6 @@ type configLoadedMsg struct {
 
 func (m PlatoConfigModel) Init() tea.Cmd {
 	return loadConfig
-}
-
-func createSandboxFromConfig(client *plato.PlatoClient, config models.SimConfigDataset, dataset string) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		// Create the sandbox
-		sandbox, err := client.Sandbox.Create(ctx, config, dataset, "sandbox", nil)
-		if err != nil {
-			return sandboxCreatedMsg{sandbox: nil, err: err}
-		}
-
-		// Monitor the operation until completion (using PublicID as correlation_id)
-		err = client.Sandbox.MonitorOperation(ctx, sandbox.PublicID, 20*time.Minute)
-		if err != nil {
-			return sandboxCreatedMsg{sandbox: sandbox, err: fmt.Errorf("VM provisioning failed: %w", err)}
-		}
-
-		return sandboxCreatedMsg{sandbox: sandbox, err: nil}
-	}
 }
 
 func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
@@ -112,18 +93,6 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 
 		return m, nil
 
-	case sandboxCreatedMsg:
-		m.creating = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		// Clear any previous errors on success
-		m.err = nil
-		return m, func() tea.Msg {
-			return NavigateMsg{view: ViewMainMenu}
-		}
-
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		if !m.loading && m.config != nil {
@@ -135,12 +104,17 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
-			if !m.loading && m.config != nil && !m.creating {
+			if !m.loading && m.config != nil {
 				selectedItem := m.datasetList.SelectedItem()
 				if selectedItem != nil {
 					dataset := selectedItem.(datasetItem)
-					m.creating = true
-					return m, createSandboxFromConfig(m.client, dataset.config, dataset.name)
+					// Navigate to VMConfigModel with the dataset config
+					return m, func() tea.Msg {
+						return launchFromConfigMsg{
+							datasetName:   dataset.name,
+							datasetConfig: dataset.config,
+						}
+					}
 				}
 			}
 			return m, nil
@@ -149,7 +123,6 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 			// If there's an error, clear it first
 			if m.err != nil {
 				m.err = nil
-				m.creating = false
 				// Reload config
 				return m, loadConfig
 			}
@@ -186,13 +159,6 @@ func (m PlatoConfigModel) View() string {
 		help := "Press Esc to go back"
 
 		return RenderHeader() + "\n" + errorStyle.Render(errorMsg) + "\n" + helpStyle.Render(help)
-	}
-
-	if m.creating {
-		style := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888")).
-			Padding(2, 4)
-		return RenderHeader() + "\n" + style.Render("Creating sandbox from config...")
 	}
 
 	if m.loading {
