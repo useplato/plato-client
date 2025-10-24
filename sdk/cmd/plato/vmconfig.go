@@ -31,6 +31,7 @@ type VMConfigModel struct {
 	width          int
 	err            error
 	spinner        spinner.Model
+	stopwatch      Stopwatch
 	statusMessages []string
 	statusChan     chan string
 	sandbox        *models.Sandbox
@@ -238,6 +239,7 @@ func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorList
 		version:        version,
 		width:          80,
 		spinner:        s,
+		stopwatch:      NewStopwatch(),
 		statusMessages: []string{},
 		skipForm:       skipForm,
 		dataset:        "base", // Default dataset
@@ -363,6 +365,7 @@ func (m VMConfigModel) Init() tea.Cmd {
 	if m.skipForm {
 		return tea.Batch(
 			m.spinner.Tick,
+			m.stopwatch.Start(),
 			createSandbox(m.client, m.datasetConfig, m.dataset, m.statusChan, m.artifactID),
 			waitForStatusUpdates(m.statusChan),
 		)
@@ -430,7 +433,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		if msg.err != nil {
 			// Show error inline with other status messages instead of switching to error view
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ VM provisioning failed: %v", msg.err))
-			return m, nil
+			return m, m.stopwatch.Stop()
 		}
 		// Don't add another success message - SSE events already showed completion
 		m.sandbox = msg.sandbox
@@ -465,25 +468,35 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 			}
 			defer errFile.Close()
 			errFile.WriteString(fmt.Sprintf("Sandbox setup failed: %v", msg.err))
-			return m, nil
+			return m, m.stopwatch.Stop()
 		}
-		m.statusMessages = append(m.statusMessages, "✓ Sandbox setup complete!")
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("✓ Sandbox setup complete! (took %s)", m.stopwatch.View()))
+
 		m.sshURL = msg.sshURL
 		m.sshHost = msg.sshHost
 
 		// Wait a moment to show success, then navigate to VM info view
-		return m, func() tea.Msg {
-			time.Sleep(1 * time.Second)
-			return navigateToVMInfoMsg{
-				sandbox:         m.sandbox,
-				dataset:         m.dataset,
-				sshURL:          msg.sshURL,
-				sshHost:         msg.sshHost,
-				fromExistingSim: m.artifactID != nil, // True if launched with artifact ID
-				artifactID:      m.artifactID,
-				version:         m.version,
-			}
-		}
+		return m, tea.Batch(
+			m.stopwatch.Stop(),
+			func() tea.Msg {
+				time.Sleep(1 * time.Second)
+				return navigateToVMInfoMsg{
+					sandbox:         m.sandbox,
+					dataset:         m.dataset,
+					sshURL:          msg.sshURL,
+					sshHost:         msg.sshHost,
+					fromExistingSim: m.artifactID != nil, // True if launched with artifact ID
+					artifactID:      m.artifactID,
+					version:         m.version,
+				}
+			},
+		)
+
+	case TickMsg, StartStopMsg, ResetMsg:
+		// Handle stopwatch messages
+		var cmd tea.Cmd
+		m.stopwatch, cmd = m.stopwatch.Update(msg)
+		return m, cmd
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -575,6 +588,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		m.statusChan = make(chan string, 10)
 
 		cmds = append(cmds, m.spinner.Tick)
+		cmds = append(cmds, m.stopwatch.Start())
 		cmds = append(cmds, createSandbox(m.client, datasetConfig, datasetVal, m.statusChan, nil))
 		cmds = append(cmds, waitForStatusUpdates(m.statusChan))
 	}
@@ -601,6 +615,15 @@ func (m VMConfigModel) View() string {
 			MarginLeft(4).
 			Width(m.width - 8). // Allow wrapping with margin
 			MaxWidth(m.width - 8)
+
+		// Show elapsed time if stopwatch is running
+		if m.stopwatch.Running() {
+			timeStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#7D56F4")).
+				MarginLeft(2).
+				Bold(true)
+			content += timeStyle.Render(fmt.Sprintf("  ⏱  %s elapsed", m.stopwatch.View())) + "\n\n"
+		}
 
 		// Show all status messages with spinner on the latest one
 		for i, msg := range m.statusMessages {
