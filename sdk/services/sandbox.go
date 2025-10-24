@@ -454,3 +454,39 @@ func (s *SandboxService) List(ctx context.Context) ([]*models.Sandbox, error) {
 
 	return sandboxes, nil
 }
+
+// SetupRootPassword sets up root password for SSH access
+func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, password string) error {
+	fmt.Printf("DEBUG: SetupRootPassword called with publicID=%s, password=%s\n", publicID, password)
+
+	payload := map[string]interface{}{
+		"root_password": password,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	fmt.Printf("DEBUG: Request body: %s\n", string(body))
+
+	req, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/public-build/vm/%s/setup-root-password", publicID), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	fmt.Printf("DEBUG: SetupRootPassword response (status %d): %s\n", resp.StatusCode, string(bodyBytes))
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}

@@ -25,22 +25,24 @@ var (
 )
 
 type VMInfoModel struct {
-	client         *plato.PlatoClient
-	sandbox        *models.Sandbox
-	dataset        string
-	lg             *lipgloss.Renderer
-	width          int
-	actionList     list.Model
-	settingUp      bool
-	setupComplete  bool
-	spinner        spinner.Model
-	statusMessages []string
-	statusChan     chan string
-	sshURL         string
-	sshHost        string
-	viewport       viewport.Model
-	viewportReady  bool
-	heartbeatStop  chan struct{}
+	client            *plato.PlatoClient
+	sandbox           *models.Sandbox
+	dataset           string
+	lg                *lipgloss.Renderer
+	width             int
+	actionList        list.Model
+	settingUp         bool
+	setupComplete     bool
+	spinner           spinner.Model
+	statusMessages    []string
+	statusChan        chan string
+	sshURL            string
+	sshHost           string
+	viewport          viewport.Model
+	viewportReady     bool
+	heartbeatStop     chan struct{}
+	fromExistingSim   bool
+	rootPasswordSetup bool
 }
 
 type vmAction struct {
@@ -57,7 +59,11 @@ type sandboxSetupMsg struct {
 	err    error
 }
 
-func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string) VMInfoModel {
+type rootPasswordSetupMsg struct {
+	err error
+}
+
+func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -65,9 +71,17 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	items := []list.Item{
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
 		vmAction{title: "Connect via SSH", description: "Open SSH connection to VM"},
+	}
+
+	// Add "Setup Root SSH" action if launched from existing simulator
+	if fromExistingSim {
+		items = append(items, vmAction{title: "Setup Root SSH", description: "Configure root password for SSH access"})
+	}
+
+	items = append(items,
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
-	}
+	)
 
 	l := list.New(items, list.NewDefaultDelegate(), 40, 18)
 	l.Title = "Actions"
@@ -84,19 +98,21 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		PaddingLeft(1)
 
 	return VMInfoModel{
-		client:         client,
-		sandbox:        sandbox,
-		dataset:        dataset,
-		lg:             lipgloss.DefaultRenderer(),
-		width:          vmInfoMaxWidth,
-		actionList:     l,
-		settingUp:      false,
-		setupComplete:  false,
-		spinner:        s,
-		statusMessages: []string{},
-		viewport:       vp,
-		viewportReady:  true,
-		heartbeatStop:  make(chan struct{}),
+		client:            client,
+		sandbox:           sandbox,
+		dataset:           dataset,
+		lg:                lipgloss.DefaultRenderer(),
+		width:             vmInfoMaxWidth,
+		actionList:        l,
+		settingUp:         false,
+		setupComplete:     false,
+		spinner:           s,
+		statusMessages:    []string{},
+		viewport:          vp,
+		viewportReady:     true,
+		heartbeatStop:     make(chan struct{}),
+		fromExistingSim:   fromExistingSim,
+		rootPasswordSetup: false,
 	}
 }
 
@@ -203,6 +219,28 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case rootPasswordSetupMsg:
+		fmt.Printf("DEBUG: rootPasswordSetupMsg received, err: %v\n", msg.err)
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Root password setup failed: %v", msg.err))
+		} else {
+			m.rootPasswordSetup = true
+			// Update SSH config with password
+			if m.sshHost != "" {
+				fmt.Printf("DEBUG: Updating SSH config for host: %s\n", m.sshHost)
+				if err := updateSSHConfigPassword(m.sshHost, "password"); err != nil {
+					fmt.Printf("DEBUG: SSH config update error: %v\n", err)
+					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config: %v", err))
+				} else {
+					fmt.Printf("DEBUG: SSH config updated successfully\n")
+					m.statusMessages = append(m.statusMessages, "✓ Root SSH password configured!")
+				}
+			} else {
+				m.statusMessages = append(m.statusMessages, "✓ Root password set!")
+			}
+		}
+		return m, nil
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -284,6 +322,22 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	return rendered
 }
 
+func setupRootPassword(client *plato.PlatoClient, publicID string) tea.Cmd {
+	return func() tea.Msg {
+		fmt.Printf("DEBUG: setupRootPassword called for publicID: %s\n", publicID)
+		ctx := context.Background()
+
+		err := client.Sandbox.SetupRootPassword(ctx, publicID, "password")
+		if err != nil {
+			fmt.Printf("DEBUG: SetupRootPassword error: %v\n", err)
+			return rootPasswordSetupMsg{err: err}
+		}
+
+		fmt.Printf("DEBUG: SetupRootPassword success\n")
+		return rootPasswordSetupMsg{err: nil}
+	}
+}
+
 func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	switch action.title {
 	case "Start Plato Worker":
@@ -292,6 +346,14 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 	case "Connect via SSH":
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
+	case "Setup Root SSH":
+		fmt.Printf("DEBUG: Setup Root SSH action triggered\n")
+		if m.rootPasswordSetup {
+			m.statusMessages = append(m.statusMessages, "Root password already configured")
+			return m, nil
+		}
+		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
+		return m, setupRootPassword(m.client, m.sandbox.PublicID)
 	case "Snapshot VM":
 		// TODO: Implement snapshot
 		m.statusMessages = append(m.statusMessages, "Snapshot not implemented yet")
