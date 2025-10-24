@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -70,7 +71,8 @@ type VMInfoModel struct {
 	rootPasswordSetup    bool
 	proxytunnelProcesses []*exec.Cmd
 	proxytunnelMappings  []proxytunnelMapping
-	config               *models.PlatoConfig
+	config            *models.PlatoConfig
+	lastPushedBranch  string // Tracks the last branch pushed to hub
 }
 
 type vmAction struct {
@@ -112,6 +114,13 @@ type cursorOpenedMsg struct {
 	err error
 }
 
+type hubPushMsg struct {
+	err        error
+	repoURL    string
+	cloneCmd   string
+	branchName string
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -122,6 +131,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		vmAction{title: "Connect via SSH", description: "Open SSH connection to VM"},
 		vmAction{title: "Connect to Cursor", description: "Open Cursor editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
+		vmAction{title: "Push to Plato Hub", description: "Push code to hub.plato.so repository"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
 	}
@@ -253,9 +263,14 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, "✓ Snapshot created successfully!")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Artifact ID: %s", msg.response.ArtifactID))
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
+			if msg.response.GitHash != "" {
+				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Git Hash: %s", msg.response.GitHash))
+			}
 			if msg.response.S3URI != "" {
 				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3URI))
 			}
+			// Clear the last pushed branch since it's been merged
+			m.lastPushedBranch = ""
 		}
 		// Update viewport content and scroll to bottom
 		renderedMarkdown := m.renderVMInfoMarkdown()
@@ -282,6 +297,24 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 					return statusUpdateMsg{message: "✓ Worker setup complete!"}
 				},
 			)
+		}
+		// Update viewport content and scroll to bottom
+		renderedMarkdown := m.renderVMInfoMarkdown()
+		m.viewport.SetContent(renderedMarkdown)
+		m.viewport.GotoBottom()
+		return m, nil
+
+	case hubPushMsg:
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Push to hub failed: %v", msg.err))
+		} else {
+			m.lastPushedBranch = msg.branchName
+			m.statusMessages = append(m.statusMessages, "✓ Successfully pushed to Plato Hub!")
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Repository: %s", msg.repoURL))
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Branch: %s", msg.branchName))
+			m.statusMessages = append(m.statusMessages, "")
+			m.statusMessages = append(m.statusMessages, "💡 To pull code in your VM, SSH in and run:")
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   %s", msg.cloneCmd))
 		}
 		// Update viewport content and scroll to bottom
 		renderedMarkdown := m.renderVMInfoMarkdown()
@@ -385,6 +418,41 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 			}
 			md.WriteString("\n")
 		}
+
+		// Show hub branch info if available
+		if m.lastPushedBranch != "" {
+			md.WriteString("---\n\n")
+			md.WriteString("## Hub Branch\n\n")
+			md.WriteString(fmt.Sprintf("**Last Pushed Branch:** `%s`\n\n", m.lastPushedBranch))
+
+			// Load config to get service name for the clone command
+			if config, err := LoadPlatoConfig(); err == nil && config.Service != "" {
+				// Get repo info and credentials from Gitea
+				ctx := context.Background()
+
+				// Get credentials first
+				if creds, err := m.client.Gitea.GetCredentials(ctx); err == nil {
+					if simulators, err := m.client.Gitea.ListSimulators(ctx); err == nil {
+						for _, sim := range simulators {
+							if strings.EqualFold(sim.Name, config.Service) && sim.HasRepo {
+								if repo, err := m.client.Gitea.GetSimulatorRepository(ctx, sim.ID); err == nil {
+									// Build authenticated clone URL
+									cloneURL := repo.CloneURL
+									if strings.HasPrefix(cloneURL, "https://") {
+										cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+									}
+
+									md.WriteString("**Clone Command (with auth):**\n\n")
+									md.WriteString(fmt.Sprintf("```bash\ngit clone -b %s %s\n```\n\n", m.lastPushedBranch, cloneURL))
+									md.WriteString("_This branch will be merged into main when you snapshot._\n\n")
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Show recent status messages if any
@@ -419,7 +487,7 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	return rendered
 }
 
-func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string) tea.Cmd {
+func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string, branchName string) tea.Cmd {
 	return func() tea.Msg {
 		// Step 1: Perform pre-snapshot cleanup
 		logDebug("Starting pre-snapshot cleanup for service: %s", service)
@@ -438,9 +506,25 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
+		var gitHash *string
+
+		// If a branch was pushed, merge it to main and get the commit hash
+		if branchName != "" {
+			hash, err := mergeHubBranchToMain(client, service, branchName)
+			if err != nil {
+				logErr := logErrorToFile("plato_error.log", fmt.Sprintf("Failed to merge branch to main: %v", err))
+				if logErr != nil {
+					fmt.Printf("Failed to write error log: %v\n", logErr)
+				}
+				return snapshotCreatedMsg{err: fmt.Errorf("failed to merge branch to main: %w", err), response: nil}
+			}
+			gitHash = &hash
+		}
+
 		req := models.CreateSnapshotRequest{
 			Service: service,
 			Dataset: dataset,
+			GitHash: gitHash,
 		}
 
 		logDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
@@ -496,11 +580,12 @@ func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, s
 	}
 }
 
-func startWorker(client *plato.PlatoClient, publicID string, dataset string, datasetConfig models.SimConfigDataset) tea.Cmd {
+func startWorker(client *plato.PlatoClient, publicID string, service string, dataset string, datasetConfig models.SimConfigDataset) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
 		req := models.StartWorkerRequest{
+			Service:            service,
 			Dataset:            dataset,
 			PlatoDatasetConfig: datasetConfig,
 			Timeout:            600, // 10 minutes timeout
@@ -518,6 +603,300 @@ func startWorker(client *plato.PlatoClient, publicID string, dataset string, dat
 
 		return workerStartedMsg{err: nil, response: resp}
 	}
+}
+
+// mergeHubBranchToMain merges a branch into main in the hub repository and returns the merge commit hash
+func mergeHubBranchToMain(client *plato.PlatoClient, serviceName string, branchName string) (string, error) {
+	ctx := context.Background()
+
+	// Get Gitea credentials
+	creds, err := client.Gitea.GetCredentials(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	// Find simulator by service name
+	simulators, err := client.Gitea.ListSimulators(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to list simulators: %w", err)
+	}
+
+	var simulator *models.GiteaSimulator
+	for i := range simulators {
+		if strings.EqualFold(simulators[i].Name, serviceName) {
+			simulator = &simulators[i]
+			break
+		}
+	}
+
+	if simulator == nil {
+		return "", fmt.Errorf("simulator '%s' not found in hub", serviceName)
+	}
+
+	// Get repository
+	repo, err := client.Gitea.GetSimulatorRepository(ctx, simulator.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get repository: %w", err)
+	}
+
+	// Build authenticated clone URL
+	cloneURL := repo.CloneURL
+	if strings.HasPrefix(cloneURL, "https://") {
+		cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+	}
+
+	// Clone repo to temp directory
+	tempDir, err := os.MkdirTemp("", "plato-merge-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	tempRepo := filepath.Join(tempDir, "repo")
+	cloneCmd := exec.Command("git", "clone", cloneURL, tempRepo)
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("failed to clone repo: %w\nOutput: %s", err, string(output))
+	}
+
+	// Checkout main branch
+	gitCheckoutMain := exec.Command("git", "checkout", "main")
+	gitCheckoutMain.Dir = tempRepo
+	if output, err := gitCheckoutMain.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("failed to checkout main: %w\nOutput: %s", err, string(output))
+	}
+
+	// Merge the branch into main
+	gitMerge := exec.Command("git", "merge", "--no-ff", "-m", fmt.Sprintf("Merge %s into main for snapshot", branchName), branchName)
+	gitMerge.Dir = tempRepo
+	if output, err := gitMerge.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("failed to merge branch: %w\nOutput: %s", err, string(output))
+	}
+
+	// Get the current commit hash
+	gitRevParse := exec.Command("git", "rev-parse", "HEAD")
+	gitRevParse.Dir = tempRepo
+	hashOutput, err := gitRevParse.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get commit hash: %w", err)
+	}
+	commitHash := strings.TrimSpace(string(hashOutput))
+
+	// Push main to remote
+	gitPush := exec.Command("git", "push", "origin", "main")
+	gitPush.Dir = tempRepo
+	if output, err := gitPush.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("failed to push main: %w\nOutput: %s", err, string(output))
+	}
+
+	return commitHash, nil
+}
+
+func pushToHub(client *plato.PlatoClient, serviceName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Get Gitea credentials
+		creds, err := client.Gitea.GetCredentials(ctx)
+		if err != nil {
+			logErrorToFile("plato_error.log", fmt.Sprintf("Failed to get Gitea credentials: %v", err))
+			return hubPushMsg{err: fmt.Errorf("failed to get credentials: %w", err)}
+		}
+
+		// Find simulator by service name
+		simulators, err := client.Gitea.ListSimulators(ctx)
+		if err != nil {
+			logErrorToFile("plato_error.log", fmt.Sprintf("Failed to list simulators: %v", err))
+			return hubPushMsg{err: fmt.Errorf("failed to list simulators: %w", err)}
+		}
+
+		var simulator *models.GiteaSimulator
+		for i := range simulators {
+			if strings.EqualFold(simulators[i].Name, serviceName) {
+				simulator = &simulators[i]
+				break
+			}
+		}
+
+		if simulator == nil {
+			return hubPushMsg{err: fmt.Errorf("simulator '%s' not found in hub", serviceName)}
+		}
+
+		// Get or create repository
+		var repo *models.GiteaRepository
+		if simulator.HasRepo {
+			repo, err = client.Gitea.GetSimulatorRepository(ctx, simulator.ID)
+			if err != nil {
+				return hubPushMsg{err: fmt.Errorf("failed to get repository: %w", err)}
+			}
+		} else {
+			repo, err = client.Gitea.CreateSimulatorRepository(ctx, simulator.ID)
+			if err != nil {
+				return hubPushMsg{err: fmt.Errorf("failed to create repository: %w", err)}
+			}
+		}
+
+		// Build authenticated clone URL
+		cloneURL := repo.CloneURL
+		if strings.HasPrefix(cloneURL, "https://") {
+			cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+		}
+
+		// Clone repo to temp directory
+		tempDir, err := os.MkdirTemp("", "plato-hub-*")
+		if err != nil {
+			return hubPushMsg{err: fmt.Errorf("failed to create temp dir: %w", err)}
+		}
+		defer os.RemoveAll(tempDir)
+
+		tempRepo := filepath.Join(tempDir, "repo")
+		cloneCmd := exec.Command("git", "clone", cloneURL, tempRepo)
+		cloneOutput, err := cloneCmd.CombinedOutput()
+		if err != nil {
+			return hubPushMsg{err: fmt.Errorf("failed to clone repo: %w\nOutput: %s", err, string(cloneOutput))}
+		}
+
+		// Get current directory
+		currentDir, err := os.Getwd()
+		if err != nil {
+			return hubPushMsg{err: fmt.Errorf("failed to get current directory: %w", err)}
+		}
+
+		// Generate branch name with timestamp
+		branchName := fmt.Sprintf("workspace-%d", time.Now().Unix())
+
+		// Create and checkout new branch
+		gitCheckout := exec.Command("git", "checkout", "-b", branchName)
+		gitCheckout.Dir = tempRepo
+		if output, err := gitCheckout.CombinedOutput(); err != nil {
+			return hubPushMsg{err: fmt.Errorf("git checkout failed: %w\nOutput: %s", err, string(output))}
+		}
+
+		// Copy files respecting .gitignore
+		if err := copyFilesRespectingGitignore(currentDir, tempRepo); err != nil {
+			return hubPushMsg{err: fmt.Errorf("failed to copy files: %w", err)}
+		}
+
+		// Commit and push
+		gitAdd := exec.Command("git", "add", ".")
+		gitAdd.Dir = tempRepo
+		if output, err := gitAdd.CombinedOutput(); err != nil {
+			return hubPushMsg{err: fmt.Errorf("git add failed: %w\nOutput: %s", err, string(output))}
+		}
+
+		// Check if there are changes
+		gitStatus := exec.Command("git", "status", "--porcelain")
+		gitStatus.Dir = tempRepo
+		statusOutput, err := gitStatus.Output()
+		if err != nil {
+			return hubPushMsg{err: fmt.Errorf("git status failed: %w", err)}
+		}
+
+		if len(strings.TrimSpace(string(statusOutput))) == 0 {
+			// No changes to push - still return authenticated clone URL
+			authenticatedCloneURL := repo.CloneURL
+			if strings.HasPrefix(authenticatedCloneURL, "https://") {
+				authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+			}
+			return hubPushMsg{err: nil, repoURL: repo.CloneURL, cloneCmd: fmt.Sprintf("git clone -b %s %s", branchName, authenticatedCloneURL), branchName: branchName}
+		}
+
+		// Commit changes
+		gitCommit := exec.Command("git", "commit", "-m", fmt.Sprintf("Sync from local workspace"))
+		gitCommit.Dir = tempRepo
+		if output, err := gitCommit.CombinedOutput(); err != nil {
+			return hubPushMsg{err: fmt.Errorf("git commit failed: %w\nOutput: %s", err, string(output))}
+		}
+
+		// Push to remote branch
+		gitPush := exec.Command("git", "push", "-u", "origin", branchName)
+		gitPush.Dir = tempRepo
+		if output, err := gitPush.CombinedOutput(); err != nil {
+			return hubPushMsg{err: fmt.Errorf("git push failed: %w\nOutput: %s", err, string(output))}
+		}
+
+		// Build authenticated clone URL for the user
+		authenticatedCloneURL := repo.CloneURL
+		if strings.HasPrefix(authenticatedCloneURL, "https://") {
+			authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+		}
+
+		// Return success with authenticated clone command
+		cloneCommand := fmt.Sprintf("git clone -b %s %s", branchName, authenticatedCloneURL)
+		return hubPushMsg{err: nil, repoURL: repo.CloneURL, cloneCmd: cloneCommand, branchName: branchName}
+	}
+}
+
+// copyFilesRespectingGitignore copies files from src to dst respecting .gitignore
+func copyFilesRespectingGitignore(src, dst string) error {
+	// First copy .gitignore if it exists
+	gitignoreSrc := filepath.Join(src, ".gitignore")
+	if _, err := os.Stat(gitignoreSrc); err == nil {
+		gitignoreDst := filepath.Join(dst, ".gitignore")
+		if _, err := os.Stat(gitignoreDst); os.IsNotExist(err) {
+			input, err := os.ReadFile(gitignoreSrc)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(gitignoreDst, input, 0644); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Helper to check if path should be copied
+	shouldCopy := func(path string) bool {
+		baseName := filepath.Base(path)
+		// Skip .git directories and .plato-hub.json
+		if strings.HasPrefix(baseName, ".git") || baseName == ".plato-hub.json" {
+			return false
+		}
+
+		// Use git check-ignore to respect .gitignore rules
+		cmd := exec.Command("git", "check-ignore", "-q", path)
+		cmd.Dir = src
+		err := cmd.Run()
+		// git check-ignore returns 0 if path IS ignored, 1 if NOT ignored
+		return err != nil // Return true if NOT ignored
+	}
+
+	// Walk through source directory
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Get relative path
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		// Skip root directory
+		if relPath == "." {
+			return nil
+		}
+
+		// Check if should copy
+		if !shouldCopy(path) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		// Copy file
+		input, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dstPath, input, info.Mode())
+	})
 }
 
 // findFreePort finds an available port on the local machine
@@ -652,8 +1031,17 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			return m, nil
 		}
 
-		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting Plato worker for dataset: %s", m.dataset))
-		return m, startWorker(m.client, m.sandbox.PublicID, m.dataset, datasetConfig)
+		// Get service from config
+		service := config.Service
+		if service == "" {
+			errMsg := "❌ Service not specified in plato-config.yml"
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting Plato worker for service: %s, dataset: %s", service, m.dataset))
+		return m, startWorker(m.client, m.sandbox.PublicID, service, m.dataset, datasetConfig)
 	case "Connect via SSH":
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
@@ -670,6 +1058,27 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		return m, func() tea.Msg {
 			return navigateToProxytunnelPortMsg{publicID: m.sandbox.PublicID}
 		}
+	case "Push to Plato Hub":
+		// Load the config to get service name
+		config, err := LoadPlatoConfig()
+		if err != nil {
+			errMsg := fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err)
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+
+		// Get service from config
+		service := config.Service
+		if service == "" {
+			errMsg := "❌ Service not specified in plato-config.yml"
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Pushing code to Plato Hub for service: %s", service))
+		return m, pushToHub(m.client, service)
 	case "Snapshot VM":
 		// Load the config to get service and dataset
 		config, err := LoadPlatoConfig()
@@ -710,9 +1119,12 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		if m.version != nil {
 			infoMsg += fmt.Sprintf(", version: %s", *m.version)
 		}
+		if m.lastPushedBranch != "" {
+			infoMsg += fmt.Sprintf(", merging branch: %s", m.lastPushedBranch)
+		}
 		m.statusMessages = append(m.statusMessages, infoMsg)
 
-		return m, createSnapshotWithCleanup(m.client, m.sandbox.PublicID, m.sandbox.JobGroupID, service, datasetPtr)
+		return m, createSnapshotWithCleanup(m.client, m.sandbox.PublicID, m.sandbox.JobGroupID, service, datasetPtr, m.lastPushedBranch)
 	case "Close VM":
 		// Stop heartbeat goroutine (only if not already stopped)
 		if !m.heartbeatStopped {

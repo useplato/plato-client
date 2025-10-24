@@ -18,6 +18,7 @@ type ClientOption func(*PlatoClient)
 // After creation, the client is immutable and safe for concurrent use
 type PlatoClient struct {
 	baseURL    string
+	hubBaseURL string // Separate base URL for Gitea/Hub operations
 	apiKey     string
 	httpClient *http.Client
 
@@ -36,6 +37,7 @@ type PlatoClient struct {
 	Organization *services.OrganizationService
 	Simulator    *services.SimulatorService
 	Environment  *services.EnvironmentService
+	Gitea        *services.GiteaService
 }
 
 // RetryConfig configures retry behavior for failed requests
@@ -52,6 +54,7 @@ func NewClient(apiKey string, opts ...ClientOption) *PlatoClient {
 
 	client := &PlatoClient{
 		baseURL:      "https://plato.so/api",
+		hubBaseURL:   "https://plato.so/api", // Default hub to same as base
 		apiKey:       apiKey,
 		headers:      make(map[string]string),
 		featureFlags: make(map[string]interface{}),
@@ -75,6 +78,7 @@ func NewClient(apiKey string, opts ...ClientOption) *PlatoClient {
 	client.Organization = services.NewOrganizationService(client)
 	client.Simulator = services.NewSimulatorService(client)
 	client.Environment = services.NewEnvironmentService(client)
+	client.Gitea = services.NewGiteaService(client)
 
 	return client
 }
@@ -83,6 +87,13 @@ func NewClient(apiKey string, opts ...ClientOption) *PlatoClient {
 func WithBaseURL(url string) ClientOption {
 	return func(c *PlatoClient) {
 		c.baseURL = url
+	}
+}
+
+// WithHubBaseURL sets a custom base URL for hub/gitea operations
+func WithHubBaseURL(url string) ClientOption {
+	return func(c *PlatoClient) {
+		c.hubBaseURL = url
 	}
 }
 
@@ -166,9 +177,38 @@ func (c *PlatoClient) GetBaseURL() string {
 	return c.baseURL
 }
 
+// GetHubBaseURL returns the configured hub base URL
+func (c *PlatoClient) GetHubBaseURL() string {
+	return c.hubBaseURL
+}
+
 // NewRequest creates a new HTTP request with auth headers and custom headers
 func (c *PlatoClient) NewRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
 	url := fmt.Sprintf("%s%s", c.baseURL, path)
+
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set auth header
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	// Set default headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Set custom headers
+	for key, value := range c.headers {
+		req.Header.Set(key, value)
+	}
+
+	return req, nil
+}
+
+// NewHubRequest creates a new HTTP request for hub/gitea operations with auth headers and custom headers
+func (c *PlatoClient) NewHubRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	url := fmt.Sprintf("%s%s", c.hubBaseURL, path)
 
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {

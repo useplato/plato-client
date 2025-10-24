@@ -21,11 +21,18 @@ func NewConfigModel() ConfigModel {
 
 	apiKey := os.Getenv("PLATO_API_KEY")
 	baseURL := os.Getenv("PLATO_BASE_URL")
+	hubBaseURL := os.Getenv("PLATO_HUB_API_URL")
 
 	var opts []plato.ClientOption
 	if baseURL != "" {
 		opts = append(opts, plato.WithBaseURL(baseURL))
 	}
+
+	// Hub API URL defaults to https://plato.so/api if not explicitly set
+	if hubBaseURL == "" {
+		hubBaseURL = "https://plato.so/api"
+	}
+	opts = append(opts, plato.WithHubBaseURL(hubBaseURL))
 
 	client := plato.NewClient(apiKey, opts...)
 
