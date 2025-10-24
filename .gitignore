@@ -63,3 +63,5 @@ python/screenshot_context_2.png
 
 *.csv
 *.out
+sdk/cmd/plato/plato
+sdk/cmd/plato/plato_error.log
