@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,8 @@ import (
 
 type VMConfigModel struct {
 	client         *plato.PlatoClient
+	simulator      *models.SimulatorListItem // Optional: for launching from existing sim
+	artifactID     *string                   // Optional: for launching with artifact
 	form           *huh.Form
 	lg             *lipgloss.Renderer
 	creating       bool
@@ -34,6 +37,7 @@ type VMConfigModel struct {
 	datasetConfig  models.SimConfigDataset
 	sshURL         string
 	sshHost        string
+	skipForm       bool // Skip form and use defaults when launching from simulator
 }
 
 var (
@@ -55,19 +59,25 @@ type statusUpdateMsg struct {
 	message string
 }
 
-func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, dataset string, statusChan chan<- string) tea.Cmd {
+func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, dataset string, statusChan chan<- string, artifactID *string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
 		// Create the sandbox
 		statusChan <- "Creating VM via API..."
-		sandbox, err := client.Sandbox.Create(ctx, config, dataset, "sandbox", nil)
+		// Use simulator name as alias if available in metadata, otherwise "sandbox"
+		alias := "sandbox"
+		if config.Metadata.Name != "" && config.Metadata.Name != "Plato Simulator" {
+			alias = config.Metadata.Name
+		}
+
+		sandbox, err := client.Sandbox.Create(ctx, config, dataset, alias, artifactID)
 		if err != nil {
 			close(statusChan)
 			return sandboxCreatedMsg{sandbox: nil, err: err}
 		}
 
-		statusChan <- fmt.Sprintf("VM created (ID: %s)", sandbox.PublicID[:8])
+		statusChan <- fmt.Sprintf("VM created (ID: %s)", sandbox.PublicID)
 		statusChan <- "Monitoring VM provisioning..."
 
 		// Monitor the operation until completion using the correlation_id from the API
@@ -80,6 +90,56 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 		// Don't send another success message here - MonitorOperation already sent events
 		// Don't close statusChan here - we'll reuse it for setup
 		return sandboxCreatedMsg{sandbox: sandbox, err: nil}
+	}
+}
+
+func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, statusChan chan<- string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		statusChan <- "Configuring SSH access..."
+
+		// Choose a random port between 2200 and 2299
+		localPort := rand.Intn(100) + 2200
+
+		// Setup SSH config using PublicID
+		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID)
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:  "",
+				sshHost: "",
+				err:     fmt.Errorf("SSH config setup failed: %w", err),
+			}
+		}
+
+		statusChan <- fmt.Sprintf("SSH configured: ssh %s", sshHost)
+
+		// Setup root password
+		statusChan <- "Setting up root password..."
+		err = client.Sandbox.SetupRootPassword(ctx, sandbox.PublicID, "password")
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:  "",
+				sshHost: "",
+				err:     fmt.Errorf("root password setup failed: %w", err),
+			}
+		}
+
+		statusChan <- "Root password configured"
+
+		// Generate SSH connection info
+		sshURL := fmt.Sprintf("root@%s", sandbox.PublicID)
+
+		statusChan <- "✓ VM ready!"
+		close(statusChan)
+
+		return sandboxSetupCompleteMsg{
+			sshURL:  sshURL,
+			sshHost: sshHost,
+			err:     nil,
+		}
 	}
 }
 
@@ -121,7 +181,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		// Choose a random port between 2200 and 2299
 		localPort := rand.Intn(100) + 2200
 
-		// Setup SSH config and get the hostname
+		// Setup SSH config using PublicID
 		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID)
 		if err != nil {
 			close(statusChan)
@@ -133,7 +193,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		}
 
 		// Generate SSH connection info
-		sshURL := fmt.Sprintf("root@%s", sandbox.JobGroupID)
+		sshURL := fmt.Sprintf("root@%s", sandbox.PublicID)
 
 		statusChan <- fmt.Sprintf("SSH configured: ssh %s", sshHost)
 		close(statusChan)
@@ -162,25 +222,34 @@ func waitForStatusUpdates(statusChan <-chan string) tea.Cmd {
 	}
 }
 
-func listenForStatusUpdates() tea.Cmd {
-	return func() tea.Msg {
-		time.Sleep(100 * time.Millisecond)
-		return statusUpdateMsg{message: "Submitting VM creation request..."}
-	}
-}
-
-func NewVMConfigModel(client *plato.PlatoClient) VMConfigModel {
+func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorListItem, artifactID *string) VMConfigModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
+	// Skip form if simulator is provided
+	skipForm := simulator != nil
+
 	m := VMConfigModel{
 		client:         client,
+		simulator:      simulator,
+		artifactID:     artifactID,
 		width:          80,
 		spinner:        s,
 		statusMessages: []string{},
+		skipForm:       skipForm,
+		dataset:        "base", // Default dataset
 	}
 	m.lg = lipgloss.DefaultRenderer()
+
+	// If skipping form, set up for immediate creation
+	if skipForm {
+		m.creating = true
+		m.started = true
+		m.statusMessages = []string{fmt.Sprintf("Starting VM creation for %s...", simulator.Name)}
+		m.statusChan = make(chan string, 10)
+		m.datasetConfig = m.buildConfig(1, 512, 10240)
+	}
 
 	theme := huh.ThemeCharm()
 	theme.Focused.Base = theme.Focused.Base.BorderForeground(vmMagenta)
@@ -282,7 +351,54 @@ func NewVMConfigModel(client *plato.PlatoClient) VMConfigModel {
 }
 
 func (m VMConfigModel) Init() tea.Cmd {
+	// If skipping form (launching from simulator), immediately start creation
+	if m.skipForm {
+		return tea.Batch(
+			m.spinner.Tick,
+			createSandbox(m.client, m.datasetConfig, m.dataset, m.statusChan, m.artifactID),
+			waitForStatusUpdates(m.statusChan),
+		)
+	}
 	return m.form.Init()
+}
+
+// buildConfig creates a SimConfigDataset with the given parameters
+func (m VMConfigModel) buildConfig(cpu, memory, disk int) models.SimConfigDataset {
+	var name, description string
+	if m.simulator != nil {
+		name = m.simulator.Name
+		if m.simulator.Description != nil {
+			description = *m.simulator.Description
+		}
+	} else {
+		name = "Plato Simulator"
+		description = "A Plato simulator environment"
+	}
+
+	compute := models.SimConfigCompute{
+		CPUs:               cpu,
+		Memory:             memory,
+		Disk:               disk,
+		AppPort:            8080,
+		PlatoMessagingPort: 7000,
+	}
+
+	metadata := models.SimConfigMetadata{
+		Favicon:       "https://plato.so/favicon.ico",
+		Name:          name,
+		Description:   description,
+		SourceCodeURL: "https://github.com/useplato/plato",
+		StartURL:      "http://localhost:8080",
+		License:       "MIT",
+		Variables:     []map[string]string{{"name": "PLATO_API_KEY", "value": "your-api-key"}},
+	}
+
+	return models.SimConfigDataset{
+		Compute:   compute,
+		Metadata:  metadata,
+		Services:  map[string]*models.SimConfigService{},
+		Listeners: map[string]*models.SimConfigListener{},
+	}
 }
 
 func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
@@ -311,7 +427,17 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		// Don't add another success message - SSE events already showed completion
 		m.sandbox = msg.sandbox
 
-		// Automatically start sandbox setup
+		// If artifact ID is present, skip sandbox setup and just configure SSH + root password
+		if m.artifactID != nil {
+			m.settingUp = true
+			m.statusChan = make(chan string, 10)
+			return m, tea.Batch(
+				setupSSHAndRootPasswordForArtifact(m.client, msg.sandbox, m.statusChan),
+				waitForStatusUpdates(m.statusChan),
+			)
+		}
+
+		// For blank VMs, run full sandbox setup
 		m.settingUp = true
 		m.statusChan = make(chan string, 10)
 		return m, tea.Batch(
@@ -324,6 +450,13 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		if msg.err != nil {
 			// Show error inline with other status messages instead of switching to error view
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Sandbox setup failed: %v", msg.err))
+			// write error to file
+			errFile, err := os.Create("setup_error.txt")
+			if err != nil {
+				fmt.Println("Error creating error file:", err)
+			}
+			defer errFile.Close()
+			errFile.WriteString(fmt.Sprintf("Sandbox setup failed: %v", msg.err))
 			return m, nil
 		}
 		m.statusMessages = append(m.statusMessages, "✓ Sandbox setup complete!")
@@ -338,7 +471,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 				dataset:         m.dataset,
 				sshURL:          msg.sshURL,
 				sshHost:         msg.sshHost,
-				fromExistingSim: false, // Blank VMs are not from existing sims
+				fromExistingSim: m.artifactID != nil, // True if launched with artifact ID
 			}
 		}
 
@@ -399,31 +532,8 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		memory, _ := strconv.Atoi(memVal)
 		disk, _ := strconv.Atoi(diskVal)
 
-		// Build SimConfigDataset
-		compute := models.SimConfigCompute{
-			CPUs:               cpu,
-			Memory:             memory,
-			Disk:               disk,
-			AppPort:            8080,
-			PlatoMessagingPort: 7000,
-		}
-
-		metadata := models.SimConfigMetadata{
-			Favicon:       "https://plato.so/favicon.ico",
-			Name:          "Plato Simulator",
-			Description:   "A Plato simulator environment",
-			SourceCodeURL: "https://github.com/useplato/plato",
-			StartURL:      "http://localhost:8080",
-			License:       "MIT",
-			Variables:     []map[string]string{{"name": "PLATO_API_KEY", "value": "your-api-key"}},
-		}
-
-		datasetConfig := models.SimConfigDataset{
-			Compute:   compute,
-			Metadata:  metadata,
-			Services:  map[string]*models.SimConfigService{},
-			Listeners: map[string]*models.SimConfigListener{},
-		}
+		// Build SimConfigDataset using helper method
+		datasetConfig := m.buildConfig(cpu, memory, disk)
 
 		// Save config if requested
 		saveConfig := m.form.GetBool("save_config")
@@ -449,7 +559,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		m.statusChan = make(chan string, 10)
 
 		cmds = append(cmds, m.spinner.Tick)
-		cmds = append(cmds, createSandbox(m.client, datasetConfig, datasetVal, m.statusChan))
+		cmds = append(cmds, createSandbox(m.client, datasetConfig, datasetVal, m.statusChan, nil))
 		cmds = append(cmds, waitForStatusUpdates(m.statusChan))
 	}
 
@@ -473,7 +583,8 @@ func (m VMConfigModel) View() string {
 		errorStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B")).
 			MarginLeft(4).
-			Width(m.width - 8) // Allow wrapping with margin
+			Width(m.width - 8). // Allow wrapping with margin
+			MaxWidth(m.width - 8)
 
 		// Show all status messages with spinner on the latest one
 		for i, msg := range m.statusMessages {

@@ -31,7 +31,6 @@ const (
 	ViewSimSelector
 	ViewSimLaunchOptions
 	ViewArtifactID
-	ViewEnvLauncher
 	ViewVMInfo
 )
 
@@ -45,7 +44,6 @@ type Model struct {
 	simSelector      SimSelectorModel
 	simLaunchOptions SimLaunchOptionsModel
 	artifactID       ArtifactIDModel
-	envLauncher      EnvLauncherModel
 	vmInfo           VMInfoModel
 	quitting         bool
 }
@@ -57,7 +55,7 @@ func newModel() Model {
 		mainMenu:         NewMainMenuModel(),
 		config:           config,
 		launch:           NewLaunchModel(config.client),
-		vmConfig:         NewVMConfigModel(config.client),
+		vmConfig:         NewVMConfigModel(config.client, nil, nil), // Blank VM - no simulator, no artifact
 		platoConfig:      NewPlatoConfigModel(config.client),
 		simSelector:      NewSimSelectorModel(config.client),
 		simLaunchOptions: SimLaunchOptionsModel{}, // Will be initialized when simulator is selected
@@ -99,9 +97,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle environment launch with simulator and optional artifact ID
 	if navMsg, ok := msg.(launchEnvironmentMsg); ok {
-		m.envLauncher = NewEnvLauncherModel(m.config.client, navMsg.simulator, navMsg.artifactID)
-		m.currentView = ViewEnvLauncher
-		return m, m.envLauncher.Init()
+		m.vmConfig = NewVMConfigModel(m.config.client, navMsg.simulator, navMsg.artifactID)
+		m.currentView = ViewVMConfig
+		return m, m.vmConfig.Init()
 	}
 
 	// Handle navigation messages
@@ -183,8 +181,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.simLaunchOptions, cmd = m.simLaunchOptions.Update(msg)
 	case ViewArtifactID:
 		m.artifactID, cmd = m.artifactID.Update(msg)
-	case ViewEnvLauncher:
-		m.envLauncher, cmd = m.envLauncher.Update(msg)
 	case ViewVMInfo:
 		m.vmInfo, cmd = m.vmInfo.Update(msg)
 	}
@@ -215,8 +211,6 @@ func (m Model) View() string {
 		return m.simLaunchOptions.View()
 	case ViewArtifactID:
 		return m.artifactID.View()
-	case ViewEnvLauncher:
-		return m.envLauncher.View()
 	case ViewVMInfo:
 		return m.vmInfo.View()
 	default:

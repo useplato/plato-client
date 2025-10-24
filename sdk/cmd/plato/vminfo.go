@@ -116,53 +116,6 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	}
 }
 
-func setupSandbox(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, statusChan chan<- string) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		statusChan <- "Setting up sandbox environment..."
-
-		statusChan <- "Calling setup-sandbox API..."
-
-		// Call the setup-sandbox API
-		// TODO: Need to get the actual config here - for now using empty config
-		emptyConfig := models.SimConfigDataset{}
-		correlationID, err := client.Sandbox.SetupSandbox(ctx, sandbox.PublicID, emptyConfig, dataset)
-		if err != nil {
-			statusChan <- fmt.Sprintf("Setup failed: %v", err)
-			close(statusChan)
-			return sandboxSetupMsg{
-				sshURL: "",
-				err:    err,
-			}
-		}
-
-		statusChan <- "Monitoring setup operation..."
-
-		// Monitor the setup operation via SSE using the returned correlation_id
-		err = client.Sandbox.MonitorOperation(ctx, correlationID, 20*time.Minute)
-		if err != nil {
-			statusChan <- fmt.Sprintf("Setup monitoring failed: %v", err)
-			close(statusChan)
-			return sandboxSetupMsg{
-				sshURL: "",
-				err:    fmt.Errorf("setup monitoring failed: %w", err),
-			}
-		}
-
-		// Generate SSH connection info
-		sshURL := fmt.Sprintf("root@%s", sandbox.JobGroupID)
-
-		statusChan <- "Sandbox setup complete!"
-		close(statusChan)
-
-		return sandboxSetupMsg{
-			sshURL: sshURL,
-			err:    nil,
-		}
-	}
-}
-
 func (m VMInfoModel) startHeartbeat() {
 	// Start heartbeat goroutine
 	go func() {
