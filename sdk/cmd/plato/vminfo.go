@@ -71,8 +71,11 @@ type VMInfoModel struct {
 	rootPasswordSetup    bool
 	proxytunnelProcesses []*exec.Cmd
 	proxytunnelMappings  []proxytunnelMapping
-	config            *models.PlatoConfig
-	lastPushedBranch  string // Tracks the last branch pushed to hub
+	config               *models.PlatoConfig
+	lastPushedBranch     string // Tracks the last branch pushed to hub
+	cachedContent        string // Cache rendered markdown content
+	contentDirty         bool   // Track if content needs re-rendering
+	cachedCloneCmd       string // Cache the clone command to avoid API calls
 }
 
 type vmAction struct {
@@ -172,6 +175,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		rootPasswordSetup:    false,
 		proxytunnelProcesses: []*exec.Cmd{},
 		proxytunnelMappings:  []proxytunnelMapping{},
+		contentDirty:         true, // Initial render needed
 	}
 }
 
@@ -251,10 +255,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				m.statusMessages = append(m.statusMessages, "✓ Root password set!")
 			}
 		}
-		// Update viewport content and scroll to bottom
-		renderedMarkdown := m.renderVMInfoMarkdown()
-		m.viewport.SetContent(renderedMarkdown)
-		m.viewport.GotoBottom()
+		// Mark content as dirty for next render
+		m.contentDirty = true
 		return m, nil
 
 	case snapshotCreatedMsg:
@@ -270,13 +272,12 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			if msg.response.S3URI != "" {
 				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3URI))
 			}
-			// Clear the last pushed branch since it's been merged
+			// Clear the last pushed branch and cached clone command since they've been merged
 			m.lastPushedBranch = ""
+			m.cachedCloneCmd = ""
 		}
-		// Update viewport content and scroll to bottom
-		renderedMarkdown := m.renderVMInfoMarkdown()
-		m.viewport.SetContent(renderedMarkdown)
-		m.viewport.GotoBottom()
+		// Mark content as dirty for next render
+		m.contentDirty = true
 		return m, nil
 
 	case workerStartedMsg:
@@ -286,6 +287,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, "✓ Worker start initiated!")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Monitoring progress via correlation ID: %s", msg.response.CorrelationID))
+			// Mark content as dirty for next render
+			m.contentDirty = true
 			// Monitor the operation using SSE events
 			return m, tea.Batch(
 				func() tea.Msg {
@@ -299,10 +302,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				},
 			)
 		}
-		// Update viewport content and scroll to bottom
-		renderedMarkdown := m.renderVMInfoMarkdown()
-		m.viewport.SetContent(renderedMarkdown)
-		m.viewport.GotoBottom()
+		// Mark content as dirty for next render
+		m.contentDirty = true
 		return m, nil
 
 	case hubPushMsg:
@@ -310,6 +311,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Push to hub failed: %v", msg.err))
 		} else {
 			m.lastPushedBranch = msg.branchName
+			m.cachedCloneCmd = msg.cloneCmd // Cache the clone command
 			m.statusMessages = append(m.statusMessages, "✓ Successfully pushed to Plato Hub!")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Repository: %s", msg.repoURL))
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Branch: %s", msg.branchName))
@@ -317,10 +319,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, "💡 To pull code in your VM, SSH in and run:")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   %s", msg.cloneCmd))
 		}
-		// Update viewport content and scroll to bottom
-		renderedMarkdown := m.renderVMInfoMarkdown()
-		m.viewport.SetContent(renderedMarkdown)
-		m.viewport.GotoBottom()
+		// Mark content as dirty for next render
+		m.contentDirty = true
 		return m, nil
 
 	case proxytunnelOpenedMsg:
@@ -336,6 +336,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("✓ Proxytunnel: localhost:%d → remote:%d", msg.localPort, msg.remotePort))
 			logDebug("Added to lists, now have %d processes and %d mappings", len(m.proxytunnelProcesses), len(m.proxytunnelMappings))
 		}
+		// Mark content as dirty for next render
+		m.contentDirty = true
 		return m, nil
 
 	case cursorOpenedMsg:
@@ -426,32 +428,11 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 			md.WriteString("## Hub Branch\n\n")
 			md.WriteString(fmt.Sprintf("**Last Pushed Branch:** `%s`\n\n", m.lastPushedBranch))
 
-			// Load config to get service name for the clone command
-			if config, err := LoadPlatoConfig(); err == nil && config.Service != "" {
-				// Get repo info and credentials from Gitea
-				ctx := context.Background()
-
-				// Get credentials first
-				if creds, err := m.client.Gitea.GetCredentials(ctx); err == nil {
-					if simulators, err := m.client.Gitea.ListSimulators(ctx); err == nil {
-						for _, sim := range simulators {
-							if strings.EqualFold(sim.Name, config.Service) && sim.HasRepo {
-								if repo, err := m.client.Gitea.GetSimulatorRepository(ctx, sim.ID); err == nil {
-									// Build authenticated clone URL
-									cloneURL := repo.CloneURL
-									if strings.HasPrefix(cloneURL, "https://") {
-										cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
-									}
-
-									md.WriteString("**Clone Command (with auth):**\n\n")
-									md.WriteString(fmt.Sprintf("```bash\ngit clone -b %s %s\n```\n\n", m.lastPushedBranch, cloneURL))
-									md.WriteString("_This branch will be merged into main when you snapshot._\n\n")
-								}
-								break
-							}
-						}
-					}
-				}
+			// Use cached clone command if available
+			if m.cachedCloneCmd != "" {
+				md.WriteString("**Clone Command (with auth):**\n\n")
+				md.WriteString(fmt.Sprintf("```bash\n%s\n```\n\n", m.cachedCloneCmd))
+				md.WriteString("_This branch will be merged into main when you snapshot._\n\n")
 			}
 		}
 	}
@@ -1250,8 +1231,12 @@ func (m VMInfoModel) View() string {
 	}
 
 	// Build VM info panel (right side) using glamour and viewport
-	renderedMarkdown := m.renderVMInfoMarkdown()
-	m.viewport.SetContent(renderedMarkdown)
+	// Only re-render if content is dirty
+	if m.contentDirty {
+		m.cachedContent = m.renderVMInfoMarkdown()
+		m.viewport.SetContent(m.cachedContent)
+		m.contentDirty = false
+	}
 	vmInfoPanel := m.viewport.View()
 
 	// Actions panel (left side)
