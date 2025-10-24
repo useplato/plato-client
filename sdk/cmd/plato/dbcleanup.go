@@ -231,9 +231,10 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 
 	var db *sql.DB
 	var err error
+	clearedCount := 0
 
 	if dbConfig.DBType == "postgresql" {
-		// Try each database until we find one with audit_log table
+		// Try each database and clear audit_log if it exists
 		for _, dbName := range dbConfig.Databases {
 			connStr := fmt.Sprintf("host=127.0.0.1 port=%d user=%s password=%s dbname=%s sslmode=disable",
 				localPort, dbConfig.User, dbConfig.Password, dbName)
@@ -243,14 +244,13 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 				logDebug("Failed to connect to postgres db %s: %v", dbName, err)
 				continue
 			}
-			defer db.Close()
 
 			// Test connection
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
 
 			if err = db.PingContext(ctx); err != nil {
 				logDebug("Failed to ping postgres db %s: %v", dbName, err)
+				cancel()
 				db.Close()
 				continue
 			}
@@ -259,13 +259,15 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 			_, err = db.ExecContext(ctx, "TRUNCATE TABLE public.audit_log RESTART IDENTITY CASCADE")
 			if err == nil {
 				logDebug("Successfully truncated audit_log from postgres db: %s", dbName)
-				return nil
+				clearedCount++
+			} else {
+				logDebug("No audit_log in %s (or error): %v", dbName, err)
 			}
-			logDebug("No audit_log in %s (or error): %v", dbName, err)
+			cancel()
 			db.Close()
 		}
 	} else if dbConfig.DBType == "mysql" {
-		// Try each database until we find one with audit_log table
+		// Try each database and clear audit_log if it exists
 		for _, dbName := range dbConfig.Databases {
 			dsn := fmt.Sprintf("%s:%s@tcp(127.0.0.1:%d)/%s",
 				dbConfig.User, dbConfig.Password, localPort, dbName)
@@ -275,14 +277,13 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 				logDebug("Failed to connect to mysql db %s: %v", dbName, err)
 				continue
 			}
-			defer db.Close()
 
 			// Test connection
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
 
 			if err = db.PingContext(ctx); err != nil {
 				logDebug("Failed to ping mysql db %s: %v", dbName, err)
+				cancel()
 				db.Close()
 				continue
 			}
@@ -291,6 +292,7 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 			_, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0")
 			if err != nil {
 				logDebug("Failed to disable foreign key checks in %s: %v", dbName, err)
+				cancel()
 				db.Close()
 				continue
 			}
@@ -300,6 +302,7 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 				logDebug("Failed to truncate audit_log in %s: %v", dbName, err)
 				// Re-enable foreign key checks before continuing
 				db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1")
+				cancel()
 				db.Close()
 				continue
 			}
@@ -311,11 +314,18 @@ func clearAuditLog(dbConfig DBConfig, localPort int) error {
 			}
 
 			logDebug("Successfully truncated audit.audit_log from mysql db: %s", dbName)
-			return nil
+			clearedCount++
+			cancel()
+			db.Close()
 		}
 	}
 
-	return fmt.Errorf("could not find or clear audit_log table in any database")
+	if clearedCount == 0 {
+		return fmt.Errorf("could not find or clear audit_log table in any database")
+	}
+
+	logDebug("Successfully cleared audit_log from %d database(s)", clearedCount)
+	return nil
 }
 
 // clearEnvState calls the /env/{job_group_id}/state endpoint to clear cache
