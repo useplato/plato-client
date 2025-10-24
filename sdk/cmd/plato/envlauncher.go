@@ -21,6 +21,7 @@ type EnvLauncherModel struct {
 	simulator      *models.SimulatorListItem
 	artifactID     *string
 	spinner        spinner.Model
+	stopwatch      Stopwatch
 	statusMessages []string
 	statusChan     chan string
 	environment    *models.Environment
@@ -174,6 +175,7 @@ func NewEnvLauncherModel(client *plato.PlatoClient, simulator *models.SimulatorL
 		simulator:      simulator,
 		artifactID:     artifactID,
 		spinner:        s,
+		stopwatch:      NewStopwatch(),
 		statusMessages: []string{},
 		statusChan:     make(chan string, 10),
 		dataset:        "base", // Default dataset
@@ -183,6 +185,7 @@ func NewEnvLauncherModel(client *plato.PlatoClient, simulator *models.SimulatorL
 func (m EnvLauncherModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
+		m.stopwatch.Start(),
 		launchEnvironment(m.client, m.simulator, m.artifactID, m.statusChan),
 		waitForEnvStatusUpdates(m.statusChan),
 	)
@@ -204,7 +207,7 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to create environment: %v", msg.err))
 			m.err = msg.err
-			return m, nil
+			return m, m.stopwatch.Stop()
 		}
 		m.environment = msg.env
 		return m, tea.Batch(
@@ -216,7 +219,7 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Environment not ready: %v", msg.err))
 			m.err = msg.err
-			return m, nil
+			return m, m.stopwatch.Stop()
 		}
 		return m, tea.Batch(
 			resetEnvironment(m.client, m.environment.JobID, m.statusChan),
@@ -227,7 +230,7 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Reset failed: %v", msg.err))
 			m.err = msg.err
-			return m, nil
+			return m, m.stopwatch.Stop()
 		}
 		return m, tea.Batch(
 			setupSSHForEnvironment(m.environment.JobID, m.statusChan),
@@ -238,30 +241,39 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ SSH config failed: %v", msg.err))
 			m.err = msg.err
-			return m, nil
+			return m, m.stopwatch.Stop()
 		}
 		m.sshHost = msg.sshHost
-		m.statusMessages = append(m.statusMessages, "✓ Environment ready!")
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("✓ Environment ready! (took %s)", m.stopwatch.View()))
 
 		// Navigate to VM info
-		return m, func() tea.Msg {
-			time.Sleep(1 * time.Second)
-			// Create a sandbox object for compatibility with VMInfo
-			sandbox := &models.Sandbox{
-				PublicID:   m.environment.JobID,
-				JobGroupID: m.environment.JobID,
-				URL:        getPublicURL(m.client, m.environment),
-			}
-			return navigateToVMInfoMsg{
-				sandbox:         sandbox,
-				dataset:         m.dataset,
-				sshURL:          fmt.Sprintf("root@%s", m.environment.JobID),
-				sshHost:         m.sshHost,
-				fromExistingSim: true,
-				artifactID:      nil, // Not available when launching from existing sim by name
-				version:         nil, // Not available when launching from existing sim by name
-			}
-		}
+		return m, tea.Batch(
+			m.stopwatch.Stop(),
+			func() tea.Msg {
+				time.Sleep(1 * time.Second)
+				// Create a sandbox object for compatibility with VMInfo
+				sandbox := &models.Sandbox{
+					PublicID:   m.environment.JobID,
+					JobGroupID: m.environment.JobID,
+					URL:        getPublicURL(m.client, m.environment),
+				}
+				return navigateToVMInfoMsg{
+					sandbox:         sandbox,
+					dataset:         m.dataset,
+					sshURL:          fmt.Sprintf("root@%s", m.environment.JobID),
+					sshHost:         m.sshHost,
+					fromExistingSim: true,
+					artifactID:      nil, // Not available when launching from existing sim by name
+					version:         nil, // Not available when launching from existing sim by name
+				}
+			},
+		)
+
+	case TickMsg, StartStopMsg, ResetMsg:
+		// Handle stopwatch messages
+		var cmd tea.Cmd
+		m.stopwatch, cmd = m.stopwatch.Update(msg)
+		return m, cmd
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -287,6 +299,15 @@ func (m EnvLauncherModel) View() string {
 
 	var content string
 	content += RenderHeader() + "\n\n"
+
+	// Show elapsed time if stopwatch is running
+	if m.stopwatch.Running() {
+		timeStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7D56F4")).
+			MarginLeft(2).
+			Bold(true)
+		content += timeStyle.Render(fmt.Sprintf("  ⏱  %s elapsed", m.stopwatch.View())) + "\n\n"
+	}
 
 	// Show all status messages
 	for i, msg := range m.statusMessages {
