@@ -28,6 +28,11 @@ type navigateToArtifactIDMsg struct {
 	simulator *models.SimulatorListItem
 }
 
+type launchEnvironmentMsg struct {
+	simulator  *models.SimulatorListItem
+	artifactID *string
+}
+
 func NewSimLaunchOptionsModel(client *plato.PlatoClient, simulator *models.SimulatorListItem) SimLaunchOptionsModel {
 	items := []list.Item{
 		simLaunchOption{
@@ -71,9 +76,9 @@ func (m SimLaunchOptionsModel) Update(msg tea.Msg) (SimLaunchOptionsModel, tea.C
 				option := selectedItem.(simLaunchOption)
 				switch option.title {
 				case "Launch Latest":
-					// TODO: Launch with latest version - for now go to VM config
+					// Launch environment with latest version (no artifact ID)
 					return m, func() tea.Msg {
-						return NavigateMsg{view: ViewVMConfig}
+						return launchEnvironmentMsg{simulator: m.simulator, artifactID: nil}
 					}
 				case "By Artifact ID":
 					// Navigate to artifact ID selection for this simulator
