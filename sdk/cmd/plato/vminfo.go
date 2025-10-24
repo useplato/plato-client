@@ -128,6 +128,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 
 	items := []list.Item{
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
+		vmAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		vmAction{title: "Connect via SSH", description: "Open SSH connection to VM"},
 		vmAction{title: "Connect to Cursor", description: "Open Cursor editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
@@ -976,6 +977,25 @@ func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
 	}
 }
 
+func setupRootPassword(client *plato.PlatoClient, publicID string, sshHost string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		logDebug("Setting up root password for VM: %s", publicID)
+
+		// Call the SetupRootPassword API
+		err := client.Sandbox.SetupRootPassword(ctx, publicID, "password")
+		if err != nil {
+			logDebug("SetupRootPassword API failed: %v", err)
+			logErrorToFile("plato_error.log", fmt.Sprintf("API: SetupRootPassword failed for %s: %v", publicID, err))
+			return rootPasswordSetupMsg{err: fmt.Errorf("failed to set up root password: %w", err)}
+		}
+
+		logDebug("Root password setup successful for VM: %s", publicID)
+		return rootPasswordSetupMsg{err: nil}
+	}
+}
+
 func openCursor(sshHost string) tea.Cmd {
 	return func() tea.Msg {
 		logDebug("Opening Cursor for SSH host: %s", sshHost)
@@ -1042,6 +1062,21 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting Plato worker for service: %s, dataset: %s", service, m.dataset))
 		return m, startWorker(m.client, m.sandbox.PublicID, service, m.dataset, datasetConfig)
+	case "Set up root SSH":
+		// Check if root password is already set up
+		if m.rootPasswordSetup {
+			m.statusMessages = append(m.statusMessages, "⚠️  Root SSH password is already configured")
+			return m, nil
+		}
+
+		// Check if SSH host is configured
+		if m.sshHost == "" {
+			m.statusMessages = append(m.statusMessages, "❌ SSH host not configured. Cannot set up root SSH.")
+			return m, nil
+		}
+
+		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
+		return m, setupRootPassword(m.client, m.sandbox.PublicID, m.sshHost)
 	case "Connect via SSH":
 		// TODO: Implement SSH connection
 		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
