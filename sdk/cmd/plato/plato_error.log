@@ -521,3 +521,8 @@
 [2025-10-24 10:44:06] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
 [2025-10-24 10:44:36] API: POST /api/env/18c8384c-d076-414c-9d5e-d5700d5a9d27/heartbeat - STATUS: 200
 [2025-10-24 10:44:43] API: DELETE /api/public-build/vm/411e0a7e-29a1-4cd8-b48c-e05629bffafd - STATUS: 200
+[2025-10-24 14:48:51] API: GET /api/simulator/list - STATUS: 200
+[2025-10-24 14:48:55] API: GET /api/simulator/odooinvoicing/versions - STATUS: 200
+[2025-10-24 14:48:58] API: POST /api/public-build/vm/create - STATUS: 200
+[2025-10-24 14:48:58] API: GET /api/public-build/events/jb-d446fc4b-8303-4efd-854e-a47839d50f1f - STATUS: 200
+[2025-10-24 14:48:58] API: POST /api/public-build/vm/d446fc4b-8303-4efd-854e-a47839d50f1f/setup-root-password - STATUS: 405

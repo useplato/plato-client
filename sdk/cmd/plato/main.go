@@ -33,6 +33,13 @@ type navigateToDBEntryMsg struct {
 	service string
 }
 
+type navigateToDatasetSelectorMsg struct {
+	service          string
+	publicID         string
+	jobGroupID       string
+	lastPushedBranch string
+}
+
 const (
 	ViewMainMenu ViewState = iota
 	ViewConfig
@@ -45,6 +52,7 @@ const (
 	ViewVMInfo
 	ViewProxytunnelPort
 	ViewDBEntry
+	ViewDatasetSelector
 )
 
 type Model struct {
@@ -60,6 +68,7 @@ type Model struct {
 	vmInfo           VMInfoModel
 	proxytunnelPort  ProxytunnelPortModel
 	dbEntry          DBEntryModel
+	datasetSelector  DatasetSelectorModel
 	quitting         bool
 }
 
@@ -70,7 +79,7 @@ func newModel() Model {
 		mainMenu:         NewMainMenuModel(),
 		config:           config,
 		launch:           NewLaunchModel(config.client),
-		vmConfig:         NewVMConfigModel(config.client, nil, nil, nil), // Blank VM - no simulator, no artifact, no version
+		vmConfig:         NewVMConfigModel(config.client, nil, nil, nil, nil), // Blank VM - no simulator, no artifact, no version, no dataset
 		platoConfig:      NewPlatoConfigModel(config.client),
 		simSelector:      NewSimSelectorModel(config.client),
 		simLaunchOptions: SimLaunchOptionsModel{}, // Will be initialized when simulator is selected
@@ -135,7 +144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle environment launch with simulator and optional artifact ID
 	if navMsg, ok := msg.(launchEnvironmentMsg); ok {
-		m.vmConfig = NewVMConfigModel(m.config.client, navMsg.simulator, navMsg.artifactID, navMsg.version)
+		m.vmConfig = NewVMConfigModel(m.config.client, navMsg.simulator, navMsg.artifactID, navMsg.version, navMsg.dataset)
 		m.currentView = ViewVMConfig
 		return m, m.vmConfig.Init()
 	}
@@ -170,8 +179,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.proxytunnelPort.Init()
 		case ViewDBEntry:
 			return m, m.dbEntry.Init()
+		case ViewDatasetSelector:
+			return m, m.datasetSelector.Init()
 		}
 		return m, nil
+	}
+
+	// Handle navigation to dataset selector
+	if navMsg, ok := msg.(navigateToDatasetSelectorMsg); ok {
+		params := snapshotParams{
+			publicID:         navMsg.publicID,
+			jobGroupID:       navMsg.jobGroupID,
+			service:          navMsg.service,
+			lastPushedBranch: navMsg.lastPushedBranch,
+		}
+		m.datasetSelector = NewDatasetSelectorModel(navMsg.service, params)
+		m.currentView = ViewDatasetSelector
+		return m, m.datasetSelector.Init()
+	}
+
+	// Handle dataset selected message - trigger snapshot with the selected dataset
+	if datasetMsg, ok := msg.(datasetSelectedMsg); ok {
+		logDebug("Dataset selected: %s for service: %s", datasetMsg.datasetName, datasetMsg.params.service)
+		m.currentView = ViewVMInfo
+
+		// Check if DB config exists for this service
+		_, hasConfig := getDBConfig(datasetMsg.params.service)
+		if !hasConfig {
+			// Navigate to DB entry view
+			logDebug("No DB config for service %s, navigating to DB entry", datasetMsg.params.service)
+			return m, func() tea.Msg {
+				return navigateToDBEntryMsg{service: datasetMsg.params.service}
+			}
+		}
+
+		// DB config exists, proceed with snapshot
+		datasetPtr := &datasetMsg.datasetName
+
+		// Add status message
+		m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, fmt.Sprintf("Creating snapshot for service: %s, dataset: %s", datasetMsg.params.service, datasetMsg.datasetName))
+		m.vmInfo.runningCommand = true
+
+		// Trigger snapshot
+		return m, tea.Batch(
+			m.vmInfo.spinner.Tick,
+			createSnapshotWithCleanup(
+				m.config.client,
+				datasetMsg.params.publicID,
+				datasetMsg.params.jobGroupID,
+				datasetMsg.params.service,
+				datasetPtr,
+				datasetMsg.params.lastPushedBranch,
+			),
+		)
 	}
 
 	// Handle DB config entered message - trigger snapshot with the entered config
@@ -255,6 +315,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.proxytunnelPort, cmd = m.proxytunnelPort.Update(msg)
 	case ViewDBEntry:
 		m.dbEntry, cmd = m.dbEntry.Update(msg)
+	case ViewDatasetSelector:
+		m.datasetSelector, cmd = m.datasetSelector.Update(msg)
 	}
 
 	return m, cmd
@@ -289,6 +351,8 @@ func (m Model) View() string {
 		return m.proxytunnelPort.View()
 	case ViewDBEntry:
 		return m.dbEntry.View()
+	case ViewDatasetSelector:
+		return m.datasetSelector.View()
 	default:
 		return "Unknown view\n"
 	}

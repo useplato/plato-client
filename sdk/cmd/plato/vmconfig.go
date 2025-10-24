@@ -261,13 +261,19 @@ func NewVMConfigModelFromConfig(client *plato.PlatoClient, datasetName string, d
 	return m
 }
 
-func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorListItem, artifactID *string, version *string) VMConfigModel {
+func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorListItem, artifactID *string, version *string, dataset *string) VMConfigModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	// Skip form if simulator is provided
 	skipForm := simulator != nil
+
+	// Use provided dataset or default to "base"
+	datasetValue := "base"
+	if dataset != nil {
+		datasetValue = *dataset
+	}
 
 	m := VMConfigModel{
 		client:         client,
@@ -279,7 +285,7 @@ func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorList
 		stopwatch:      NewStopwatch(),
 		statusMessages: []string{},
 		skipForm:       skipForm,
-		dataset:        "base", // Default dataset
+		dataset:        datasetValue,
 	}
 	m.lg = lipgloss.DefaultRenderer()
 
