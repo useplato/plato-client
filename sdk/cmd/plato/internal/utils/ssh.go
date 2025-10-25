@@ -12,6 +12,32 @@ import (
 	"strings"
 )
 
+// ReadSSHPublicKey reads the user's SSH public key from ~/.ssh directory
+// It tries common key files in order: id_ed25519.pub, id_rsa.pub
+func ReadSSHPublicKey() (string, error) {
+	sshDir := filepath.Join(os.Getenv("HOME"), ".ssh")
+
+	// Try common SSH public key file names in order of preference
+	keyFiles := []string{"id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub"}
+
+	for _, keyFile := range keyFiles {
+		keyPath := filepath.Join(sshDir, keyFile)
+		data, err := os.ReadFile(keyPath)
+		if err == nil {
+			// Found a key, return its content (trimmed of whitespace)
+			return strings.TrimSpace(string(data)), nil
+		}
+		// If file doesn't exist, try next key file
+		if !os.IsNotExist(err) {
+			// If error is not "file doesn't exist", return the error
+			return "", fmt.Errorf("error reading %s: %w", keyPath, err)
+		}
+	}
+
+	// No SSH public key found
+	return "", fmt.Errorf("no SSH public key found in %s (tried: %s)", sshDir, strings.Join(keyFiles, ", "))
+}
+
 // ReadSSHConfig reads SSH config file, returns empty string if doesn't exist
 func ReadSSHConfig() (string, error) {
 	sshConfigPath := filepath.Join(os.Getenv("HOME"), ".ssh", "config")

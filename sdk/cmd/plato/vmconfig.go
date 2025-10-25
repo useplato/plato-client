@@ -125,19 +125,29 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 
 		statusChan <- fmt.Sprintf("SSH configured: ssh %s", sshHost)
 
-		// Setup root password
-		statusChan <- "Setting up root password..."
-		err = client.Sandbox.SetupRootPassword(ctx, sandbox.PublicID, "password")
+		// Setup root SSH access with public key
+		statusChan <- "Setting up root SSH access..."
+		sshPublicKey, err := utils.ReadSSHPublicKey()
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
 				sshURL:  "",
 				sshHost: "",
-				err:     fmt.Errorf("root password setup failed: %w", err),
+				err:     fmt.Errorf("failed to read SSH public key: %w", err),
 			}
 		}
 
-		statusChan <- "Root password configured"
+		err = client.Sandbox.SetupRootPassword(ctx, sandbox.PublicID, sshPublicKey)
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:  "",
+				sshHost: "",
+				err:     fmt.Errorf("root SSH setup failed: %w", err),
+			}
+		}
+
+		statusChan <- "Root SSH access configured"
 
 		// Generate SSH connection info
 		sshURL := fmt.Sprintf("root@%s", sandbox.PublicID)

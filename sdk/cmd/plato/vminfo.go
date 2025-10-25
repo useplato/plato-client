@@ -990,17 +990,25 @@ func setupRootPassword(client *plato.PlatoClient, publicID string, sshHost strin
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		utils.LogDebug("Setting up root password for VM: %s", publicID)
+		utils.LogDebug("Setting up root SSH access for VM: %s", publicID)
 
-		// Call the SetupRootPassword API
-		err := client.Sandbox.SetupRootPassword(ctx, publicID, "password")
+		// Read SSH public key
+		sshPublicKey, err := utils.ReadSSHPublicKey()
+		if err != nil {
+			utils.LogDebug("Failed to read SSH public key: %v", err)
+			logErrorToFile("plato_error.log", fmt.Sprintf("Failed to read SSH public key: %v", err))
+			return rootPasswordSetupMsg{err: fmt.Errorf("failed to read SSH public key: %w", err)}
+		}
+
+		// Call the SetupRootPassword API with SSH public key
+		err = client.Sandbox.SetupRootPassword(ctx, publicID, sshPublicKey)
 		if err != nil {
 			utils.LogDebug("SetupRootPassword API failed: %v", err)
 			logErrorToFile("plato_error.log", fmt.Sprintf("API: SetupRootPassword failed for %s: %v", publicID, err))
-			return rootPasswordSetupMsg{err: fmt.Errorf("failed to set up root password: %w", err)}
+			return rootPasswordSetupMsg{err: fmt.Errorf("failed to set up root SSH access: %w", err)}
 		}
 
-		utils.LogDebug("Root password setup successful for VM: %s", publicID)
+		utils.LogDebug("Root SSH access setup successful for VM: %s", publicID)
 		return rootPasswordSetupMsg{err: nil}
 	}
 }
