@@ -133,6 +133,13 @@ type hubPushMsg struct {
 	branchName string
 }
 
+type serviceStartedMsg struct {
+	err          error
+	repoURL      string
+	branchName   string
+	servicesInfo []string
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -143,7 +150,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		vmAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		vmAction{title: "Connect to Cursor/VSCode", description: "Open Cursor/VSCode editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
-		vmAction{title: "Push to Plato Hub", description: "Push code to hub.plato.so repository"},
+		vmAction{title: "Start Service", description: "Start the service defined in plato-config.yml"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
 	}
@@ -368,6 +375,22 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, "")
 			m.statusMessages = append(m.statusMessages, "💡 To pull code in your VM, SSH in and run:")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   %s", msg.cloneCmd))
+		}
+		return m, nil
+
+	case serviceStartedMsg:
+		m.runningCommand = false
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to start service: %v", msg.err))
+		} else {
+			m.lastPushedBranch = msg.branchName
+			m.statusMessages = append(m.statusMessages, "✓ Service started successfully!")
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Repository: %s", msg.repoURL))
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Branch: %s", msg.branchName))
+			m.statusMessages = append(m.statusMessages, "")
+			for _, info := range msg.servicesInfo {
+				m.statusMessages = append(m.statusMessages, info)
+			}
 		}
 		return m, nil
 
@@ -865,6 +888,204 @@ func pushToHub(client *plato.PlatoClient, serviceName string) tea.Cmd {
 	}
 }
 
+// startService pushes code to hub, clones it on the VM, and starts services
+func startService(client *plato.PlatoClient, serviceName string, datasetName string, datasetConfig models.SimConfigDataset, sshHost string, sshConfigPath string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Step 1: Push code to hub (reuse pushToHub logic)
+		utils.LogDebug("Step 1: Pushing code to hub for service: %s", serviceName)
+
+		// Get Gitea credentials
+		creds, err := client.Gitea.GetCredentials(ctx)
+		if err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("failed to get credentials: %w", err)}
+		}
+
+		// Find simulator by service name
+		simulators, err := client.Gitea.ListSimulators(ctx)
+		if err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("failed to list simulators: %w", err)}
+		}
+
+		var simulator *models.GiteaSimulator
+		for i := range simulators {
+			if strings.EqualFold(simulators[i].Name, serviceName) {
+				simulator = &simulators[i]
+				break
+			}
+		}
+
+		if simulator == nil {
+			return serviceStartedMsg{err: fmt.Errorf("simulator '%s' not found in hub", serviceName)}
+		}
+
+		// Get or create repository
+		var repo *models.GiteaRepository
+		if simulator.HasRepo {
+			repo, err = client.Gitea.GetSimulatorRepository(ctx, simulator.ID)
+			if err != nil {
+				return serviceStartedMsg{err: fmt.Errorf("failed to get repository: %w", err)}
+			}
+		} else {
+			repo, err = client.Gitea.CreateSimulatorRepository(ctx, simulator.ID)
+			if err != nil {
+				return serviceStartedMsg{err: fmt.Errorf("failed to create repository: %w", err)}
+			}
+		}
+
+		// Build authenticated clone URL
+		cloneURL := repo.CloneURL
+		if strings.HasPrefix(cloneURL, "https://") {
+			cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+		}
+
+		// Clone repo to temp directory
+		tempDir, err := os.MkdirTemp("", "plato-hub-*")
+		if err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("failed to create temp dir: %w", err)}
+		}
+		defer os.RemoveAll(tempDir)
+
+		tempRepo := filepath.Join(tempDir, "repo")
+		cloneCmd := exec.Command("git", "clone", cloneURL, tempRepo)
+		cloneOutput, err := cloneCmd.CombinedOutput()
+		if err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("failed to clone repo: %w\nOutput: %s", err, string(cloneOutput))}
+		}
+
+		// Get current directory
+		currentDir, err := os.Getwd()
+		if err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("failed to get current directory: %w", err)}
+		}
+
+		// Generate branch name with timestamp
+		branchName := fmt.Sprintf("workspace-%d", time.Now().Unix())
+
+		// Create and checkout new branch
+		gitCheckout := exec.Command("git", "checkout", "-b", branchName)
+		gitCheckout.Dir = tempRepo
+		if output, err := gitCheckout.CombinedOutput(); err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("git checkout failed: %w\nOutput: %s", err, string(output))}
+		}
+
+		// Copy files respecting .gitignore
+		if err := copyFilesRespectingGitignore(currentDir, tempRepo); err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("failed to copy files: %w", err)}
+		}
+
+		// Commit and push
+		gitAdd := exec.Command("git", "add", ".")
+		gitAdd.Dir = tempRepo
+		if output, err := gitAdd.CombinedOutput(); err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("git add failed: %w\nOutput: %s", err, string(output))}
+		}
+
+		// Check if there are changes
+		gitStatus := exec.Command("git", "status", "--porcelain")
+		gitStatus.Dir = tempRepo
+		statusOutput, err := gitStatus.Output()
+		if err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("git status failed: %w", err)}
+		}
+
+		// Only commit and push if there are changes
+		if len(strings.TrimSpace(string(statusOutput))) > 0 {
+			gitCommit := exec.Command("git", "commit", "-m", fmt.Sprintf("Sync from local workspace"))
+			gitCommit.Dir = tempRepo
+			if output, err := gitCommit.CombinedOutput(); err != nil {
+				return serviceStartedMsg{err: fmt.Errorf("git commit failed: %w\nOutput: %s", err, string(output))}
+			}
+
+			gitPush := exec.Command("git", "push", "-u", "origin", branchName)
+			gitPush.Dir = tempRepo
+			if output, err := gitPush.CombinedOutput(); err != nil {
+				return serviceStartedMsg{err: fmt.Errorf("git push failed: %w\nOutput: %s", err, string(output))}
+			}
+		}
+
+		utils.LogDebug("Code pushed successfully, branch: %s", branchName)
+
+		// Step 2: Clone repo on VM via SSH
+		utils.LogDebug("Step 2: Cloning repo on VM via SSH")
+
+		// Build authenticated clone URL for SSH command
+		authenticatedCloneURL := repo.CloneURL
+		if strings.HasPrefix(authenticatedCloneURL, "https://") {
+			authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+		}
+
+		// Determine target directory on VM - use /home/plato/worktree
+		repoDir := fmt.Sprintf("/home/plato/worktree/%s", serviceName)
+
+		// Ensure worktree directory exists
+		mkdirCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, "mkdir -p /home/plato/worktree")
+		if output, err := mkdirCmd.CombinedOutput(); err != nil {
+			utils.LogDebug("Failed to create worktree directory: %v\nOutput: %s", err, string(output))
+		}
+
+		// Remove existing directory if it exists
+		rmCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, fmt.Sprintf("rm -rf %s", repoDir))
+		if output, err := rmCmd.CombinedOutput(); err != nil {
+			utils.LogDebug("Failed to remove existing directory (may not exist): %v\nOutput: %s", err, string(output))
+		}
+
+		// Clone the repository on the VM
+		cloneVMCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, fmt.Sprintf("git clone -b %s %s %s", branchName, authenticatedCloneURL, repoDir))
+		cloneVMOutput, err := cloneVMCmd.CombinedOutput()
+		if err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("failed to clone repo on VM: %w\nOutput: %s", err, string(cloneVMOutput))}
+		}
+
+		utils.LogDebug("Repo cloned on VM: %s", string(cloneVMOutput))
+
+		// Step 3: Start services based on their type
+		utils.LogDebug("Step 3: Starting services from dataset config")
+		var servicesInfo []string
+
+		for serviceName, service := range datasetConfig.Services {
+			if service == nil {
+				continue
+			}
+
+			utils.LogDebug("Starting service: %s (type: %s)", serviceName, service.Type)
+
+			switch service.Type {
+			case "docker-compose":
+				// Run docker compose up (Docker Compose V2)
+				composeFile := service.File
+				if composeFile == "" {
+					composeFile = "docker-compose.yml"
+				}
+
+				// Build the docker compose command (V2 syntax without hyphen)
+				composeCmd := fmt.Sprintf("cd %s && docker compose -f %s up -d", repoDir, composeFile)
+				sshCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, composeCmd)
+
+				output, err := sshCmd.CombinedOutput()
+				if err != nil {
+					return serviceStartedMsg{err: fmt.Errorf("failed to start docker compose service '%s': %w\nOutput: %s", serviceName, err, string(output))}
+				}
+
+				utils.LogDebug("Docker compose service '%s' started: %s", serviceName, string(output))
+				servicesInfo = append(servicesInfo, fmt.Sprintf("✓ Started docker compose service: %s", serviceName))
+
+			default:
+				utils.LogDebug("Unknown service type: %s for service: %s", service.Type, serviceName)
+				servicesInfo = append(servicesInfo, fmt.Sprintf("⚠ Skipped service '%s' (unknown type: %s)", serviceName, service.Type))
+			}
+		}
+
+		return serviceStartedMsg{
+			err:          nil,
+			repoURL:      repo.CloneURL,
+			branchName:   branchName,
+			servicesInfo: servicesInfo,
+		}
+	}
+}
+
 // copyFilesRespectingGitignore copies files from src to dst respecting .gitignore
 func copyFilesRespectingGitignore(src, dst string) error {
 	// First copy .gitignore if it exists
@@ -1150,8 +1371,8 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		return m, func() tea.Msg {
 			return navigateToProxytunnelPortMsg{publicID: m.sandbox.PublicID}
 		}
-	case "Push to Plato Hub":
-		// Load the config to get service name
+	case "Start Service":
+		// Load the config to get service name and dataset config
 		config, err := LoadPlatoConfig()
 		if err != nil {
 			errMsg := fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err)
@@ -1169,9 +1390,18 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			return m, nil
 		}
 
-		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Pushing code to Plato Hub for service: %s", service))
+		// Get dataset config
+		datasetConfig, exists := config.Datasets[m.dataset]
+		if !exists {
+			errMsg := fmt.Sprintf("❌ Dataset '%s' not found in plato-config.yml", m.dataset)
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting service: %s", service))
 		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, pushToHub(m.client, service))
+		return m, tea.Batch(m.spinner.Tick, startService(m.client, service, m.dataset, datasetConfig, m.sshHost, m.sshConfigPath))
 	case "Snapshot VM":
 		// Load the config to get service
 		config, err := LoadPlatoConfig()

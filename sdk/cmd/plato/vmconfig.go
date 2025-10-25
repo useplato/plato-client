@@ -612,15 +612,18 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 
 	var cmds []tea.Cmd
 
-	// Process the form
-	form, cmd := m.form.Update(msg)
-	if f, ok := form.(*huh.Form); ok {
-		m.form = f
-		cmds = append(cmds, cmd)
+	// Only process the form if we're not skipping it
+	if !m.skipForm {
+		form, cmd := m.form.Update(msg)
+		if f, ok := form.(*huh.Form); ok {
+			m.form = f
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	// When form is completed, create the sandbox (but only if we haven't started yet)
-	if m.form.State == huh.StateCompleted && !m.creating && !m.started {
+	// Only check form state if we're not skipping the form
+	if !m.skipForm && m.form.State == huh.StateCompleted && !m.creating && !m.started {
 		cpuVal := m.form.GetString("cpu")
 		if cpuVal == "" {
 			cpuVal = "1"
