@@ -132,42 +132,45 @@ jobs:
             COMMITS=$(git log --pretty=format:"- %s (%h)" ${LAST_TAG}..HEAD)
           fi
 
-          NOTES="## Changes in v${{ steps.new_version.outputs.version }}
+          cat > release_notes.md << 'EOF'
+          ## Changes in v${{ steps.new_version.outputs.version }}
 
-$COMMITS
+          EOF
 
-## Installation
+          echo "$COMMITS" >> release_notes.md
 
-### macOS (Apple Silicon)
-\`\`\`bash
-curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-arm64.tar.gz | tar xz
-chmod +x plato-darwin-arm64
-mv plato-darwin-arm64 ~/.local/bin/plato
-\`\`\`
+          cat >> release_notes.md << 'EOF'
 
-### macOS (Intel)
-\`\`\`bash
-curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-amd64.tar.gz | tar xz
-chmod +x plato-darwin-amd64
-mv plato-darwin-amd64 ~/.local/bin/plato
-\`\`\`
+          ## Installation
 
-### Linux (x86_64)
-\`\`\`bash
-curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-amd64.tar.gz | tar xz
-chmod +x plato-linux-amd64
-sudo mv plato-linux-amd64 /usr/local/bin/plato
-\`\`\`
+          ### macOS (Apple Silicon)
+          ```bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-arm64.tar.gz | tar xz
+          chmod +x plato-darwin-arm64
+          mv plato-darwin-arm64 ~/.local/bin/plato
+          ```
 
-### Linux (ARM64)
-\`\`\`bash
-curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-arm64.tar.gz | tar xz
-chmod +x plato-linux-arm64
-sudo mv plato-linux-arm64 /usr/local/bin/plato
-\`\`\`"
+          ### macOS (Intel)
+          ```bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-amd64.tar.gz | tar xz
+          chmod +x plato-darwin-amd64
+          mv plato-darwin-amd64 ~/.local/bin/plato
+          ```
 
-          # Save to file for multiline output
-          echo "$NOTES" > release_notes.md
+          ### Linux (x86_64)
+          ```bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-amd64.tar.gz | tar xz
+          chmod +x plato-linux-amd64
+          sudo mv plato-linux-amd64 /usr/local/bin/plato
+          ```
+
+          ### Linux (ARM64)
+          ```bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-arm64.tar.gz | tar xz
+          chmod +x plato-linux-arm64
+          sudo mv plato-linux-arm64 /usr/local/bin/plato
+          ```
+          EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
