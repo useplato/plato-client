@@ -146,6 +146,8 @@ type ecrAuthenticatedMsg struct {
 	err error
 }
 
+type triggerECRAuthMsg struct{}
+
 type hubRepoURLMsg struct {
 	url string
 }
@@ -282,9 +284,23 @@ func (m VMInfoModel) Init() tea.Cmd {
 	// Start sending heartbeats to keep the VM alive
 	m.startHeartbeat()
 
+	var cmds []tea.Cmd
+
+	// Automatically authenticate with ECR if setup is complete and not already authenticated
+	// This handles the case where the VM is initialized via navigateToVMInfoMsg (bypassing sandboxSetupMsg)
+	if m.setupComplete && !m.ecrAuthenticated && m.sshHost != "" && m.sshConfigPath != "" {
+		cmds = append(cmds, func() tea.Msg {
+			return triggerECRAuthMsg{}
+		})
+	}
+
 	// Fetch hub repository URL in background if we have a config
 	if m.config != nil && m.config.Service != "" {
-		return fetchHubRepoURL(m.client, m.config.Service)
+		cmds = append(cmds, fetchHubRepoURL(m.client, m.config.Service))
+	}
+
+	if len(cmds) > 0 {
+		return tea.Batch(cmds...)
 	}
 
 	return nil
@@ -449,6 +465,12 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		// Update viewport content to reflect new status
 		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
+
+	case triggerECRAuthMsg:
+		// Trigger ECR authentication
+		m.statusMessages = append(m.statusMessages, "🔐 Authenticating Docker with AWS ECR...")
+		m.runningCommand = true
+		return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
 
 	case ecrAuthenticatedMsg:
 		m.runningCommand = false
