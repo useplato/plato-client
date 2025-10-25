@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -166,8 +167,10 @@ func CreateTempSSHConfig(hostname string, port int, jobGroupID string, username 
 		return "", fmt.Errorf("failed to create .plato directory: %w", err)
 	}
 
-	// Create temp config file with hostname in the name for easier identification
-	tempConfigPath := filepath.Join(platoDir, fmt.Sprintf("ssh_config_%s", hostname))
+	// Extract number from hostname (e.g., "sandbox-1" -> "1")
+	// Use simple naming: ssh_N.conf
+	numStr := strings.TrimPrefix(hostname, "sandbox-")
+	tempConfigPath := filepath.Join(platoDir, fmt.Sprintf("ssh_%s.conf", numStr))
 	if err := os.WriteFile(tempConfigPath, []byte(configContent), 0600); err != nil {
 		return "", fmt.Errorf("failed to write temp SSH config: %w", err)
 	}
@@ -218,13 +221,36 @@ func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username s
 	return WriteSSHConfig(configContent)
 }
 
+// getNextSandboxNumber finds the next available sandbox number by checking existing config files
+func getNextSandboxNumber() int {
+	platoDir := filepath.Join(os.Getenv("HOME"), ".plato")
+	files, err := os.ReadDir(platoDir)
+	if err != nil {
+		return 1 // If directory doesn't exist or error, start at 1
+	}
+
+	maxNum := 0
+	for _, file := range files {
+		if strings.HasPrefix(file.Name(), "ssh_") && strings.HasSuffix(file.Name(), ".conf") {
+			// Extract number from ssh_N.conf
+			name := strings.TrimPrefix(file.Name(), "ssh_")
+			name = strings.TrimSuffix(name, ".conf")
+			if num, err := strconv.Atoi(name); err == nil && num > maxNum {
+				maxNum = num
+			}
+		}
+	}
+	return maxNum + 1
+}
+
 // SetupSSHConfig creates a temporary SSH config file and returns the hostname and config path
 // Returns (hostname, configPath, error)
 func SetupSSHConfig(localPort int, jobPublicID string, username string) (string, string, error) {
-	// Use jobPublicID as the hostname (since we're using temp configs, no conflict issues)
-	sshHost := fmt.Sprintf("sandbox-%s", jobPublicID)
+	// Get next available sandbox number for a simple hostname
+	sandboxNum := getNextSandboxNumber()
+	sshHost := fmt.Sprintf("sandbox-%d", sandboxNum)
 
-	// Create temporary SSH config file
+	// Create temporary SSH config file with simple name
 	configPath, err := CreateTempSSHConfig(sshHost, localPort, jobPublicID, username)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create temp SSH config: %w", err)
