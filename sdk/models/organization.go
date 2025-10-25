@@ -1,3 +1,8 @@
+// Package models provides data structures for organization-related operations.
+//
+// This file defines models for Plato organizations, organization members, session
+// summaries, and job metrics. These models are used when querying organization
+// information, monitoring running sessions, and analyzing job performance metrics.
 package models
 
 type Organization struct {

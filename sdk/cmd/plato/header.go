@@ -1,3 +1,7 @@
+// Package main provides version information for the Plato CLI.
+//
+// This file defines version constants that are set at build time via ldflags
+// to display version information when running the CLI with --version flag.
 package main
 
 import (

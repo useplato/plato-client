@@ -1,3 +1,9 @@
+// Package main provides a basic example of using the Plato SDK.
+//
+// This example demonstrates how to create a Plato client with custom
+// configuration options including base URL, timeout, custom headers,
+// feature flags, and retry configuration. It shows the basic client
+// initialization pattern that all Plato SDK applications should follow.
 package main
 
 import (

@@ -1,3 +1,13 @@
+// Package plato provides the main client for interacting with the Plato API.
+//
+// This file contains the PlatoClient struct and associated configuration options
+// for making authenticated HTTP requests to the Plato platform. The client provides
+// access to all Plato services including Sandbox, Organization, Simulator, Environment,
+// and Gitea operations.
+//
+// The client is thread-safe and immutable after creation, supporting concurrent usage
+// across multiple goroutines. It includes built-in retry logic, timeout configuration,
+// and custom header support.
 package plato
 
 import (

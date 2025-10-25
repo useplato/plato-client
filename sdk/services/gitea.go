@@ -1,3 +1,9 @@
+// Package services provides the Gitea service for Plato API operations.
+//
+// This file implements the GiteaService which handles Gitea integration operations
+// including retrieving authentication credentials, listing simulators with repository
+// information, and managing simulator repositories. Gitea is the git hosting platform
+// used by Plato for storing and versioning simulator source code.
 package services
 
 import (

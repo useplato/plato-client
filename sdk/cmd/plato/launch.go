@@ -1,3 +1,8 @@
+// Package main provides the environment launch view for the Plato CLI.
+//
+// This file implements the LaunchModel which handles the environment launch
+// workflow, allowing users to choose between launching from an existing simulator,
+// launching from a local plato-config.yml, or creating a blank VM.
 package main
 
 import (

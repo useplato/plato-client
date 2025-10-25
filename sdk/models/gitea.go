@@ -1,3 +1,9 @@
+// Package models provides data structures for Gitea integration.
+//
+// This file defines models for Gitea authentication, simulators with repository
+// information, and repository metadata. Gitea is used as the git hosting platform
+// for simulator source code, allowing users to clone, modify, and version control
+// their simulators.
 package models
 
 // GiteaCredentials represents Gitea authentication credentials

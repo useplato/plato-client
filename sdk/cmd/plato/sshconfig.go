@@ -1,3 +1,7 @@
+// Package main provides SSH configuration utilities for the Plato CLI.
+//
+// This file handles reading, parsing, and updating the user's ~/.ssh/config file
+// to add or manage SSH host entries for Plato VM sandboxes.
 package main
 
 import (

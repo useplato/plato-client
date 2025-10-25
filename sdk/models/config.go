@@ -1,3 +1,9 @@
+// Package models provides data structures for simulator configuration.
+//
+// This file defines the complete plato-config.yml structure, including compute
+// resources, metadata, services (docker/docker-compose), listeners, and datasets.
+// These models are used when configuring simulators and creating sandboxes with
+// specific resource requirements and service definitions.
 package models
 
 // SimConfigCompute represents compute resource configuration for a simulator

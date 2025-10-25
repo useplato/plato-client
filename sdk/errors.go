@@ -1,3 +1,9 @@
+// Package plato provides error types for the Plato SDK.
+//
+// This file defines custom error types for different failure scenarios when
+// interacting with the Plato API, including API errors, network errors,
+// validation errors, and rate limiting errors. Each error type provides
+// structured information about the failure for better error handling.
 package plato
 
 import "fmt"

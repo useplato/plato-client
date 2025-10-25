@@ -1,3 +1,8 @@
+// Package main provides the simulator selector view for the Plato CLI.
+//
+// This file implements the SimSelectorModel which displays a searchable list
+// of available simulators that users can select to launch as environments.
+// It fetches simulator data from the Plato API and provides filtering capabilities.
 package main
 
 import (
