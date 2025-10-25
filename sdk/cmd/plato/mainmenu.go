@@ -5,15 +5,19 @@
 package main
 
 import (
+	"os"
 
-"plato-sdk/cmd/plato/internal/ui/components"
+	"plato-sdk/cmd/plato/internal/ui/components"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type MainMenuModel struct {
-	choices list.Model
+	choices      list.Model
+	apiKeyMissing bool
 }
 
 type menuItem struct {
@@ -37,8 +41,12 @@ func NewMainMenuModel() MainMenuModel {
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 
+	// Check if API key is set
+	apiKey := os.Getenv("PLATO_API_KEY")
+
 	return MainMenuModel{
-		choices: l,
+		choices:      l,
+		apiKeyMissing: apiKey == "",
 	}
 }
 
@@ -47,6 +55,14 @@ func (m MainMenuModel) Init() tea.Cmd {
 }
 
 func (m MainMenuModel) Update(msg tea.Msg) (MainMenuModel, tea.Cmd) {
+	// If API key is missing, only allow quitting with any key
+	if m.apiKeyMissing {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		h := 15 // Fixed reasonable height for menu items
@@ -82,5 +98,39 @@ func (m MainMenuModel) Update(msg tea.Msg) (MainMenuModel, tea.Cmd) {
 }
 
 func (m MainMenuModel) View() string {
-	return components.RenderHeader() + "\n" + m.choices.View()
+	header := components.RenderHeader() + "\n"
+
+	// If API key is missing, show error message and exit instructions
+	if m.apiKeyMissing {
+		warningStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF0000")).
+			Bold(true).
+			MarginLeft(2).
+			MarginTop(1).
+			MarginBottom(1)
+
+		instructionStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#CCCCCC")).
+			MarginLeft(2).
+			MarginBottom(1)
+
+		exitStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#888888")).
+			MarginLeft(2).
+			MarginTop(2)
+
+		warning := warningStyle.Render("⚠  PLATO_API_KEY is not set")
+		instructions := instructionStyle.Render(
+			"Please set your API key before using the CLI:\n\n" +
+			"  export PLATO_API_KEY=your-api-key-here\n\n" +
+			"Or create a .env file in your project directory with:\n\n" +
+			"  PLATO_API_KEY=your-api-key-here\n\n" +
+			"You can view your API key at: https://plato.so/settings",
+		)
+		exitMsg := exitStyle.Render("Press any key to exit...")
+
+		return header + warning + "\n" + instructions + "\n" + exitMsg
+	}
+
+	return header + m.choices.View()
 }

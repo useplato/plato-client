@@ -81,6 +81,7 @@ type VMInfoModel struct {
 	config               *models.PlatoConfig
 	lastPushedBranch     string // Tracks the last branch pushed to hub
 	cachedCloneCmd       string // Cached clone command to avoid repeated API calls
+	hubRepoURL           string // Cached hub repository URL
 	showInfoPanel        bool   // Whether to show the info panel
 	runningCommand       bool   // Whether a command is currently running
 }
@@ -144,6 +145,10 @@ type ecrAuthenticatedMsg struct {
 	err error
 }
 
+type hubRepoURLMsg struct {
+	url string
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -174,6 +179,12 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		BorderForeground(vmInfoIndigo).
 		PaddingLeft(1)
 
+	// Try to load plato-config.yml
+	var config *models.PlatoConfig
+	if cfg, err := LoadPlatoConfig(); err == nil {
+		config = cfg
+	}
+
 	return VMInfoModel{
 		client:               client,
 		sandbox:              sandbox,
@@ -195,6 +206,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		rootPasswordSetup:    false,
 		proxytunnelProcesses: []*exec.Cmd{},
 		proxytunnelMappings:  []proxytunnelMapping{},
+		config:               config,
 		showInfoPanel:        false, // Start with info panel hidden
 	}
 }
@@ -269,6 +281,12 @@ func (m VMInfoModel) Init() tea.Cmd {
 	// Setup should already be done when we reach this view
 	// Start sending heartbeats to keep the VM alive
 	m.startHeartbeat()
+
+	// Fetch hub repository URL in background if we have a config
+	if m.config != nil && m.config.Service != "" {
+		return fetchHubRepoURL(m.client, m.config.Service)
+	}
+
 	return nil
 }
 
@@ -427,6 +445,13 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case hubRepoURLMsg:
+		// Cache the hub repo URL for display
+		m.hubRepoURL = msg.url
+		// Update viewport content with new info
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
+		return m, nil
+
 	case proxytunnelOpenedMsg:
 		utils.LogDebug("proxytunnelOpenedMsg received, localPort=%d, remotePort=%d, err=%v", msg.localPort, msg.remotePort, msg.err)
 		m.runningCommand = false
@@ -529,6 +554,11 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 		output.WriteString(fmt.Sprintf("Version:  %s\n", *m.version))
 	}
 	output.WriteString(fmt.Sprintf("URL:      %s\n", m.sandbox.URL))
+
+	// Show hub.plato.so repository link if we have it cached
+	if m.hubRepoURL != "" {
+		output.WriteString(fmt.Sprintf("Hub Repo: %s\n", m.hubRepoURL))
+	}
 
 	if m.setupComplete {
 		output.WriteString("\n" + strings.Repeat("─", 50) + "\n\n")
@@ -1667,4 +1697,35 @@ func (m VMInfoModel) View() string {
 	footer := helpStyle.Render(helpText)
 
 	return components.RenderHeader() + "\n" + header + "\n" + body + "\n" + footer
+}
+
+// fetchHubRepoURL fetches the hub repository URL for a service
+func fetchHubRepoURL(client *plato.PlatoClient, serviceName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Fetch simulators
+		simulators, err := client.Gitea.ListSimulators(ctx)
+		if err != nil {
+			return hubRepoURLMsg{url: ""}
+		}
+
+		// Find the simulator by service name
+		for _, sim := range simulators {
+			if strings.EqualFold(sim.Name, serviceName) {
+				if sim.HasRepo {
+					// Get the repository
+					repo, err := client.Gitea.GetSimulatorRepository(ctx, sim.ID)
+					if err == nil {
+						// Return the CloneURL without .git suffix
+						hubURL := strings.TrimSuffix(repo.CloneURL, ".git")
+						return hubRepoURLMsg{url: hubURL}
+					}
+				}
+				break
+			}
+		}
+
+		return hubRepoURLMsg{url: ""}
+	}
 }
