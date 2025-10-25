@@ -5,6 +5,8 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/ui/components"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -80,5 +82,5 @@ func (m MainMenuModel) Update(msg tea.Msg) (MainMenuModel, tea.Cmd) {
 }
 
 func (m MainMenuModel) View() string {
-	return RenderHeader() + "\n" + m.choices.View()
+	return components.RenderHeader() + "\n" + m.choices.View()
 }

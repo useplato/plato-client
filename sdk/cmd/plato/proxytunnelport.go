@@ -1,9 +1,10 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/ui/components"
 	"strconv"
 	"strings"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -122,5 +123,5 @@ func (m ProxytunnelPortModel) View() string {
 
 	body += "\n" + helpStyle.Render("enter: open tunnel • esc: back to VM info • ctrl+c: quit")
 
-	return RenderHeader() + "\n" + header + "\n" + body
+	return components.RenderHeader() + "\n" + header + "\n" + body
 }

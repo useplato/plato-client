@@ -8,18 +8,18 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/utils"
+"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
-
 	plato "plato-sdk"
 	"plato-sdk/models"
-
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -285,7 +285,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		return m, nil
 
 	case rootPasswordSetupMsg:
-		logDebug("rootPasswordSetupMsg received, err: %v", msg.err)
+		utils.LogDebug("rootPasswordSetupMsg received, err: %v", msg.err)
 		m.runningCommand = false
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Root password setup failed: %v", msg.err))
@@ -294,9 +294,9 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			// Update SSH config with password and change user to root
 			if m.sshHost != "" {
 				// First, update the username to root
-				if err := updateSSHConfigUser(m.sshHost, "root"); err != nil {
+				if err := utils.UpdateSSHConfigUser(m.sshHost, "root"); err != nil {
 					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config user: %v", err))
-				} else if err := updateSSHConfigPassword(m.sshHost, "password"); err != nil {
+				} else if err := utils.UpdateSSHConfigPassword(m.sshHost, "password"); err != nil {
 					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config password: %v", err))
 				} else {
 					m.statusMessages = append(m.statusMessages, "✓ Root SSH password configured!")
@@ -368,7 +368,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		return m, nil
 
 	case proxytunnelOpenedMsg:
-		logDebug("proxytunnelOpenedMsg received, localPort=%d, remotePort=%d, err=%v", msg.localPort, msg.remotePort, msg.err)
+		utils.LogDebug("proxytunnelOpenedMsg received, localPort=%d, remotePort=%d, err=%v", msg.localPort, msg.remotePort, msg.err)
 		m.runningCommand = false
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to open proxytunnel: %v", msg.err))
@@ -379,12 +379,12 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				remotePort: msg.remotePort,
 			})
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("✓ Proxytunnel: localhost:%d → remote:%d", msg.localPort, msg.remotePort))
-			logDebug("Added to lists, now have %d processes and %d mappings", len(m.proxytunnelProcesses), len(m.proxytunnelMappings))
+			utils.LogDebug("Added to lists, now have %d processes and %d mappings", len(m.proxytunnelProcesses), len(m.proxytunnelMappings))
 		}
 		return m, nil
 
 	case cursorOpenedMsg:
-		logDebug("cursorOpenedMsg received, err=%v", msg.err)
+		utils.LogDebug("cursorOpenedMsg received, err=%v", msg.err)
 		m.runningCommand = false
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to open Cursor: %v", msg.err))
@@ -522,15 +522,15 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string, branchName string) tea.Cmd {
 	return func() tea.Msg {
 		// Step 1: Perform pre-snapshot cleanup
-		logDebug("Starting pre-snapshot cleanup for service: %s", service)
-		needsDBConfig, err := preSnapshotCleanup(client, publicID, jobGroupID, service)
+		utils.LogDebug("Starting pre-snapshot cleanup for service: %s", service)
+		needsDBConfig, err := utils.PreSnapshotCleanup(client, publicID, jobGroupID, service)
 		if err != nil {
-			logDebug("Pre-snapshot cleanup failed: %v", err)
+			utils.LogDebug("Pre-snapshot cleanup failed: %v", err)
 			// Don't fail the snapshot if cleanup fails, just log it
 		}
 		if needsDBConfig {
 			// This shouldn't happen here since we check before calling this function
-			logDebug("Warning: DB config needed but not provided")
+			utils.LogDebug("Warning: DB config needed but not provided")
 		}
 
 		// Step 2: Create the snapshot
@@ -559,11 +559,11 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 			GitHash: gitHash,
 		}
 
-		logDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
+		utils.LogDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
 		resp, err := client.Sandbox.CreateSnapshot(ctx, publicID, req)
 		if err != nil {
 			// Log error to file
-			logDebug("CreateSnapshot failed: %v", err)
+			utils.LogDebug("CreateSnapshot failed: %v", err)
 			logErr := logErrorToFile("plato_error.log", fmt.Sprintf("API: CreateSnapshot failed for %s: %v", publicID, err))
 			if logErr != nil {
 				fmt.Printf("Failed to write error log: %v\n", logErr)
@@ -571,7 +571,7 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 			return snapshotCreatedMsg{err: err, response: nil}
 		}
 
-		logDebug("Snapshot created successfully: %s", resp.ArtifactID)
+		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactID)
 		return snapshotCreatedMsg{err: nil, response: resp}
 	}
 }
@@ -579,9 +579,17 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string, dbConfig DBConfig) tea.Cmd {
 	return func() tea.Msg {
 		// Step 1: Perform pre-snapshot cleanup with provided config
-		logDebug("Starting pre-snapshot cleanup with provided DB config for service: %s", service)
-		if err := preSnapshotCleanupWithConfig(client, publicID, jobGroupID, dbConfig); err != nil {
-			logDebug("Pre-snapshot cleanup failed: %v", err)
+		utils.LogDebug("Starting pre-snapshot cleanup with provided DB config for service: %s", service)
+		// Convert local DBConfig to utils.DBConfig
+		utilsConfig := utils.DBConfig{
+			DBType:    dbConfig.DBType,
+			User:      dbConfig.User,
+			Password:  dbConfig.Password,
+			DestPort:  dbConfig.DestPort,
+			Databases: dbConfig.Databases,
+		}
+		if err := utils.PreSnapshotCleanupWithConfig(client, publicID, jobGroupID, utilsConfig); err != nil {
+			utils.LogDebug("Pre-snapshot cleanup failed: %v", err)
 			// Don't fail the snapshot if cleanup fails, just log it
 		}
 
@@ -595,11 +603,11 @@ func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, s
 			Dataset: dataset,
 		}
 
-		logDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
+		utils.LogDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
 		resp, err := client.Sandbox.CreateSnapshot(ctx, publicID, req)
 		if err != nil {
 			// Log error to file
-			logDebug("CreateSnapshot failed: %v", err)
+			utils.LogDebug("CreateSnapshot failed: %v", err)
 			logErr := logErrorToFile("plato_error.log", fmt.Sprintf("API: CreateSnapshot failed for %s: %v", publicID, err))
 			if logErr != nil {
 				fmt.Printf("Failed to write error log: %v\n", logErr)
@@ -607,7 +615,7 @@ func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, s
 			return snapshotCreatedMsg{err: err, response: nil}
 		}
 
-		logDebug("Snapshot created successfully: %s", resp.ArtifactID)
+		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactID)
 		return snapshotCreatedMsg{err: nil, response: resp}
 	}
 }
@@ -924,52 +932,29 @@ func copyFilesRespectingGitignore(src, dst string) error {
 	})
 }
 
-// findFreePort finds an available port on the local machine
-func findFreePort() (int, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
-	return port, nil
-}
-
-// findFreePortPreferred tries to use the preferred port, falls back to any free port
-func findFreePortPreferred(preferredPort int) (int, error) {
-	// Try preferred port first
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preferredPort))
-	if err == nil {
-		// Preferred port is available
-		listener.Close()
-		logDebug("Using preferred port: %d", preferredPort)
-		return preferredPort, nil
-	}
-
-	// Preferred port not available, find any free port
-	logDebug("Preferred port %d not available, finding alternative", preferredPort)
-	return findFreePort()
-}
+// These functions are now in internal/utils/network.go
+// Keeping empty stubs here for reference, but they should be removed
+// and all calls should use utils.FindFreePort() and utils.FindFreePortPreferred()
 
 func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
 	return func() tea.Msg {
-		logDebug("openProxytunnelWithPort called, publicID=%s, remotePort=%d", publicID, remotePort)
+		utils.LogDebug("openProxytunnelWithPort called, publicID=%s, remotePort=%d", publicID, remotePort)
 
 		// Try to use the same port as remote, fall back to any free port
-		localPort, err := findFreePortPreferred(remotePort)
+		localPort, err := utils.FindFreePortPreferred(remotePort)
 		if err != nil {
-			logDebug("Failed to find free port: %v", err)
+			utils.LogDebug("Failed to find free port: %v", err)
 			return proxytunnelOpenedMsg{err: fmt.Errorf("failed to find free port: %w", err)}
 		}
-		logDebug("Found free local port: %d (requested: %d)", localPort, remotePort)
+		utils.LogDebug("Found free local port: %d (requested: %d)", localPort, remotePort)
 
 		// Find proxytunnel path
 		proxytunnelPath, err := exec.LookPath("proxytunnel")
 		if err != nil {
-			logDebug("proxytunnel not found: %v", err)
+			utils.LogDebug("proxytunnel not found: %v", err)
 			return proxytunnelOpenedMsg{err: fmt.Errorf("proxytunnel not found in PATH: %w", err)}
 		}
-		logDebug("Found proxytunnel at: %s", proxytunnelPath)
+		utils.LogDebug("Found proxytunnel at: %s", proxytunnelPath)
 
 		// Build proxytunnel command
 		// proxytunnel -E -p proxy.plato.so:9000 -P '{publicID}@{remotePort}:newpass' -d 127.0.0.1:{remotePort} -a {localPort} -v --no-check-certificate
@@ -983,14 +968,14 @@ func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
 			"-v",
 			"--no-check-certificate",
 		)
-		logDebug("Starting proxytunnel command: %v", cmd.Args)
+		utils.LogDebug("Starting proxytunnel command: %v", cmd.Args)
 
 		// Start the process
 		if err := cmd.Start(); err != nil {
-			logDebug("Failed to start proxytunnel: %v", err)
+			utils.LogDebug("Failed to start proxytunnel: %v", err)
 			return proxytunnelOpenedMsg{err: fmt.Errorf("failed to start proxytunnel: %w", err)}
 		}
-		logDebug("Proxytunnel started successfully with PID: %d", cmd.Process.Pid)
+		utils.LogDebug("Proxytunnel started successfully with PID: %d", cmd.Process.Pid)
 
 		return proxytunnelOpenedMsg{
 			localPort:  localPort,
@@ -1005,47 +990,47 @@ func setupRootPassword(client *plato.PlatoClient, publicID string, sshHost strin
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		logDebug("Setting up root password for VM: %s", publicID)
+		utils.LogDebug("Setting up root password for VM: %s", publicID)
 
 		// Call the SetupRootPassword API
 		err := client.Sandbox.SetupRootPassword(ctx, publicID, "password")
 		if err != nil {
-			logDebug("SetupRootPassword API failed: %v", err)
+			utils.LogDebug("SetupRootPassword API failed: %v", err)
 			logErrorToFile("plato_error.log", fmt.Sprintf("API: SetupRootPassword failed for %s: %v", publicID, err))
 			return rootPasswordSetupMsg{err: fmt.Errorf("failed to set up root password: %w", err)}
 		}
 
-		logDebug("Root password setup successful for VM: %s", publicID)
+		utils.LogDebug("Root password setup successful for VM: %s", publicID)
 		return rootPasswordSetupMsg{err: nil}
 	}
 }
 
 func openCursor(sshHost string) tea.Cmd {
 	return func() tea.Msg {
-		logDebug("Opening VS Code for SSH host: %s", sshHost)
+		utils.LogDebug("Opening VS Code for SSH host: %s", sshHost)
 
 		// Find code command
 		codePath, err := exec.LookPath("code")
 		if err != nil {
-			logDebug("code command not found: %v", err)
+			utils.LogDebug("code command not found: %v", err)
 			return cursorOpenedMsg{err: fmt.Errorf("code command not found in PATH. Please install VS Code: https://code.visualstudio.com")}
 		}
-		logDebug("Found code at: %s", codePath)
+		utils.LogDebug("Found code at: %s", codePath)
 
 		// Build code command with SSH remote
 		// code --folder-uri vscode-remote://ssh-remote+{sshHost}/root --remote-platform linux
 		folderURI := fmt.Sprintf("vscode-remote://ssh-remote+%s/root", sshHost)
 		cmd := exec.Command(codePath, "--folder-uri", folderURI, "--remote-platform", "linux")
 
-		logDebug("Starting code command: %v", cmd.Args)
+		utils.LogDebug("Starting code command: %v", cmd.Args)
 
 		// Start the code process (don't wait, let it run independently)
 		if err := cmd.Start(); err != nil {
-			logDebug("Failed to start code: %v", err)
+			utils.LogDebug("Failed to start code: %v", err)
 			return cursorOpenedMsg{err: fmt.Errorf("failed to start code: %w", err)}
 		}
 
-		logDebug("VS Code started successfully with PID: %d", cmd.Process.Pid)
+		utils.LogDebug("VS Code started successfully with PID: %d", cmd.Process.Pid)
 
 		// Release the process so it continues independently
 		go cmd.Wait()
@@ -1176,32 +1161,32 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		if !m.heartbeatStopped {
 			close(m.heartbeatStop)
 			m.heartbeatStopped = true
-			logDebug("Stopped heartbeat goroutine")
+			utils.LogDebug("Stopped heartbeat goroutine")
 		}
 		// Kill all proxytunnel processes
 		for i, cmd := range m.proxytunnelProcesses {
 			if cmd.Process != nil {
 				pid := cmd.Process.Pid
-				logDebug("Killing proxytunnel process %d/%d (PID: %d)", i+1, len(m.proxytunnelProcesses), pid)
+				utils.LogDebug("Killing proxytunnel process %d/%d (PID: %d)", i+1, len(m.proxytunnelProcesses), pid)
 				if err := cmd.Process.Kill(); err != nil {
-					logDebug("Error killing proxytunnel process PID %d: %v", pid, err)
+					utils.LogDebug("Error killing proxytunnel process PID %d: %v", pid, err)
 				} else {
-					logDebug("Successfully killed proxytunnel process PID: %d", pid)
+					utils.LogDebug("Successfully killed proxytunnel process PID: %d", pid)
 					// Wait for process to exit to avoid zombies
 					go cmd.Wait()
 				}
 			} else {
-				logDebug("Proxytunnel process %d/%d has no process handle", i+1, len(m.proxytunnelProcesses))
+				utils.LogDebug("Proxytunnel process %d/%d has no process handle", i+1, len(m.proxytunnelProcesses))
 			}
 		}
-		logDebug("Finished killing %d proxytunnel processes", len(m.proxytunnelProcesses))
+		utils.LogDebug("Finished killing %d proxytunnel processes", len(m.proxytunnelProcesses))
 
 		// Cleanup SSH config entry if exists
 		if m.sshHost != "" {
-			if err := cleanupSSHConfig(m.sshHost); err != nil {
-				logDebug("Error cleaning up SSH config: %v", err)
+			if err := utils.CleanupSSHConfig(m.sshHost); err != nil {
+				utils.LogDebug("Error cleaning up SSH config: %v", err)
 			} else {
-				logDebug("Successfully cleaned up SSH config for host: %s", m.sshHost)
+				utils.LogDebug("Successfully cleaned up SSH config for host: %s", m.sshHost)
 			}
 		}
 		// Call VM cleanup API
@@ -1210,12 +1195,12 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			logDebug("Calling DeleteVM for: %s", m.sandbox.PublicID)
+			utils.LogDebug("Calling DeleteVM for: %s", m.sandbox.PublicID)
 			if err := m.client.Sandbox.DeleteVM(ctx, m.sandbox.PublicID); err != nil {
 				// Log error but still navigate away
-				logDebug("Warning: failed to delete VM: %v", err)
+				utils.LogDebug("Warning: failed to delete VM: %v", err)
 			} else {
-				logDebug("Successfully deleted VM: %s", m.sandbox.PublicID)
+				utils.LogDebug("Successfully deleted VM: %s", m.sandbox.PublicID)
 			}
 			return NavigateMsg{view: ViewMainMenu}
 		}
@@ -1283,7 +1268,7 @@ func (m VMInfoModel) View() string {
 		}
 
 		body := lipgloss.NewStyle().MarginTop(1).Render(statusContent.String())
-		return RenderHeader() + "\n" + header + "\n" + body
+		return components.RenderHeader() + "\n" + header + "\n" + body
 	}
 
 	// Actions panel (left side)
@@ -1313,5 +1298,5 @@ func (m VMInfoModel) View() string {
 	}
 	footer := helpStyle.Render(helpText)
 
-	return RenderHeader() + "\n" + header + "\n" + body + "\n" + footer
+	return components.RenderHeader() + "\n" + header + "\n" + body + "\n" + footer
 }

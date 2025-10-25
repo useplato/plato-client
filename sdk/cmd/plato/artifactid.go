@@ -1,12 +1,12 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"strings"
-
 	plato "plato-sdk"
 	"plato-sdk/models"
-
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -204,7 +204,7 @@ func (m *ArtifactIDModel) updateTableRows() {
 }
 
 func (m ArtifactIDModel) View() string {
-	header := RenderHeader() + "\n"
+	header := components.RenderHeader() + "\n"
 
 	if m.starting {
 		return header + "\n  Starting environment from artifact...\n"

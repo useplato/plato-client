@@ -1,10 +1,12 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/utils"
+"plato-sdk/cmd/plato/internal/ui/components"
 	"fmt"
 	"strconv"
 	"strings"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -144,7 +146,15 @@ func (m DBEntryModel) Update(msg tea.Msg) (DBEntryModel, tea.Cmd) {
 				}
 
 				// Save and return
-				if err := saveCustomDBConfig(m.service, config); err != nil {
+				// Convert local DBConfig to utils.DBConfig
+			utilsConfig := utils.DBConfig{
+				DBType:    config.DBType,
+				User:      config.User,
+				Password:  config.Password,
+				DestPort:  config.DestPort,
+				Databases: config.Databases,
+			}
+			if err := utils.SaveCustomDBConfig(m.service, utilsConfig); err != nil {
 					m.err = fmt.Sprintf("Failed to save config: %v", err)
 					return m, nil
 				}
@@ -251,5 +261,5 @@ func (m DBEntryModel) View() string {
 	body.WriteString("\n")
 	body.WriteString(helpStyle.Render("tab/shift+tab: navigate • enter: submit • esc: skip DB cleanup"))
 
-	return RenderHeader() + "\n" + header + "\n" + body.String()
+	return components.RenderHeader() + "\n" + header + "\n" + body.String()
 }

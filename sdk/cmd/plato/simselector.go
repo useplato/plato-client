@@ -6,14 +6,14 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"fmt"
 	"io"
 	"strings"
-
 	plato "plato-sdk"
 	"plato-sdk/models"
-
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -177,7 +177,7 @@ func (m SimSelectorModel) View() string {
 		MarginTop(1)
 
 	var content strings.Builder
-	content.WriteString(RenderHeader() + "\n")
+	content.WriteString(components.RenderHeader() + "\n")
 
 	if m.loading {
 		loadingStyle := lipgloss.NewStyle().

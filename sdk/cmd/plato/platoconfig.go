@@ -7,11 +7,11 @@
 package main
 
 import (
-	"fmt"
 
+"plato-sdk/cmd/plato/internal/ui/components"
+	"fmt"
 	plato "plato-sdk"
 	"plato-sdk/models"
-
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -166,21 +166,21 @@ func (m PlatoConfigModel) View() string {
 		errorMsg := fmt.Sprintf("❌ Error:\n\n%v", m.err)
 		help := "Press Esc to go back"
 
-		return RenderHeader() + "\n" + errorStyle.Render(errorMsg) + "\n" + helpStyle.Render(help)
+		return components.RenderHeader() + "\n" + errorStyle.Render(errorMsg) + "\n" + helpStyle.Render(help)
 	}
 
 	if m.loading {
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
 			Padding(2, 4)
-		return RenderHeader() + "\n" + style.Render("Loading plato-config.yml...")
+		return components.RenderHeader() + "\n" + style.Render("Loading plato-config.yml...")
 	}
 
 	if m.config == nil || len(m.config.Datasets) == 0 {
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
 			Padding(2, 4)
-		return RenderHeader() + "\n" + style.Render("No datasets found in plato-config.yml")
+		return components.RenderHeader() + "\n" + style.Render("No datasets found in plato-config.yml")
 	}
 
 	helpStyle := lipgloss.NewStyle().
@@ -188,7 +188,7 @@ func (m PlatoConfigModel) View() string {
 		MarginLeft(2).
 		MarginTop(1)
 
-	content := RenderHeader() + "\n" + m.datasetList.View()
+	content := components.RenderHeader() + "\n" + m.datasetList.View()
 	content += "\n" + helpStyle.Render("Enter: Launch • Esc: Back")
 	return content
 }
