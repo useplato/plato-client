@@ -553,6 +553,9 @@ def sandbox(
         "plato-config.yml", "--config", help="VM configuration file"
     ),
     dataset: str = typer.Option("base", "--dataset", help="Dataset to use"),
+    resume: Optional[str] = typer.Option(
+        None, "--resume", help="Artifact ID to resume from"
+    ),
 ):
     """Start a development sandbox environment."""
 
@@ -579,7 +582,7 @@ def sandbox(
                 task = progress.add_task(
                     "[cyan]Provisioning sandbox (VM, SSH, tunnel)...", total=None
                 )
-                await sandbox_service.init(console, dataset, sdk, sandbox_sdk)
+                await sandbox_service.init(console, dataset, sdk, sandbox_sdk, resume)
                 progress.update(task, description="[green]Sandbox ready[/green]")
 
             # Run interactive sandbox menu
@@ -594,7 +597,41 @@ def sandbox(
             if not isinstance(
                 e, (KeyboardInterrupt, typer.Abort, EOFError, asyncio.CancelledError)
             ):
-                console.print(f"[red]❌ Sandbox failed: {e}[/red]")
+                # Try to parse JSON from the exception string and pretty-print details
+                error_str = str(e)
+                printed_pretty = False
+                try:
+                    if "{" in error_str and "}" in error_str:
+                        start_idx = error_str.find("{")
+                        end_idx = error_str.rfind("}")
+                        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                            json_substr = error_str[start_idx : end_idx + 1]
+                            payload = json.loads(json_substr)
+                            console.print("[red]❌ Sandbox failed[/red]")
+                            if isinstance(payload, dict) and payload.get("detail"):
+                                # Show the detail field formatted in a panel
+                                detail_panel = Panel.fit(
+                                    payload.get("detail"),
+                                    title="[red]Detail[/red]",
+                                    border_style="red",
+                                )
+                                console.print(detail_panel)
+                            else:
+                                # Fallback to pretty-printed JSON
+                                pretty_json = json.dumps(payload, indent=2)
+                                json_panel = Panel.fit(
+                                    pretty_json,
+                                    title="[red]Error (JSON)[/red]",
+                                    border_style="red",
+                                )
+                                console.print(json_panel)
+                            printed_pretty = True
+                except Exception:
+                    # If parsing fails, fall back to raw message below
+                    printed_pretty = False
+
+                if not printed_pretty:
+                    console.print(f"[red]❌ Sandbox failed: {e}[/red]")
                 raise typer.Exit(1)
         finally:
             try:
@@ -797,21 +834,16 @@ async def handle_run_services(sandbox: Sandbox):
                 dataset_config=sandbox.sandbox_info.dataset_config,
             )
 
-            start_result = await sandbox._monitor_ssh_execution_with_data(
+            start_result = await sandbox._monitor_sse_stream_with_data(
                 sandbox.client,
                 submit.correlation_id,
                 "Start Services",
                 timeout=900,
             )
-            start_obj = _parse_last_json(start_result.stdout or "")
-            if (
-                not start_result.success
-                or not start_obj
-                or start_obj.get("status") == "error"
-            ):
+            if not start_result.success:
                 progress.update(task, description="[red]Start-services failed[/red]")
                 console.print(
-                    f"[red]❌ Error starting services: {(start_result.error or (start_obj or {}).get('message') or 'unknown error')}[/red]"
+                    f"[red]❌ Error starting services: {start_result.error or 'unknown error'}[/red]"
                 )
                 return
             progress.update(task, description="[green]Start-services submitted[/green]")
@@ -832,7 +864,7 @@ async def handle_run_services(sandbox: Sandbox):
                     dataset=sandbox.sandbox_info.dataset,
                     dataset_config=sandbox.sandbox_info.dataset_config,
                 )
-                health_result = await sandbox._monitor_ssh_execution_with_data(
+                health_result = await sandbox._monitor_sse_stream_with_data(
                     sandbox.client,
                     health_submit.correlation_id,
                     "Services Health",
@@ -901,7 +933,7 @@ async def handle_run_worker(sandbox: Sandbox):
                 dataset=sandbox.sandbox_info.dataset,
                 dataset_config=sandbox.sandbox_info.dataset_config,
             )
-            start_result = await sandbox._monitor_ssh_execution_with_data(
+            start_result = await sandbox._monitor_sse_stream_with_data(
                 sandbox.client,
                 submit.correlation_id,
                 "Start Worker",
@@ -914,6 +946,7 @@ async def handle_run_worker(sandbox: Sandbox):
                 or start_obj.get("status") == "error"
             ):
                 progress.update(task, description="[red]Start-worker failed[/red]")
+                breakpoint()
                 console.print(
                     f"[red]❌ Error starting worker: {(start_result.error or (start_obj or {}).get('message') or 'unknown error')}[/red]"
                 )
@@ -935,7 +968,7 @@ async def handle_run_worker(sandbox: Sandbox):
                 submit_h = await sandbox.sandbox_sdk.healthy_worker(
                     public_id=sandbox.sandbox_info.public_id
                 )
-                result_h = await sandbox._monitor_ssh_execution_with_data(
+                result_h = await sandbox._monitor_sse_stream_with_data(
                     sandbox.client,
                     submit_h.correlation_id,
                     "Worker Health",
@@ -999,7 +1032,7 @@ async def handle_create_snapshot(sandbox: Sandbox):
 
             # Monitor snapshot creation
             progress.update(task, description="[cyan]Creating VM snapshot...[/cyan]")
-            result = await sandbox._monitor_ssh_execution_with_data(
+            result = await sandbox._monitor_sse_stream_with_data(
                 sandbox.client,
                 submit.correlation_id,
                 "VM Snapshot",

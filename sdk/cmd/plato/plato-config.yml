@@ -1,0 +1,27 @@
+service: test
+datasets:
+    base:
+        compute:
+            cpus: 1
+            memory: 512
+            disk: 10240
+            app_port: 8080
+            plato_messaging_port: 7000
+        metadata:
+            favicon: https://plato.so/favicon.ico
+            name: Plato Simulator
+            description: A Plato simulator environment
+            source_code_url: https://github.com/useplato/plato
+            start_url: http://localhost:8080
+            license: MIT
+            variables:
+                - name: PLATO_API_KEY
+                  value: your-api-key
+        services:
+            main_app:
+                type: docker-compose
+                file: docker-compose.yml
+                required_healthy_containers:
+                    - all
+                healthy_wait_timeout: 300
+        listeners: {}
