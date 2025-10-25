@@ -47,6 +47,7 @@ type VMConfigModel struct {
 	datasetConfig  models.SimConfigDataset
 	sshURL         string
 	sshHost        string
+	sshConfigPath  string
 	skipForm       bool // Skip form and use defaults when launching from simulator
 }
 
@@ -60,9 +61,10 @@ type sandboxCreatedMsg struct {
 }
 
 type sandboxSetupCompleteMsg struct {
-	sshURL  string
-	sshHost string
-	err     error
+	sshURL        string
+	sshHost       string
+	sshConfigPath string
+	err           error
 }
 
 type statusUpdateMsg struct {
@@ -117,9 +119,10 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:  "",
-				sshHost: "",
-				err:     fmt.Errorf("SSH config setup failed: %w", err),
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("SSH config setup failed: %w", err),
 			}
 		}
 
@@ -131,9 +134,10 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:  "",
-				sshHost: "",
-				err:     fmt.Errorf("failed to read SSH public key: %w", err),
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("failed to read SSH public key: %w", err),
 			}
 		}
 
@@ -141,9 +145,10 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:  "",
-				sshHost: "",
-				err:     fmt.Errorf("root SSH setup failed: %w", err),
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("root SSH setup failed: %w", err),
 			}
 		}
 
@@ -156,9 +161,10 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 		close(statusChan)
 
 		return sandboxSetupCompleteMsg{
-			sshURL:  sshURL,
-			sshHost: sshHost,
-			err:     nil,
+			sshURL:        sshURL,
+			sshHost:       sshHost,
+			sshConfigPath: configPath,
+			err:           nil,
 		}
 	}
 }
@@ -169,16 +175,30 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 
 		statusChan <- "Setting up sandbox environment..."
 
-		statusChan <- "Calling setup-sandbox API..."
-
-		// Call the setup-sandbox API with full config
-		correlationID, err := client.Sandbox.SetupSandbox(ctx, sandbox.PublicID, config, dataset)
+		// Read SSH public key for plato user
+		statusChan <- "Reading SSH public key..."
+		sshPublicKey, err := utils.ReadSSHPublicKey()
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:  "",
-				sshHost: "",
-				err:     err,
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("failed to read SSH public key: %w", err),
+			}
+		}
+
+		statusChan <- "Calling setup-sandbox API..."
+
+		// Call the setup-sandbox API with full config and SSH public key
+		correlationID, err := client.Sandbox.SetupSandbox(ctx, sandbox.PublicID, config, dataset, sshPublicKey)
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           err,
 			}
 		}
 
@@ -190,9 +210,10 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:  "",
-				sshHost: "",
-				err:     fmt.Errorf("setup monitoring failed: %w", err),
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("setup monitoring failed: %w", err),
 			}
 		}
 
@@ -206,9 +227,10 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:  "",
-				sshHost: "",
-				err:     fmt.Errorf("SSH config setup failed: %w", err),
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("SSH config setup failed: %w", err),
 			}
 		}
 
@@ -218,13 +240,13 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		// Generate SSH connection info
 		sshURL := fmt.Sprintf("root@%s", sandbox.PublicID)
 
-		statusChan <- fmt.Sprintf("SSH configured: ssh %s", sshHost)
 		close(statusChan)
 
 		return sandboxSetupCompleteMsg{
-			sshURL:  sshURL,
-			sshHost: sshHost,
-			err:     nil,
+			sshURL:        sshURL,
+			sshHost:       sshHost,
+			sshConfigPath: configPath,
+			err:           nil,
 		}
 	}
 }
@@ -537,6 +559,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 
 		m.sshURL = msg.sshURL
 		m.sshHost = msg.sshHost
+		m.sshConfigPath = msg.sshConfigPath
 
 		// Wait a moment to show success, then navigate to VM info view
 		return m, tea.Batch(
@@ -548,6 +571,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 					dataset:         m.dataset,
 					sshURL:          msg.sshURL,
 					sshHost:         msg.sshHost,
+					sshConfigPath:   msg.sshConfigPath,
 					fromExistingSim: m.artifactID != nil, // True if launched with artifact ID
 					artifactID:      m.artifactID,
 					version:         m.version,

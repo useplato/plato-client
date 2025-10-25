@@ -303,11 +303,16 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 	return fmt.Errorf("SSE stream ended without completion")
 }
 
-// SetupSandbox sets up a sandbox
-func (s *SandboxService) SetupSandbox(ctx context.Context, jobID string, config models.SimConfigDataset, dataset string) (string, error) {
+// SetupSandbox sets up a sandbox with optional SSH public key for plato user
+func (s *SandboxService) SetupSandbox(ctx context.Context, jobID string, config models.SimConfigDataset, dataset string, sshPublicKey string) (string, error) {
 	payload := map[string]interface{}{
 		"dataset":              dataset,
 		"plato_dataset_config": config,
+	}
+
+	// Add SSH public key if provided
+	if sshPublicKey != "" {
+		payload["ssh_public_key"] = sshPublicKey
 	}
 
 	body, err := json.Marshal(payload)

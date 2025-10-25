@@ -69,6 +69,7 @@ type VMInfoModel struct {
 	statusChan           chan string
 	sshURL               string
 	sshHost              string
+	sshConfigPath        string
 	viewport             viewport.Model
 	viewportReady        bool
 	heartbeatStop        chan struct{}
@@ -94,8 +95,10 @@ func (v vmAction) Description() string { return v.description }
 func (v vmAction) FilterValue() string { return v.title }
 
 type sandboxSetupMsg struct {
-	sshURL string
-	err    error
+	sshURL        string
+	sshHost       string
+	sshConfigPath string
+	err           error
 }
 
 type rootPasswordSetupMsg struct {
@@ -280,6 +283,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Setup failed: %v", msg.err))
 		} else {
 			m.sshURL = msg.sshURL
+			m.sshHost = msg.sshHost
+			m.sshConfigPath = msg.sshConfigPath
 			m.statusMessages = append(m.statusMessages, "✓ Sandbox ready!")
 		}
 		return m, nil
@@ -473,7 +478,12 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	if m.setupComplete {
 		output.WriteString("\n" + strings.Repeat("─", 50) + "\n\n")
 		output.WriteString("CONNECTION INFO\n\n")
-		if m.sshHost != "" {
+		if m.sshHost != "" && m.sshConfigPath != "" {
+			// Format SSH command on multiple lines for better readability
+			output.WriteString("SSH Command:\n")
+			output.WriteString(fmt.Sprintf("  ssh -F %s \\\n", m.sshConfigPath))
+			output.WriteString(fmt.Sprintf("      %s\n", m.sshHost))
+		} else if m.sshHost != "" {
 			output.WriteString(fmt.Sprintf("SSH:  ssh %s\n", m.sshHost))
 		} else {
 			output.WriteString(fmt.Sprintf("SSH:  %s\n", m.sshURL))
