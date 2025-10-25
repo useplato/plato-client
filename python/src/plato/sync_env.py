@@ -2,6 +2,7 @@ import os
 from urllib.parse import urlparse
 from plato.models.task import CustomEvalConfig
 from plato.models import PlatoTask, EvaluationResult
+from plato.models.flow import Flow
 from typing import List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import threading
@@ -72,7 +73,6 @@ class SyncPlatoEnvironment:
             throw_on_login_error (bool): Whether to raise an error on login failure
             dataset (str): The dataset to use for login (default: "base")
         """
-        from plato.models.flow import Simulator
         from plato.sync_flow_executor import SyncFlowExecutor
 
         if not self.env_id:
@@ -86,14 +86,10 @@ class SyncPlatoEnvironment:
             )
         with open(scripts_path, "r") as f:
             scripts = yaml.safe_load(f)
-        simulator = Simulator.model_validate(scripts)
 
-        # Get the specified dataset
-        target_dataset = next(
-            (d for d in simulator.datasets if d.name == dataset), None
-        )
-        if not target_dataset:
-            raise PlatoClientError(f"No dataset '{dataset}' found")
+        # Parse flows from Watchdog-style format
+        flows_data = scripts.get("flows", [])
+        flows_list = [Flow.model_validate(f) for f in flows_data]
 
         # Determine flow name based on dataset
         if dataset == "base":
@@ -102,12 +98,12 @@ class SyncPlatoEnvironment:
             flow_name = dataset
 
         login_flow = next(
-            (flow for flow in simulator.flows if flow.name == flow_name), None
+            (flow for flow in flows_list if flow.name == flow_name), None
         )
         if not login_flow:
             raise PlatoClientError(f"No login flow '{flow_name}' found")
 
-        flow_executor = SyncFlowExecutor(page, login_flow, target_dataset, logger=logger)
+        flow_executor = SyncFlowExecutor(page, login_flow, logger=logger)
         if not flow_executor.execute_flow():
             if throw_on_login_error:
                 raise PlatoClientError("Failed to login")

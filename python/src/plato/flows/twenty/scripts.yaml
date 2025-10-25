@@ -1,89 +1,75 @@
-name: twenty
-reset_timeout: 60000
-environment_ready_timeout: 300000
-datasets:
-- name: base
-  description: Base dataset with admin credentials
-  variables:
-    username: plato@gmail.com
-    password: password
-    wrong_password: wrongpassword
-  flows:
-  - login
-  - incorrect_login
 flows:
 - name: login
   description: Complete login flow for Twenty CRM (Plato UI)
   steps:
-  - action: navigate
-    url: '/'
-    description: Navigate to Twenty CRM home page
-  - action: screenshot
-    description: Screenshot before login (initial screen)
+  - description: Navigate to Twenty CRM home page
+    type: navigate
+    url: /
+  - description: Screenshot before login (initial screen)
     filename: 01_before_login.png
-  - action: wait
-    description: Wait for login modal to appear
+    type: screenshot
+  - description: Wait for login modal to appear
     duration: 5000
-  - action: wait_for_selector
-    description: Wait for Continue with Email button
+    type: wait
+  - description: Wait for Continue with Email button
     selector: button:has-text("Continue with Email")
     timeout: 15000
-  - action: click
-    description: Click "Continue with Email" button on Plato modal
+    type: wait_for_selector
+  - description: Click "Continue with Email" button on Plato modal
     selector: button:has-text("Continue with Email")
-  - action: wait
-    description: Wait for email input to appear
+    type: click
+  - description: Wait for email input to appear
     duration: 2000
-  - action: screenshot
-    description: Screenshot after Continue screen
+    type: wait
+  - description: Screenshot after Continue screen
     filename: 02_after_email.png
-  - action: wait_for_selector
-    description: Wait for email input field
+    type: screenshot
+  - description: Wait for email input field
     selector: input[placeholder='Email']
     timeout: 10000
-  - action: fill
-    description: Fill in email
+    type: wait_for_selector
+  - description: Fill in email
     selector: input[placeholder='Email']
-    value: $username
-  - action: wait_for_selector
-    description: Wait for continue/submit button
+    type: fill
+    value: plato@gmail.com
+  - description: Wait for continue/submit button
     selector: button:has-text('Continue'), button[type='submit']
     timeout: 10000
-  - action: click
-    description: Submit email to proceed
+    type: wait_for_selector
+  - description: Submit email to proceed
     selector: button:has-text('Continue'), button[type='submit']
-  - action: wait
-    description: Wait for password screen
+    type: click
+  - description: Wait for password screen
     duration: 2000
-  - action: wait_for_selector
-    description: Wait for password input field
+    type: wait
+  - description: Wait for password input field
     selector: input[type='password'], input[name='password']
     timeout: 5000
-  - action: fill
-    description: Fill in password
+    type: wait_for_selector
+  - description: Fill in password
     selector: input[type='password'], input[name='password']
-    value: $password
-  - action: screenshot
-    description: Screenshot after entering email and password
+    type: fill
+    value: password
+  - description: Screenshot after entering email and password
     filename: 02_credentials_entered.png
-  - action: wait_for_selector
-    description: Wait for login button
+    type: screenshot
+  - description: Wait for login button
     selector: button:has-text('Log in'), button[type='submit']
     timeout: 10000
-  - action: click
-    description: Click login button
+    type: wait_for_selector
+  - description: Click login button
     selector: button:has-text('Log in'), button[type='submit']
-  - action: wait
-    description: Wait for login to process
+    type: click
+  - description: Wait for login to process
     duration: 5000
-  - action: screenshot
-    description: Screenshot after login
+    type: wait
+  - description: Screenshot after login
     filename: 03_after_login.png
-  - action: wait
-    description: Final wait for dashboard or redirect
+    type: screenshot
+  - description: Final wait for dashboard or redirect
     duration: 5000
-  - action: verify_no_errors
-    description: Verify no errors visible after login
+    type: wait
+  - description: Verify no errors visible after login
     error_selectors:
     - .alert-danger
     - .alert-error
@@ -93,98 +79,101 @@ flows:
     - .auth-error
     - .error
     - .alert
-  - action: verify_url
+    type: verify_no_errors
+  - contains: true
     description: Verify redirected to book call decision (post-login)
-    url: '/book'
-    contains: true
-  - action: verify
-    description: Verify workspace dropdown present (authenticated UI)
-    type: element_exists
+    type: verify_url
+    url: /book
+  - description: Verify workspace dropdown present (authenticated UI)
     selector: '[data-testid="workspace-dropdown"]'
-  - action: verify
-    description: Verify navigation/sidebar present
-    type: element_exists
-    selector: 'nav, [role="navigation"], aside, [class*="sidebar"], [data-testid*="sidebar"]'
-  - action: verify
+    type: verify
+    verify_type: element_exists
+  - description: Verify navigation/sidebar present
+    selector: nav, [role="navigation"], aside, [class*="sidebar"], [data-testid*="sidebar"]
+    type: verify
+    verify_type: element_exists
+  - contains: true
     description: Verify page title indicates Twenty
-    type: page_title
-    title: 'Twenty'
-    contains: true
-  - action: wait_for_selector
-    description: Wait for Finish button to appear
-    selector: 'button:has-text("Finish"), [aria-label*="Finish"], [data-testid*="finish"]'
+    title: Twenty
+    type: verify
+    verify_type: page_title
+  - description: Wait for Finish button to appear
+    selector: button:has-text("Finish"), [aria-label*="Finish"], [data-testid*="finish"]
     timeout: 10000
-  - action: click
-    description: Click Finish to avoid onboarding booking
-    selector: 'button:has-text("Finish"), [aria-label*="Finish"], [data-testid*="finish"]'
-  - action: wait
-    description: Wait for post-finish navigation to settle
+    type: wait_for_selector
+  - description: Click Finish to avoid onboarding booking
+    selector: button:has-text("Finish"), [aria-label*="Finish"], [data-testid*="finish"]
+    type: click
+  - description: Wait for post-finish navigation to settle
     duration: 2000
-  - action: screenshot
-    description: Final proof after login
+    type: wait
+  - description: Final proof after login
     filename: 99_final.png
+    type: screenshot
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  - action: screenshot
-    description: Screenshot before incorrect login attempt
+  - description: Screenshot before incorrect login attempt
     filename: 01_before_incorrect_login.png
-  - action: wait
-    description: Wait for login modal to appear
+    type: screenshot
+  - description: Wait for login modal to appear
     duration: 5000
-  - action: wait_for_selector
-    description: Wait for Continue with Email button
+    type: wait
+  - description: Wait for Continue with Email button
     selector: button:has-text("Continue with Email")
     timeout: 15000
-  - action: click
-    description: Click "Continue with Email" button
+    type: wait_for_selector
+  - description: Click "Continue with Email" button
     selector: button:has-text("Continue with Email")
-  - action: wait
-    description: Wait for email input to appear
+    type: click
+  - description: Wait for email input to appear
     duration: 2000
-  - action: wait_for_selector
-    description: Wait for email input field
+    type: wait
+  - description: Wait for email input field
     selector: input[placeholder='Email']
     timeout: 10000
-  - action: fill
-    description: Fill in email
+    type: wait_for_selector
+  - description: Fill in email
     selector: input[placeholder='Email']
-    value: $username
-  - action: wait_for_selector
-    description: Wait for continue/submit button
+    type: fill
+    value: plato@gmail.com
+  - description: Wait for continue/submit button
     selector: button:has-text('Continue'), button[type='submit']
     timeout: 10000
-  - action: click
-    description: Submit email to proceed
+    type: wait_for_selector
+  - description: Submit email to proceed
     selector: button:has-text('Continue'), button[type='submit']
-  - action: wait
-    description: Wait for password screen
+    type: click
+  - description: Wait for password screen
     duration: 2000
-  - action: wait_for_selector
-    description: Wait for password input field
+    type: wait
+  - description: Wait for password input field
     selector: input[type='password'], input[name='password']
     timeout: 5000
-  - action: fill
-    description: Fill in incorrect password
+    type: wait_for_selector
+  - description: Fill in incorrect password
     selector: input[type='password'], input[name='password']
-    value: $wrong_password
-  - action: screenshot
-    description: Screenshot after entering incorrect credentials
+    type: fill
+    value: wrongpassword
+  - description: Screenshot after entering incorrect credentials
     filename: 02_incorrect_credentials_entered.png
-  - action: wait_for_selector
-    description: Wait for login button
+    type: screenshot
+  - description: Wait for login button
     selector: button:has-text("Log in"), button[type="submit"]
     timeout: 10000
-  - action: click
-    description: Click login button
+    type: wait_for_selector
+  - description: Click login button
     selector: button:has-text("Log in"), button[type="submit"]
-  - action: wait
-    description: Wait for login attempt to process
+    type: click
+  - description: Wait for login attempt to process
     duration: 3000
-  - action: screenshot
-    description: Screenshot after incorrect login attempt
+    type: wait
+  - description: Screenshot after incorrect login attempt
     filename: 03_after_incorrect_login.png
-  - action: verify
-    description: Verify error message is displayed
-    type: element_exists
-    selector: '[data-testid="error-message"], .MuiAlert-root, .MuiAlert-standardError, .error-message, [data-testid*="error"], .form-error, .text-danger, [class*="error"], [role="alert"], [class*="alert"], [class*="danger"], .warning, .fail, .invalid'
+    type: screenshot
+  - description: Verify error message is displayed
+    selector: '[data-testid="error-message"], .MuiAlert-root, .MuiAlert-standardError,
+      .error-message, [data-testid*="error"], .form-error, .text-danger, [class*="error"],
+      [role="alert"], [class*="alert"], [class*="danger"], .warning, .fail, .invalid'
+    type: verify
+    verify_type: element_exists

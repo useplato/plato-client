@@ -3,6 +3,7 @@ import subprocess
 import socket
 from plato.models.task import CustomEvalConfig
 from plato.models import PlatoTask, EvaluationResult
+from plato.models.flow import Flow
 from typing import Coroutine, List, Optional, Type, Dict, Any, TYPE_CHECKING
 import time
 import asyncio
@@ -78,7 +79,6 @@ class PlatoEnvironment:
         Args:
             page (Page): The Playwright page to authenticate
         """
-        from plato.models.flow import Simulator
         from plato.flow_executor import FlowExecutor
 
         if not self.env_id:
@@ -93,30 +93,26 @@ class PlatoEnvironment:
             )
         with open(scripts_path, "r") as f:
             scripts = yaml.safe_load(f)
-        simulator = Simulator.model_validate(scripts)
 
-        # Get base dataset and login flow
-        base_dataset = next(
-            (ds for ds in simulator.datasets if ds.name == dataset), None
-        )
-        if not base_dataset:
-            raise PlatoClientError("No dataset found")
+        # Parse flows from Watchdog-style format
+        flows_data = scripts.get("flows", [])
+        flows_list = [Flow.model_validate(f) for f in flows_data]
 
+        # Get login flow (default to "login" if dataset is "base")
         if dataset == "base":
             flow_name = "login"
         else:
             flow_name = dataset
 
         login_flow = next(
-            (flow for flow in simulator.flows if flow.name == flow_name), None
+            (flow for flow in flows_list if flow.name == flow_name), None
         )
         if not login_flow:
-            raise PlatoClientError("No login flow found")
+            raise PlatoClientError(f"No flow named '{flow_name}' found")
 
         flow_executor = FlowExecutor(
             page,
             login_flow,
-            base_dataset,
             logger=logger,
             screenshots_dir=screenshots_dir,
         )

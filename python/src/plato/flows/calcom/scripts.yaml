@@ -1,91 +1,82 @@
-name: calcom
-reset_timeout: 60000
-environment_ready_timeout: 300000
-datasets:
-- name: base
-  description: Base dataset with admin credentials
-  variables:
-    username: a@gmail.com
-    password: GavinWang123456
-    wrong_password: wrongpassword
-  flows:
-  - login
-  - incorrect_login
 flows:
 - name: login
   description: Complete login flow for Cal.com with verification
   steps:
-  - action: navigate
-    url: '/auth/login'
-    description: Navigate directly to login page
-  - action: wait
+  - description: Navigate directly to login page
+    type: navigate
+    url: /auth/login
+  - description: Wait for page to fully load
     duration: 3000
-    description: Wait for page to fully load
-  - action: wait_for_selector
+    type: wait
+  - description: Wait for email field
     selector: 'input[name="email"], input[type="email"], #email'
     timeout: 15000
-    description: Wait for email field
-  - action: fill
+    type: wait_for_selector
+  - description: Fill email field
     selector: 'input[name="email"], input[type="email"], #email'
-    value: $username
-    description: Fill email field
-  - action: wait_for_selector
+    type: fill
+    value: a@gmail.com
+  - description: Wait for password field
     selector: 'input[name="password"], input[type="password"], #password'
     timeout: 10000
-    description: Wait for password field
-  - action: fill
+    type: wait_for_selector
+  - description: Fill password field
     selector: 'input[name="password"], input[type="password"], #password'
-    value: $password
-    description: Fill password field
-  - action: wait_for_selector
-    selector: 'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Login")'
+    type: fill
+    value: GavinWang123456
+  - description: Wait for submit button
+    selector: button[type="submit"], input[type="submit"], button:has-text("Sign in"),
+      button:has-text("Login")
     timeout: 10000
-    description: Wait for submit button
-  - action: click
-    selector: 'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Login")'
-    description: Click login submit button
-  - action: wait
+    type: wait_for_selector
+  - description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], button:has-text("Sign in"),
+      button:has-text("Login")
+    type: click
+  - description: Wait for login to process and redirect
     duration: 5000
-    description: Wait for login to process and redirect
-  - action: navigate
+    type: wait
+  - description: Redirect to sims.plato.so
+    type: navigate
     url: https://sims.plato.so
-    description: Redirect to sims.plato.so
-  - action: wait
+  - description: Wait for redirect to complete
     duration: 5000
-    description: Wait for redirect to complete
-  - action: verify
-    type: element_exists
-    selector: '[data-testid="dashboard-shell"], [data-test-id="event_types_page_title"], #view_public_page, h3:has-text("Event Types")'
-    description: Verify Event Types dashboard loaded after redirect
+    type: wait
+  - description: Verify Event Types dashboard loaded after redirect
+    selector: '[data-testid="dashboard-shell"], [data-test-id="event_types_page_title"],
+      #view_public_page, h3:has-text("Event Types")'
+    type: verify
+    verify_type: element_exists
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  - action: wait
+  - description: Wait for page to fully load
     duration: 3000
-    description: Wait for page to fully load
-  - action: wait_for_selector
+    type: wait
+  - description: Wait for username/email field
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
     timeout: 15000
-    description: Wait for username/email field
-  - action: fill
+    type: wait_for_selector
+  - description: Fill username/email field with valid username
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
-    value: $username
-    description: Fill username/email field with valid username
-  - action: wait_for_selector
+    type: fill
+    value: a@gmail.com
+  - description: Wait for password field
     selector: 'input[name="password"], input[type="password"], #password'
     timeout: 5000
-    description: Wait for password field
-  - action: fill
+    type: wait_for_selector
+  - description: Fill password field with incorrect password
     selector: 'input[name="password"], input[type="password"], #password'
-    value: $wrong_password
-    description: Fill password field with incorrect password
-  - action: click
-    selector: 'button[type="submit"], input[type="submit"], .btn-primary'
-    description: Click login submit button
-  - action: wait
+    type: fill
+    value: wrongpassword
+  - description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary
+    type: click
+  - description: Wait for login attempt to process
     duration: 3000
-    description: Wait for login attempt to process
-  - action: verify
-    type: element_exists
-    selector: '[data-testid="error-message"], [role="alert"], .text-red-500, .text-error, [class*="error"], .alert'
-    description: Verify error message is displayed
+    type: wait
+  - description: Verify error message is displayed
+    selector: '[data-testid="error-message"], [role="alert"], .text-red-500, .text-error,
+      [class*="error"], .alert'
+    type: verify
+    verify_type: element_exists

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from playwright.sync_api import Page
 from plato.models.flow import (
-    FlowStep, Dataset, Flow,
+    FlowStep, Flow,
     WaitForSelectorStep, ClickStep, FillStep, WaitStep, NavigateStep,
     WaitForUrlStep, CheckElementStep, ScreenshotStep, VerifyTextStep,
     VerifyUrlStep, VerifyNoErrorsStep, VerifyStep
@@ -23,10 +23,10 @@ from plato.models.flow import (
 class SyncFlowExecutor:
     """Executes configurable flows for simulator interactions with Pydantic validation (synchronous)."""
 
-    def __init__(self, page: Page, flow: Flow, dataset: Dataset, screenshots_dir: Optional[Path] = None, logger: logging.Logger = logging.getLogger(__name__)):
+    def __init__(self, page: Page, flow: Flow, screenshots_dir: Optional[Path] = None, logger: logging.Logger = logging.getLogger(__name__)):
         self.page = page
         self.flow = flow
-        self.dataset = dataset
+        
         self.screenshots_dir = screenshots_dir
         if self.screenshots_dir:
             self.screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +66,7 @@ class SyncFlowExecutor:
 
         try:
             for i, step in enumerate(steps, 1):
-                self.logger.info(f"🔸 Step {i}/{len(steps)}: {step.description or step.action}")
+                self.logger.info(f"🔸 Step {i}/{len(steps)}: {step.description or step.type}")
 
                 success = self._execute_step(step)
                 if not success:
@@ -82,32 +82,32 @@ class SyncFlowExecutor:
 
     def _execute_step(self, step: FlowStep) -> bool:
         """Execute a single step in a flow using action attribute."""
-        if step.action == "wait_for_selector":
+        if step.type == "wait_for_selector":
             return self._wait_for_selector(step)
-        elif step.action == "click":
+        elif step.type == "click":
             return self._click(step)
-        elif step.action == "fill":
+        elif step.type == "fill":
             return self._fill(step)
-        elif step.action == "wait":
+        elif step.type == "wait":
             return self._wait(step)
-        elif step.action == "navigate":
+        elif step.type == "navigate":
             return self._navigate(step)
-        elif step.action == "wait_for_url":
+        elif step.type == "wait_for_url":
             return self._wait_for_url(step)
-        elif step.action == "check_element":
+        elif step.type == "check_element":
             return self._check_element(step)
-        elif step.action == "verify":
+        elif step.type == "verify":
             return self._verify(step)
-        elif step.action == "screenshot":
+        elif step.type == "screenshot":
             return self._screenshot(step)
-        elif step.action == "verify_text":
+        elif step.type == "verify_text":
             return self._verify_text(step)
-        elif step.action == "verify_url":
+        elif step.type == "verify_url":
             return self._verify_url(step)
-        elif step.action == "verify_no_errors":
+        elif step.type == "verify_no_errors":
             return self._verify_no_errors(step)
         else:
-            self.logger.error(f"❌ Unknown step action: {step.action}")
+            self.logger.error(f"❌ Unknown step action: {step.type}")
             return False
 
     def _wait_for_selector(self, step: WaitForSelectorStep) -> bool:
@@ -133,17 +133,7 @@ class SyncFlowExecutor:
 
     def _fill(self, step: FillStep) -> bool:
         """Fill an input field."""
-        value_ref = step.value
-
-        # Resolve value from dataset variables if it's a reference
-        if isinstance(value_ref, str) and value_ref.startswith("$"):
-            variable_key = value_ref[1:]  # Remove $ prefix
-            value = self.dataset.variables.get(variable_key)
-            if value is None:
-                self.logger.error(f"❌ Dataset variable '{variable_key}' not found")
-                return False
-        else:
-            value = value_ref
+        value = step.value
 
         try:
             self.page.wait_for_selector(step.selector, timeout=step.timeout)
@@ -214,7 +204,7 @@ class SyncFlowExecutor:
 
     def _verify(self, step: VerifyStep) -> bool:
         """Verify DOM state using multiple validation criteria."""
-        verification_type = step.type
+        verification_type = step.verify_type
 
         if verification_type == "element_exists":
             return self._verify_element_exists(step)

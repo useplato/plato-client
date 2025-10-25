@@ -1,157 +1,121 @@
-name: akaunting
-reset_timeout: 60000
-environment_ready_timeout: 300000
-datasets:
-- name: base
-  description: Base dataset with admin credentials
-  variables:
-    username: admin@plato.so
-    password: password
-    wrong_password: wrongpassword
-  flows:
-  - login
-  - incorrect_login
 flows:
 - name: login
   description: Complete login flow for Akaunting with verification
   steps:
-  # No navigation needed - simulator starts on login page
-  - action: wait
+  - description: Wait for initial page load
     duration: 3000
-    description: Wait for initial page load
-  - action: screenshot
+    type: wait
+  - description: Screenshot of login page
     filename: 01_login_page.png
-    description: Screenshot of login page
-
-  # Fill login credentials
-  - action: wait_for_selector
-    selector: 'input[type="email"]'
+    type: screenshot
+  - description: Wait for email field
+    selector: input[type="email"]
     timeout: 15000
-    description: Wait for email field
-  - action: fill
-    selector: 'input[type="email"]'
-    value: $username
-    description: Fill email field
-  - action: wait
+    type: wait_for_selector
+  - description: Fill email field
+    selector: input[type="email"]
+    type: fill
+    value: admin@plato.so
+  - description: Brief wait after filling username
     duration: 500
-    description: Brief wait after filling username
-
-  - action: wait_for_selector
-    selector: 'input[type="password"]'
+    type: wait
+  - description: Wait for password field
+    selector: input[type="password"]
     timeout: 5000
-    description: Wait for password field
-  - action: fill
-    selector: 'input[type="password"]'
-    value: $password
-    description: Fill password field
-  - action: wait
+    type: wait_for_selector
+  - description: Fill password field
+    selector: input[type="password"]
+    type: fill
+    value: password
+  - description: Brief wait after filling password
     duration: 500
-    description: Brief wait after filling password
-
-  - action: screenshot
+    type: wait
+  - description: Screenshot after credentials entered, before submission
     filename: 02_credentials_entered.png
-    description: Screenshot after credentials entered, before submission
-
-  # Submit login form
-  - action: wait_for_selector
-    selector: 'button[type="submit"]'
+    type: screenshot
+  - description: Wait for login button to be available
+    selector: button[type="submit"]
     timeout: 5000
-    description: Wait for login button to be available
-  - action: wait
+    type: wait_for_selector
+  - description: Wait to ensure form is ready
     duration: 2000
-    description: Wait to ensure form is ready
-  - action: click
-    selector: 'button[type="submit"]'
-    description: Click login submit button
-  - action: wait
+    type: wait
+  - description: Click login submit button
+    selector: button[type="submit"]
+    type: click
+  - description: Wait for login to process and page redirect
     duration: 30000
-    description: Wait for login to process and page redirect
-
-  - action: screenshot
+    type: wait
+  - description: Screenshot after login attempt
     filename: 03_after_login.png
-    description: Screenshot after login attempt
-
-  # Comprehensive authentication verification
-  - action: verify_url
-    url: /1
-    contains: true
+    type: screenshot
+  - contains: true
     description: Verify redirected to company dashboard after login
-
-  - action: screenshot
+    type: verify_url
+    url: /1
+  - description: Screenshot of verified logged-in state
     filename: 04_verified_logged_in.png
-    description: Screenshot of verified logged-in state
+    type: screenshot
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  # No navigation needed - simulator starts on login page
-  - action: wait
+  - description: Wait for page to fully load
     duration: 3000
-    description: Wait for page to fully load
-  - action: screenshot
+    type: wait
+  - description: Screenshot before incorrect login attempt
     filename: 01_before_incorrect_login.png
-    description: Screenshot before incorrect login attempt
-
-  # Fill incorrect credentials
-  - action: wait_for_selector
+    type: screenshot
+  - description: Wait for username/email field
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
     timeout: 15000
-    description: Wait for username/email field
-  - action: fill
+    type: wait_for_selector
+  - description: Fill username/email field with valid username
     selector: 'input[name="email"], input[type="email"], #email, input[name="username"]'
-    value: $username
-    description: Fill username/email field with valid username
-  - action: wait
+    type: fill
+    value: admin@plato.so
+  - description: Brief wait after filling username
     duration: 500
-    description: Brief wait after filling username
-
-  - action: wait_for_selector
+    type: wait
+  - description: Wait for password field
     selector: 'input[name="password"], input[type="password"], #password'
     timeout: 5000
-    description: Wait for password field
-  - action: fill
+    type: wait_for_selector
+  - description: Fill password field with incorrect password
     selector: 'input[name="password"], input[type="password"], #password'
-    value: $wrong_password
-    description: Fill password field with incorrect password
-  - action: wait
+    type: fill
+    value: wrongpassword
+  - description: Brief wait after filling password
     duration: 500
-    description: Brief wait after filling password
-
-  - action: screenshot
+    type: wait
+  - description: Screenshot after entering incorrect credentials
     filename: 02_incorrect_credentials_entered.png
-    description: Screenshot after entering incorrect credentials
-
-  # Submit form with incorrect credentials
-  - action: wait_for_selector
-    selector: 'button[type="submit"]'
+    type: screenshot
+  - description: Wait for login button to be available
+    selector: button[type="submit"]
     timeout: 5000
-    description: Wait for login button to be available
-  - action: wait
+    type: wait_for_selector
+  - description: Wait to ensure form is ready
     duration: 2000
-    description: Wait to ensure form is ready
-  - action: click
-    selector: 'button[type="submit"]'
-    description: Click login submit button
-  - action: wait
+    type: wait
+  - description: Click login submit button
+    selector: button[type="submit"]
+    type: click
+  - description: Wait for login attempt to process
     duration: 3000
-    description: Wait for login attempt to process
-
-  - action: screenshot
+    type: wait
+  - description: Screenshot after incorrect login attempt
     filename: 03_after_incorrect_login.png
-    description: Screenshot after incorrect login attempt
-
-  # Verify error message
-  - action: verify
-    type: element_exists
-    selector: '.alert-danger, .error-message, [class*="error"], div:has-text("These credentials do not match our records."), div:has-text("Invalid credentials")'
-    description: Verify error message is displayed
-
-  # Verify still on login page
-  - action: verify_url
-    url: /auth/login
-    contains: true
+    type: screenshot
+  - description: Verify error message is displayed
+    selector: .alert-danger, .error-message, [class*="error"], div:has-text("These
+      credentials do not match our records."), div:has-text("Invalid credentials")
+    type: verify
+    verify_type: element_exists
+  - contains: true
     description: Verify still on login page after failed attempt
-
-  - action: verify
-    type: element_exists
-    selector: 'input[type="email"]'
-    description: Verify login form is still present
+    type: verify_url
+    url: /auth/login
+  - description: Verify login form is still present
+    selector: input[type="email"]
+    type: verify
+    verify_type: element_exists

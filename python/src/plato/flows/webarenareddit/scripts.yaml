@@ -1,70 +1,60 @@
-name: webarenareddit
-reset_timeout: 60000
-environment_ready_timeout: 300000
-datasets:
-- name: base
-  description: WebArena Reddit (Postmill) credentials
-  variables:
-    username: MarvelsGrantMan136
-    password: test1234
-    wrong_password: wrongpassword
-  flows:
-  - login
 flows:
 - name: login
   description: Login flow for WebArena Reddit (Postmill) with verification
   steps:
-  - action: navigate
-    description: Navigate directly to login page
-    url: '/login'
-  - action: wait
-    description: Wait for page to fully load
+  - description: Navigate directly to login page
+    type: navigate
+    url: /login
+  - description: Wait for page to fully load
     duration: 3000
-  - action: wait_for_selector
-    description: Wait for username field
-    selector: 'input[name="username"], input#username, input[type="text"]'
+    type: wait
+  - description: Wait for username field
+    selector: input[name="username"], input#username, input[type="text"]
     timeout: 15000
-  - action: fill
-    description: Fill username field
-    selector: 'input[name="username"], input#username, input[type="text"]'
-    value: $username
-  - action: wait_for_selector
-    description: Wait for password field
-    selector: 'input[name="password"], input#password, input[type="password"]'
+    type: wait_for_selector
+  - description: Fill username field
+    selector: input[name="username"], input#username, input[type="text"]
+    type: fill
+    value: MarvelsGrantMan136
+  - description: Wait for password field
+    selector: input[name="password"], input#password, input[type="password"]
     timeout: 10000
-  - action: fill
-    description: Fill password field
-    selector: 'input[name="password"], input#password, input[type="password"]'
-    value: $password
-  - action: wait_for_selector
-    description: Wait for login submit button
-    selector: 'button[type="submit"], input[type="submit"], button:has-text("Log in"), button:has-text("Login"), button:has-text("Sign in")'
+    type: wait_for_selector
+  - description: Fill password field
+    selector: input[name="password"], input#password, input[type="password"]
+    type: fill
+    value: test1234
+  - description: Wait for login submit button
+    selector: button[type="submit"], input[type="submit"], button:has-text("Log in"),
+      button:has-text("Login"), button:has-text("Sign in")
     timeout: 15000
-  - action: click
-    description: Click login submit button
-    selector: 'button[type="submit"], input[type="submit"], button:has-text("Log in"), button:has-text("Login"), button:has-text("Sign in")'
-  - action: wait
-    description: Wait for login to process and redirect
+    type: wait_for_selector
+  - description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], button:has-text("Log in"),
+      button:has-text("Login"), button:has-text("Sign in")
+    type: click
+  - description: Wait for login to process and redirect
     duration: 6000
-  - action: verify_no_errors
-    description: Verify no login errors are displayed
+    type: wait
+  - description: Verify no login errors are displayed
     error_selectors:
-      - '.alert-danger'
-      - '.alert-error'
-      - '.error'
-      - '.invalid-feedback'
-      - '[role="alert"]'
-  - action: verify_url
+    - .alert-danger
+    - .alert-error
+    - .error
+    - .invalid-feedback
+    - '[role="alert"]'
+    type: verify_no_errors
+  - contains: true
     description: Verify redirected to home/front page
-    url: '/'
-    contains: true
-  - action: verify
-    description: Verify authenticated UI indicators present
-    selector: 'a[href*="/logout"], a[href*="/submit"], a[href*="/me"], .user, .navbar a[href*="/new"], a[href*="/inbox"]'
-    type: element_exists
-  - action: verify
+    type: verify_url
+    url: /
+  - description: Verify authenticated UI indicators present
+    selector: a[href*="/logout"], a[href*="/submit"], a[href*="/me"], .user, .navbar
+      a[href*="/new"], a[href*="/inbox"]
+    type: verify
+    verify_type: element_exists
+  - contains: true
     description: Verify page title indicates Postmill
-    title: 'Postmill'
-    contains: true
-    type: page_title
-
+    title: Postmill
+    type: verify
+    verify_type: page_title

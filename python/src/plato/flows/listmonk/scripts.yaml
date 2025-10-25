@@ -1,54 +1,44 @@
-name: listmonk
-reset_timeout: 60000
-environment_ready_timeout: 300000
-datasets:
-- name: base
-  description: Base dataset with admin credentials
-  variables:
-    username: admin
-    password: password
-    wrong_password: wrongpassword
-  flows:
-  - login
-  - incorrect_login
 flows:
 - name: login
   description: Standard login flow for Listmonk
   steps:
-  - action: wait
+  - description: Wait for page to fully load
     duration: 8000
-    description: Wait for page to fully load
-  - action: wait_for_selector
-    selector: 'a:has-text("Login")'
+    type: wait
+  - description: Wait for "Login" span to appear
+    selector: a:has-text("Login")
     timeout: 15000
-    description: Wait for "Login" span to appear
-  - action: click
-    selector: 'a:has-text("Login")'
-    description: Click login button
-  - action: wait_for_selector
-    selector: 'input[name="username"], input[name="email"], input[type="email"], #login, .o_field_widget input[type="text"]'
-    description: Wait for email/login field
+    type: wait_for_selector
+  - description: Click login button
+    selector: a:has-text("Login")
+    type: click
+  - description: Wait for email/login field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #login,
+      .o_field_widget input[type="text"]'
     timeout: 15000
-  - action: fill
-    selector: 'input[name="username"], input[name="email"], input[type="email"], #login, .o_field_widget input[type="text"]'
-    value: $username
-    description: Fill email/login field
-  - action: wait_for_selector
-    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget input[type="password"]'
-    description: Wait for password field
+    type: wait_for_selector
+  - description: Fill email/login field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #login,
+      .o_field_widget input[type="text"]'
+    type: fill
+    value: admin
+  - description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget
+      input[type="password"]'
     timeout: 15000
-  - action: fill
-    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget input[type="password"]'
-    value: $password
-    description: Fill password field
-  - action: click
-    selector: 'button[type="submit"], input[type="submit"], .btn-primary, .o_login_btn'
-    description: Click login submit button
-  - action: wait
+    type: wait_for_selector
+  - description: Fill password field
+    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget
+      input[type="password"]'
+    type: fill
+    value: password
+  - description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, .o_login_btn
+    type: click
+  - description: Wait for page to fully load
     duration: 8000
-    description: Wait for page to fully load
-  - action: verify_no_errors
-    description: Verify no login errors are displayed
+    type: wait
+  - description: Verify no login errors are displayed
     error_selectors:
     - .alert-danger
     - .alert-error
@@ -59,59 +49,66 @@ flows:
     - .error
     - .alert
     - .o_error_detail
-  - action: verify
-    type: element_exists
-    selector: 'span:has-text("Dashboard")'
-    description: Verify successful login by checking for main Listmonk interface elements and Todo specific elements
-  - action: verify_url
-    url: '/admin'
-    contains: true
+    type: verify_no_errors
+  - description: Verify successful login by checking for main Listmonk interface elements
+      and Todo specific elements
+    selector: span:has-text("Dashboard")
+    type: verify
+    verify_type: element_exists
+  - contains: true
     description: Verify redirected to dashboard
-  - action: verify
-    type: element_exists
-    selector: 'a:has-text("Campaigns"), a:has-text("Subscribers"), a:has-text("Templates"), nav a[href*="/campaigns"], nav a[href*="/subscribers"]'
-    description: Verify key navigation items are present
-  - action: verify
-    type: page_title
-    title: 'listmonk'
-    contains: true
+    type: verify_url
+    url: /admin
+  - description: Verify key navigation items are present
+    selector: a:has-text("Campaigns"), a:has-text("Subscribers"), a:has-text("Templates"),
+      nav a[href*="/campaigns"], nav a[href*="/subscribers"]
+    type: verify
+    verify_type: element_exists
+  - contains: true
     description: Verify page title indicates Listmonk
+    title: listmonk
+    type: verify
+    verify_type: page_title
 - name: incorrect_login
   description: Verify login fails with incorrect password
   steps:
-  - action: wait
+  - description: Wait for page to fully load
     duration: 8000
-    description: Wait for page to fully load
-  - action: wait_for_selector
-    selector: 'a:has-text("Login")'
+    type: wait
+  - description: Wait for "Login" span to appear
+    selector: a:has-text("Login")
     timeout: 15000
-    description: Wait for "Login" span to appear
-  - action: click
-    selector: 'a:has-text("Login")'
-    description: Click login button
-  - action: wait_for_selector
-    selector: 'input[name="username"], input[name="email"], input[type="email"], #login, .o_field_widget input[type="text"]'
-    description: Wait for email/login field
+    type: wait_for_selector
+  - description: Click login button
+    selector: a:has-text("Login")
+    type: click
+  - description: Wait for email/login field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #login,
+      .o_field_widget input[type="text"]'
     timeout: 15000
-  - action: fill
-    selector: 'input[name="username"], input[name="email"], input[type="email"], #login, .o_field_widget input[type="text"]'
-    value: $username
-    description: Fill email/login field
-  - action: wait_for_selector
-    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget input[type="password"]'
-    description: Wait for password field
+    type: wait_for_selector
+  - description: Fill email/login field
+    selector: 'input[name="username"], input[name="email"], input[type="email"], #login,
+      .o_field_widget input[type="text"]'
+    type: fill
+    value: admin
+  - description: Wait for password field
+    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget
+      input[type="password"]'
     timeout: 15000
-  - action: fill
-    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget input[type="password"]'
-    value: $wrong_password
-    description: Fill password field with incorrect password
-  - action: click
-    selector: 'button[type="submit"], input[type="submit"], .btn-primary, .o_login_btn'
-    description: Click login submit button
-  - action: wait
+    type: wait_for_selector
+  - description: Fill password field with incorrect password
+    selector: 'input[name="password"], input[type="password"], #password, .o_field_widget
+      input[type="password"]'
+    type: fill
+    value: wrongpassword
+  - description: Click login submit button
+    selector: button[type="submit"], input[type="submit"], .btn-primary, .o_login_btn
+    type: click
+  - description: Wait for page to fully load
     duration: 1000
-    description: Wait for page to fully load
-  - action: verify
-    type: element_exists
-    selector: 'span:has-text("Invalid login or password")'
-    description: Verify error message is displayed
+    type: wait
+  - description: Verify error message is displayed
+    selector: span:has-text("Invalid login or password")
+    type: verify
+    verify_type: element_exists

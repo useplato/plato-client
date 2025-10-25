@@ -1,53 +1,46 @@
-name: outline
-reset_timeout: 60000
-environment_ready_timeout: 300000
-datasets:
-- name: base
-  description: Base dataset with admin credentials
-  variables:
-    username: admin@example.com
-    password: password
-  flows:
-  - login
 flows:
 - name: login
   description: Auto-login flow for Outline - wait for environment and verify access
   steps:
-  - action: wait
+  - description: Let app bootstrap
     duration: 3000
-    description: Let app bootstrap
-  - action: wait_for_selector
-    selector: 'form[action="/auth/email"] button, button:has-text("Continue with Email")'
+    type: wait
+  - description: Wait for Continue with Email button
+    selector: form[action="/auth/email"] button, button:has-text("Continue with Email")
     timeout: 15000
-    description: Wait for Continue with Email button
-  - action: click
-    selector: 'form[action="/auth/email"] button, button:has-text("Continue with Email")'
+    type: wait_for_selector
+  - description: Click Continue with Email
+    selector: form[action="/auth/email"] button, button:has-text("Continue with Email")
     timeout: 5000
-    description: Click Continue with Email
-  - action: wait
+    type: click
+  - description: Wait for email form
     duration: 1500
-    description: Wait for email form
-  - action: wait_for_selector
+    type: wait
+  - description: Wait for email input
     selector: 'input[type="email"], input[name="email"], #email'
     timeout: 15000
-    description: Wait for email input
-  - action: fill
+    type: wait_for_selector
+  - description: Fill email
     selector: 'input[type="email"], input[name="email"], #email'
-    value: $username
     timeout: 5000
-    description: Fill email
-  - action: wait_for_selector
-    selector: 'button[type="submit"], button:has-text("Continue"), button:has-text("Send"), form button'
+    type: fill
+    value: admin@example.com
+  - description: Wait for submit button
+    selector: button[type="submit"], button:has-text("Continue"), button:has-text("Send"),
+      form button
     timeout: 10000
-    description: Wait for submit button
-  - action: click
-    selector: 'button[type="submit"], button:has-text("Continue"), button:has-text("Send"), form button'
+    type: wait_for_selector
+  - description: Submit email form
+    selector: button[type="submit"], button:has-text("Continue"), button:has-text("Send"),
+      form button
     timeout: 5000
-    description: Submit email form
-  - action: wait
+    type: click
+  - description: Wait for response / redirect
     duration: 5000
-    description: Wait for response / redirect
-  - action: verify
-    type: element_exists
-    selector: 'body, main, .app, #root, [data-testid], .outline-app, nav, .sidebar, .main-content, .document-list, .collection-list, .app-content, .workspace, .dashboard, [data-testid="sidebar"], [data-testid="document-list"], .outline-sidebar, .outline-content'
-    description: Verify Outline workspace interface is accessible
+    type: wait
+  - description: Verify Outline workspace interface is accessible
+    selector: 'body, main, .app, #root, [data-testid], .outline-app, nav, .sidebar,
+      .main-content, .document-list, .collection-list, .app-content, .workspace, .dashboard,
+      [data-testid="sidebar"], [data-testid="document-list"], .outline-sidebar, .outline-content'
+    type: verify
+    verify_type: element_exists
