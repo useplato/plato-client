@@ -488,10 +488,11 @@ func (s *SandboxService) List(ctx context.Context) ([]*models.Sandbox, error) {
 	return sandboxes, nil
 }
 
-// SetupRootPassword sets up root password for SSH access
-func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, password string) error {
+// SetupRootPassword sets up root SSH access using a public key
+func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, sshPublicKey string) error {
 	payload := map[string]interface{}{
-		"root_password": password,
+		"ssh_public_key": sshPublicKey,
+		"timeout":        60,
 	}
 
 	body, err := json.Marshal(payload)
