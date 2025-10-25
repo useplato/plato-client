@@ -505,7 +505,7 @@ func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, sshPub
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/public-build/vm/%s/setup-root-password", publicID), bytes.NewReader(body))
+	req, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/public-build/vm/%s/setup-root-access", publicID), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

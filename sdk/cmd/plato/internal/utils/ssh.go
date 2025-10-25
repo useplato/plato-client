@@ -378,3 +378,105 @@ func UpdateSSHConfigUser(hostname, username string) error {
 	updatedConfig := strings.Join(newLines, "\n")
 	return WriteSSHConfig(updatedConfig)
 }
+
+// UpdateSSHConfigFileUser updates the username for a host in a specific SSH config file
+func UpdateSSHConfigFileUser(configPath, hostname, username string) error {
+	configContent, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read SSH config: %w", err)
+	}
+
+	existingConfig := string(configContent)
+	if existingConfig == "" {
+		return fmt.Errorf("SSH config is empty")
+	}
+
+	if !HostExistsInConfig(hostname, existingConfig) {
+		return fmt.Errorf("host %s not found in SSH config", hostname)
+	}
+
+	lines := strings.Split(existingConfig, "\n")
+	var newLines []string
+	inTargetHost := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Check if we're entering the target host block
+		if trimmed == fmt.Sprintf("Host %s", hostname) {
+			inTargetHost = true
+			newLines = append(newLines, line)
+			continue
+		}
+
+		// Check if we're entering a different host block
+		if strings.HasPrefix(trimmed, "Host ") && trimmed != fmt.Sprintf("Host %s", hostname) {
+			inTargetHost = false
+		}
+
+		// If we're in the target host and it's the User line, update it
+		if inTargetHost && strings.HasPrefix(trimmed, "User ") {
+			newLines = append(newLines, fmt.Sprintf("    User %s", username))
+			continue
+		}
+
+		newLines = append(newLines, line)
+	}
+
+	updatedConfig := strings.Join(newLines, "\n")
+	return os.WriteFile(configPath, []byte(updatedConfig), 0600)
+}
+
+// UpdateSSHConfigFilePassword updates password for a host in a specific SSH config file
+func UpdateSSHConfigFilePassword(configPath, hostname, password string) error {
+	LogDebug("UpdateSSHConfigFilePassword called for configPath=%s, hostname=%s, password=%s", configPath, hostname, password)
+
+	configContent, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read SSH config: %w", err)
+	}
+
+	existingConfig := string(configContent)
+	if existingConfig == "" {
+		return fmt.Errorf("SSH config is empty")
+	}
+
+	if !HostExistsInConfig(hostname, existingConfig) {
+		return fmt.Errorf("host %s not found in SSH config", hostname)
+	}
+
+	LogDebug("Found host in SSH config, updating...")
+
+	lines := strings.Split(existingConfig, "\n")
+	var newLines []string
+	inTargetHost := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Check if we're entering the target host block
+		if trimmed == fmt.Sprintf("Host %s", hostname) {
+			inTargetHost = true
+			newLines = append(newLines, line)
+			// Add password comment right after Host line
+			newLines = append(newLines, fmt.Sprintf("    # Password: %s", password))
+			continue
+		}
+
+		// Check if we're entering a different host block
+		if strings.HasPrefix(trimmed, "Host ") && trimmed != fmt.Sprintf("Host %s", hostname) {
+			inTargetHost = false
+		}
+
+		// Skip existing password comments
+		if inTargetHost && strings.HasPrefix(trimmed, "# Password:") {
+			continue
+		}
+
+		newLines = append(newLines, line)
+	}
+
+	updatedConfig := strings.Join(newLines, "\n")
+	LogDebug("Updated SSH config, writing to file...")
+	return os.WriteFile(configPath, []byte(updatedConfig), 0600)
+}
