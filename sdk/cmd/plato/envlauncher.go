@@ -140,13 +140,13 @@ func setupSSHForEnvironment(jobID string, statusChan chan<- string) tea.Cmd {
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname (use 'root' for existing simulator environments)
-		sshHost, err := utils.SetupSSHConfig(localPort, jobID, "root")
+		sshHost, configPath, err := utils.SetupSSHConfig(localPort, jobID, "root")
 		if err != nil {
 			close(statusChan)
 			return envSSHConfiguredMsg{sshHost: "", err: err}
 		}
 
-		statusChan <- fmt.Sprintf("SSH configured: ssh %s", sshHost)
+		statusChan <- fmt.Sprintf("SSH configured: ssh -F %s %s", configPath, sshHost)
 		close(statusChan)
 		return envSSHConfiguredMsg{sshHost: sshHost, err: nil}
 	}
