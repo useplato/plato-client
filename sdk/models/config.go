@@ -35,6 +35,30 @@ type SimConfigService struct {
 	HealthyWaitTimeout        int      `json:"healthy_wait_timeout,omitempty" yaml:"healthy_wait_timeout,omitempty"`
 }
 
+// SimConfigDBListener represents a database listener configuration
+type SimConfigDBListener struct {
+	Type          string   `json:"type" yaml:"type"`
+	DBType        string   `json:"db_type" yaml:"db_type"`
+	DBHost        string   `json:"db_host" yaml:"db_host"`
+	DBPort        int      `json:"db_port" yaml:"db_port"`
+	DBUser        string   `json:"db_user" yaml:"db_user"`
+	DBPassword    string   `json:"db_password" yaml:"db_password"`
+	DBDatabase    string   `json:"db_database" yaml:"db_database"`
+	SeedDataPaths []string `json:"seed_data_paths,omitempty" yaml:"seed_data_paths,omitempty"`
+	Volumes       []string `json:"volumes,omitempty" yaml:"volumes,omitempty"`
+}
+
+// SimConfigFileListener represents a file listener configuration
+type SimConfigFileListener struct {
+	Type           string   `json:"type" yaml:"type"`
+	TargetDir      string   `json:"target_dir" yaml:"target_dir"`
+	WatchEnabled   bool     `json:"watch_enabled" yaml:"watch_enabled"`
+	WatchPatterns  []string `json:"watch_patterns,omitempty" yaml:"watch_patterns,omitempty"`
+	IgnorePatterns []string `json:"ignore_patterns,omitempty" yaml:"ignore_patterns,omitempty"`
+	SeedDataPath   string   `json:"seed_data_path,omitempty" yaml:"seed_data_path,omitempty"`
+	Volumes        []string `json:"volumes,omitempty" yaml:"volumes,omitempty"`
+}
+
 // SimConfigListener represents a mutation listener configuration (interface for different types)
 type SimConfigListener map[string]interface{}
 

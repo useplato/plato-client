@@ -15,6 +15,7 @@ import (
 	"time"
 
 	plato "plato-sdk"
+	"plato-sdk/cmd/plato/internal/config"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
@@ -32,9 +33,9 @@ type DBConfig struct {
 // SimDBConfigs contains preset database configurations for known simulators
 var SimDBConfigs = map[string]DBConfig{
 	// PostgreSQL
-	"bugsink":     {DBType: "postgresql", User: "bugsink", Password: "bugsink_password", DestPort: 5432, Databases: []string{"postgres", "bugsink"}},
-	"calcom":      {DBType: "postgresql", User: "unicorn_user", Password: "magical_password", DestPort: 5432, Databases: []string{"postgres", "calendso"}},
-	"discourse":   {DBType: "postgresql", User: "discourse", Password: "discourse", DestPort: 5432, Databases: []string{"postgres", "discourse"}},
+	"bugsink":   {DBType: "postgresql", User: "bugsink", Password: "bugsink_password", DestPort: 5432, Databases: []string{"postgres", "bugsink"}},
+	"calcom":    {DBType: "postgresql", User: "unicorn_user", Password: "magical_password", DestPort: 5432, Databases: []string{"postgres", "calendso"}},
+	"discourse": {DBType: "postgresql", User: "discourse", Password: "discourse", DestPort: 5432, Databases: []string{"postgres", "discourse"}},
 	// ... (include all others from original file)
 }
 
@@ -86,8 +87,71 @@ func SaveCustomDBConfig(service string, config DBConfig) error {
 	return nil
 }
 
-// GetDBConfig gets DB config for a service, checking custom configs first, then presets
+// GetDBConfigFromPlatoConfig extracts DB config from plato-config.yml for a specific dataset
+func GetDBConfigFromPlatoConfig(dataset string) (DBConfig, bool) {
+	platoConfig, err := config.LoadPlatoConfig()
+	if err != nil {
+		LogDebug("Failed to load plato-config.yml: %v", err)
+		return DBConfig{}, false
+	}
+
+	datasetConfig, ok := platoConfig.Datasets[dataset]
+	if !ok {
+		LogDebug("Dataset '%s' not found in plato-config.yml", dataset)
+		return DBConfig{}, false
+	}
+
+	// Look for a DB listener in the dataset's listeners
+	for _, listener := range datasetConfig.Listeners {
+		if listener == nil {
+			continue
+		}
+
+		// Check if this is a DB listener
+		listenerMap := *listener
+		listenerType, ok := listenerMap["type"].(string)
+		if !ok || listenerType != "db" {
+			continue
+		}
+
+		// Extract DB configuration
+		dbConfig := DBConfig{}
+
+		if dbType, ok := listenerMap["db_type"].(string); ok {
+			dbConfig.DBType = dbType
+		}
+		if dbUser, ok := listenerMap["db_user"].(string); ok {
+			dbConfig.User = dbUser
+		}
+		if dbPassword, ok := listenerMap["db_password"].(string); ok {
+			dbConfig.Password = dbPassword
+		}
+		if dbPort, ok := listenerMap["db_port"].(int); ok {
+			dbConfig.DestPort = dbPort
+		}
+		if dbDatabase, ok := listenerMap["db_database"].(string); ok {
+			dbConfig.Databases = []string{dbDatabase}
+		}
+
+		LogDebug("Found DB config in plato-config.yml for dataset '%s': type=%s, port=%d", dataset, dbConfig.DBType, dbConfig.DestPort)
+		return dbConfig, true
+	}
+
+	LogDebug("No DB listener found in plato-config.yml for dataset '%s'", dataset)
+	return DBConfig{}, false
+}
+
+// GetDBConfig gets DB config for a service, checking in this order:
+// 1. plato-config.yml for the current dataset
+// 2. Custom configs from ~/.plato/custom_db_configs.json
+// 3. Preset configs from SimDBConfigs
 func GetDBConfig(service string) (DBConfig, bool) {
+	// Try to get from plato-config.yml first (check for "base" dataset by default)
+	if config, ok := GetDBConfigFromPlatoConfig("base"); ok {
+		LogDebug("Using DB config from plato-config.yml for service: %s", service)
+		return config, true
+	}
+
 	customConfigs := LoadCustomDBConfigs()
 	if config, ok := customConfigs[service]; ok {
 		LogDebug("Using custom DB config for service: %s", service)
@@ -100,6 +164,18 @@ func GetDBConfig(service string) (DBConfig, bool) {
 	}
 
 	return DBConfig{}, false
+}
+
+// GetDBConfigForDataset gets DB config specifically for a dataset from plato-config.yml
+func GetDBConfigForDataset(service string, dataset string) (DBConfig, bool) {
+	// Try to get from plato-config.yml for the specific dataset
+	if config, ok := GetDBConfigFromPlatoConfig(dataset); ok {
+		LogDebug("Using DB config from plato-config.yml for service: %s, dataset: %s", service, dataset)
+		return config, true
+	}
+
+	// Fall back to the original GetDBConfig logic
+	return GetDBConfig(service)
 }
 
 // OpenTemporaryProxytunnel opens a proxytunnel for the duration of a cleanup operation
@@ -269,12 +345,13 @@ func ClearEnvState(client *plato.PlatoClient, jobGroupID string) error {
 
 // PreSnapshotCleanup performs database cleanup and cache clearing before snapshot
 // Returns (needsDBConfig, error) - needsDBConfig=true means manual entry is required
-func PreSnapshotCleanup(client *plato.PlatoClient, publicID, jobGroupID, service string) (bool, error) {
-	LogDebug("Starting pre-snapshot cleanup for service: %s", service)
+func PreSnapshotCleanup(client *plato.PlatoClient, publicID, jobGroupID, service, dataset string) (bool, error) {
+	LogDebug("Starting pre-snapshot cleanup for service: %s, dataset: %s", service, dataset)
 
-	dbConfig, ok := GetDBConfig(service)
+	// Try to get DB config for the specific dataset first
+	dbConfig, ok := GetDBConfigForDataset(service, dataset)
 	if !ok {
-		LogDebug("No DB config found for service: %s, manual entry required", service)
+		LogDebug("No DB config found for service: %s, dataset: %s, manual entry required", service, dataset)
 		return true, nil
 	}
 

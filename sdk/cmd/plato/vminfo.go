@@ -8,18 +8,18 @@
 package main
 
 import (
-
-"plato-sdk/cmd/plato/internal/utils"
-"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	plato "plato-sdk"
+	"plato-sdk/cmd/plato/internal/ui/components"
+	"plato-sdk/cmd/plato/internal/utils"
+	"plato-sdk/models"
 	"strings"
 	"time"
-	plato "plato-sdk"
-	"plato-sdk/models"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -84,6 +84,7 @@ type VMInfoModel struct {
 	hubRepoURL           string // Cached hub repository URL
 	infoPanelFocused     bool   // Whether the info panel has focus (vs actions list)
 	runningCommand       bool   // Whether a command is currently running
+	ecrAuthenticated     bool   // Whether ECR authentication has been completed
 }
 
 type vmAction struct {
@@ -155,13 +156,11 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	items := []list.Item{
-		vmAction{title: "Authenticate ECR", description: "Authenticate Docker with AWS ECR on the VM"},
 		vmAction{title: "Start Service", description: "Start the service defined in plato-config.yml"},
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
-		vmAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		vmAction{title: "Connect to Cursor/VSCode", description: "Open Cursor/VSCode editor connected to VM via SSH"},
-		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
+		vmAction{title: "Advanced", description: "Advanced VM management options"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
 	}
 
@@ -208,6 +207,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		proxytunnelMappings:  []proxytunnelMapping{},
 		config:               config,
 		infoPanelFocused:     false, // Start with actions list focused
+		ecrAuthenticated:     false,
 	}
 }
 
@@ -256,7 +256,7 @@ func wrapText(text string, width int) string {
 			// First word on the line
 			currentLine.WriteString(word)
 			currentLength = wordLen
-		} else if currentLength + 1 + wordLen <= width {
+		} else if currentLength+1+wordLen <= width {
 			// Word fits on current line
 			currentLine.WriteString(" " + word)
 			currentLength += 1 + wordLen
@@ -312,11 +312,18 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		m.setupComplete = true
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Setup failed: %v", msg.err))
+			return m, nil
 		} else {
 			m.sshURL = msg.sshURL
 			m.sshHost = msg.sshHost
 			m.sshConfigPath = msg.sshConfigPath
 			m.statusMessages = append(m.statusMessages, "✓ Sandbox ready!")
+			// Automatically authenticate with ECR for 2 hours (ECR tokens are valid for 12 hours by default)
+			if !m.ecrAuthenticated && m.sshHost != "" && m.sshConfigPath != "" {
+				m.statusMessages = append(m.statusMessages, "🔐 Authenticating Docker with AWS ECR...")
+				m.runningCommand = true
+				return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
+			}
 		}
 		// Update viewport content to reflect new status
 		m.viewport.SetContent(m.renderVMInfoMarkdown())
@@ -457,7 +464,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				}
 			}
 		} else {
-			m.statusMessages = append(m.statusMessages, "✓ Successfully authenticated Docker with AWS ECR")
+			m.ecrAuthenticated = true
+			m.statusMessages = append(m.statusMessages, "✓ Successfully authenticated Docker with AWS ECR (valid for 12 hours)")
 		}
 		// Update viewport content to reflect new status
 		m.viewport.SetContent(m.renderVMInfoMarkdown())
@@ -653,8 +661,12 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string, branchName string) tea.Cmd {
 	return func() tea.Msg {
 		// Step 1: Perform pre-snapshot cleanup
-		utils.LogDebug("Starting pre-snapshot cleanup for service: %s", service)
-		needsDBConfig, err := utils.PreSnapshotCleanup(client, publicID, jobGroupID, service)
+		datasetName := "base"
+		if dataset != nil {
+			datasetName = *dataset
+		}
+		utils.LogDebug("Starting pre-snapshot cleanup for service: %s, dataset: %s", service, datasetName)
+		needsDBConfig, err := utils.PreSnapshotCleanup(client, publicID, jobGroupID, service, datasetName)
 		if err != nil {
 			utils.LogDebug("Pre-snapshot cleanup failed: %v", err)
 			// Don't fail the snapshot if cleanup fails, just log it
@@ -1190,7 +1202,9 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 	}
 }
 
-// authenticateECR authenticates Docker with AWS ECR on the VM
+// authenticateECR authenticates Docker with AWS ECR on the VM.
+// ECR authentication tokens are valid for 12 hours by default.
+// This function is called automatically when the VM starts up.
 func authenticateECR(sshHost string, sshConfigPath string) tea.Cmd {
 	return func() tea.Msg {
 		utils.LogDebug("Starting ECR authentication process")
@@ -1509,15 +1523,12 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		m.statusMessages = append(m.statusMessages, "Opening VS Code...")
 		m.runningCommand = true
 		return m, tea.Batch(m.spinner.Tick, openCursor(m.sshHost, m.sshConfigPath))
-	case "Open Proxytunnel":
-		// Navigate to port selector
+	case "Advanced":
+		// Navigate to advanced menu
 		return m, func() tea.Msg {
-			return navigateToProxytunnelPortMsg{publicID: m.sandbox.PublicID}
+			// Create and navigate to the advanced menu
+			return NavigateMsg{view: ViewAdvanced}
 		}
-	case "Authenticate ECR":
-		m.statusMessages = append(m.statusMessages, "Authenticating Docker with AWS ECR...")
-		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
 	case "Start Service":
 		// Load the config to get service name and dataset config
 		config, err := LoadPlatoConfig()
@@ -1667,9 +1678,9 @@ func (m VMInfoModel) View() string {
 				lines := strings.Split(wrapped, "\n")
 				for j, line := range lines {
 					if j == 0 {
-						statusContent.WriteString(statusMsgStyle.Render("  " + line) + "\n")
+						statusContent.WriteString(statusMsgStyle.Render("  "+line) + "\n")
 					} else {
-						statusContent.WriteString(statusMsgStyle.Render("    " + line) + "\n")
+						statusContent.WriteString(statusMsgStyle.Render("    "+line) + "\n")
 					}
 				}
 			} else {
@@ -1680,9 +1691,9 @@ func (m VMInfoModel) View() string {
 				lines := strings.Split(wrapped, "\n")
 				for j, line := range lines {
 					if j == 0 {
-						statusContent.WriteString(prevStatusStyle.Render("    " + line) + "\n")
+						statusContent.WriteString(prevStatusStyle.Render("    "+line) + "\n")
 					} else {
-						statusContent.WriteString(prevStatusStyle.Render("      " + line) + "\n")
+						statusContent.WriteString(prevStatusStyle.Render("      "+line) + "\n")
 					}
 				}
 			}

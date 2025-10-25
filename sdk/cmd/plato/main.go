@@ -63,6 +63,7 @@ const (
 	ViewProxytunnelPort
 	ViewDBEntry
 	ViewDatasetSelector
+	ViewAdvanced
 )
 
 type Model struct {
@@ -79,6 +80,7 @@ type Model struct {
 	proxytunnelPort  ProxytunnelPortModel
 	dbEntry          DBEntryModel
 	datasetSelector  DatasetSelectorModel
+	advancedMenu     AdvancedMenuModel
 	quitting         bool
 }
 
@@ -192,6 +194,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.dbEntry.Init()
 		case ViewDatasetSelector:
 			return m, m.datasetSelector.Init()
+		case ViewAdvanced:
+			// Initialize advanced menu with current VM info
+			m.advancedMenu = NewAdvancedMenuModel(m.vmInfo.sandbox.PublicID, m.vmInfo.sshHost, m.vmInfo.sshConfigPath)
+			return m, m.advancedMenu.Init()
 		}
 		return m, nil
 	}
@@ -207,6 +213,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.datasetSelector = NewDatasetSelectorModel(navMsg.service, params)
 		m.currentView = ViewDatasetSelector
 		return m, m.datasetSelector.Init()
+	}
+
+	// Handle executing advanced actions
+	if actionMsg, ok := msg.(executeAdvancedActionMsg); ok {
+		// Go back to VM info and execute the action
+		m.currentView = ViewVMInfo
+
+		switch actionMsg.action {
+		case "Authenticate ECR":
+			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Authenticating Docker with AWS ECR...")
+			m.vmInfo.runningCommand = true
+			return m, tea.Batch(m.vmInfo.spinner.Tick, authenticateECR(m.vmInfo.sshHost, m.vmInfo.sshConfigPath))
+		case "Open Proxytunnel":
+			// Navigate to proxytunnel port selector
+			return m, func() tea.Msg {
+				return navigateToProxytunnelPortMsg{publicID: m.vmInfo.sandbox.PublicID}
+			}
+		case "Set up root SSH":
+			if m.vmInfo.rootPasswordSetup {
+				m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "⚠️  Root SSH password is already configured")
+				return m, nil
+			}
+			if m.vmInfo.sshHost == "" {
+				m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "❌ SSH host not configured. Cannot set up root SSH.")
+				return m, nil
+			}
+			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Setting up root SSH password...")
+			m.vmInfo.runningCommand = true
+			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicID, m.vmInfo.sshHost))
+		}
+		return m, nil
 	}
 
 	// Handle dataset selected message - trigger snapshot with the selected dataset
@@ -328,6 +365,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dbEntry, cmd = m.dbEntry.Update(msg)
 	case ViewDatasetSelector:
 		m.datasetSelector, cmd = m.datasetSelector.Update(msg)
+	case ViewAdvanced:
+		m.advancedMenu, cmd = m.advancedMenu.Update(msg)
 	}
 
 	return m, cmd
@@ -364,6 +403,8 @@ func (m Model) View() string {
 		return m.dbEntry.View()
 	case ViewDatasetSelector:
 		return m.datasetSelector.View()
+	case ViewAdvanced:
+		return m.advancedMenu.View()
 	default:
 		return "Unknown view\n"
 	}
