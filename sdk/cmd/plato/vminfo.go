@@ -140,6 +140,10 @@ type serviceStartedMsg struct {
 	servicesInfo []string
 }
 
+type ecrAuthenticatedMsg struct {
+	err error
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -150,6 +154,7 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		vmAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		vmAction{title: "Connect to Cursor/VSCode", description: "Open Cursor/VSCode editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
+		vmAction{title: "Authenticate ECR", description: "Authenticate Docker with AWS ECR on the VM"},
 		vmAction{title: "Start Service", description: "Start the service defined in plato-config.yml"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
@@ -381,7 +386,17 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 	case serviceStartedMsg:
 		m.runningCommand = false
 		if msg.err != nil {
-			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to start service: %v", msg.err))
+			// Split error message into separate lines for better display
+			errorMsg := msg.err.Error()
+			m.statusMessages = append(m.statusMessages, "❌ Failed to start service")
+
+			// Split by common delimiters and add each part as a separate message
+			lines := strings.Split(errorMsg, "\n")
+			for _, line := range lines {
+				if strings.TrimSpace(line) != "" {
+					m.statusMessages = append(m.statusMessages, "   "+strings.TrimSpace(line))
+				}
+			}
 		} else {
 			m.lastPushedBranch = msg.branchName
 			m.statusMessages = append(m.statusMessages, "✓ Service started successfully!")
@@ -391,6 +406,24 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			for _, info := range msg.servicesInfo {
 				m.statusMessages = append(m.statusMessages, info)
 			}
+		}
+		return m, nil
+
+	case ecrAuthenticatedMsg:
+		m.runningCommand = false
+		if msg.err != nil {
+			// Split error message into separate lines for better display
+			errorMsg := msg.err.Error()
+			m.statusMessages = append(m.statusMessages, "❌ ECR authentication failed")
+
+			lines := strings.Split(errorMsg, "\n")
+			for _, line := range lines {
+				if strings.TrimSpace(line) != "" {
+					m.statusMessages = append(m.statusMessages, "   "+strings.TrimSpace(line))
+				}
+			}
+		} else {
+			m.statusMessages = append(m.statusMessages, "✓ Successfully authenticated Docker with AWS ECR")
 		}
 		return m, nil
 
@@ -535,13 +568,30 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	if len(m.statusMessages) > 0 {
 		output.WriteString("\n" + strings.Repeat("─", 50) + "\n\n")
 		output.WriteString("STATUS\n\n")
-		// Show last 5 messages
+		// Show last 10 messages
 		start := 0
-		if len(m.statusMessages) > 5 {
-			start = len(m.statusMessages) - 5
+		if len(m.statusMessages) > 10 {
+			start = len(m.statusMessages) - 10
 		}
+
+		// Calculate wrap width based on viewport width (leave room for padding and scrollbar)
+		wrapWidth := m.viewport.Width - 6
+		if wrapWidth < 40 {
+			wrapWidth = 40 // Minimum width
+		}
+
 		for _, msg := range m.statusMessages[start:] {
-			output.WriteString(fmt.Sprintf("  %s\n", msg))
+			// Wrap long messages for better readability
+			wrapped := wrapText(msg, wrapWidth)
+			lines := strings.Split(wrapped, "\n")
+			for i, line := range lines {
+				if i == 0 {
+					output.WriteString(fmt.Sprintf("  %s\n", line))
+				} else {
+					// Indent continuation lines
+					output.WriteString(fmt.Sprintf("    %s\n", line))
+				}
+			}
 		}
 	}
 
@@ -1060,7 +1110,8 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 				}
 
 				// Build the docker compose command (V2 syntax without hyphen)
-				composeCmd := fmt.Sprintf("cd %s && docker compose -f %s up -d", repoDir, composeFile)
+				// Set DOCKER_HOST to use rootless docker daemon socket
+				composeCmd := fmt.Sprintf("cd %s && DOCKER_HOST=unix:///var/run/docker-user.sock docker compose -f %s up -d", repoDir, composeFile)
 				sshCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, composeCmd)
 
 				output, err := sshCmd.CombinedOutput()
@@ -1083,6 +1134,45 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 			branchName:   branchName,
 			servicesInfo: servicesInfo,
 		}
+	}
+}
+
+// authenticateECR authenticates Docker with AWS ECR on the VM
+func authenticateECR(sshHost string, sshConfigPath string) tea.Cmd {
+	return func() tea.Msg {
+		utils.LogDebug("Starting ECR authentication process")
+
+		// Step 1: Get ECR login token on local machine
+		utils.LogDebug("Step 1: Getting ECR login token from local AWS CLI")
+		ecrCmd := exec.Command("aws", "ecr", "get-login-password", "--region", "us-west-1")
+		tokenBytes, err := ecrCmd.Output()
+		if err != nil {
+			return ecrAuthenticatedMsg{err: fmt.Errorf("failed to get ECR login token: %w", err)}
+		}
+
+		token := strings.TrimSpace(string(tokenBytes))
+		if token == "" {
+			return ecrAuthenticatedMsg{err: fmt.Errorf("ECR login token is empty")}
+		}
+
+		utils.LogDebug("Successfully got ECR login token (length: %d)", len(token))
+
+		// Step 2: Login to ECR on the VM using the token
+		utils.LogDebug("Step 2: Logging into ECR on VM")
+		ecrRegistry := "383806609161.dkr.ecr.us-west-1.amazonaws.com"
+
+		// Use echo to pipe the token to docker login
+		// Set DOCKER_HOST to use rootless docker daemon socket
+		dockerLoginCmd := fmt.Sprintf("echo '%s' | DOCKER_HOST=unix:///var/run/docker-user.sock docker login --username AWS --password-stdin %s", token, ecrRegistry)
+		sshCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, dockerLoginCmd)
+
+		output, err := sshCmd.CombinedOutput()
+		if err != nil {
+			return ecrAuthenticatedMsg{err: fmt.Errorf("failed to login to ECR on VM: %w\nOutput: %s", err, string(output))}
+		}
+
+		utils.LogDebug("ECR authentication successful: %s", string(output))
+		return ecrAuthenticatedMsg{err: nil}
 	}
 }
 
@@ -1371,6 +1461,10 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		return m, func() tea.Msg {
 			return navigateToProxytunnelPortMsg{publicID: m.sandbox.PublicID}
 		}
+	case "Authenticate ECR":
+		m.statusMessages = append(m.statusMessages, "Authenticating Docker with AWS ECR...")
+		m.runningCommand = true
+		return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
 	case "Start Service":
 		// Load the config to get service name and dataset config
 		config, err := LoadPlatoConfig()
