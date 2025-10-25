@@ -6,11 +6,11 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/ui/components"
 	"os"
 	"strings"
-
 	plato "plato-sdk"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/joho/godotenv"
@@ -79,7 +79,7 @@ func (m ConfigModel) View() string {
 	baseURL := m.client.GetBaseURL()
 
 	var content strings.Builder
-	content.WriteString(RenderHeader())
+	content.WriteString(components.RenderHeader())
 	content.WriteString("\n")
 
 	// API Key

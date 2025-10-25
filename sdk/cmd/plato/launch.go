@@ -6,8 +6,9 @@
 package main
 
 import (
-	plato "plato-sdk"
 
+"plato-sdk/cmd/plato/internal/ui/components"
+	plato "plato-sdk"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -120,7 +121,7 @@ func (m LaunchModel) View() string {
 		MarginLeft(2).
 		MarginTop(1)
 
-	content := RenderHeader() + "\n" + m.optionsList.View()
+	content := components.RenderHeader() + "\n" + m.optionsList.View()
 	content += "\n" + helpStyle.Render("Enter: Select • Esc: Back to Main Menu")
 	return content
 }

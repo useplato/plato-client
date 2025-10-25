@@ -8,8 +8,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	plato "plato-sdk"
 	"time"
+
+	plato "plato-sdk"
+	"plato-sdk/cmd/plato/internal/utils"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
@@ -183,7 +185,7 @@ func openTemporaryProxytunnel(publicID string, remotePort int) (*exec.Cmd, int, 
 	logDebug("Opening temporary proxytunnel for port %d", remotePort)
 
 	// Try to use the same port as remote
-	localPort, err := findFreePortPreferred(remotePort)
+	localPort, err := utils.FindFreePortPreferred(remotePort)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to find free port: %w", err)
 	}

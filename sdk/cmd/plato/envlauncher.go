@@ -1,16 +1,17 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/utils"
+"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"fmt"
 	"math/rand"
 	"strings"
 	"time"
-
 	plato "plato-sdk"
 	"plato-sdk/models"
 	"plato-sdk/services"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,7 +22,7 @@ type EnvLauncherModel struct {
 	simulator      *models.SimulatorListItem
 	artifactID     *string
 	spinner        spinner.Model
-	stopwatch      Stopwatch
+	stopwatch      components.Stopwatch
 	statusMessages []string
 	statusChan     chan string
 	environment    *models.Environment
@@ -139,7 +140,7 @@ func setupSSHForEnvironment(jobID string, statusChan chan<- string) tea.Cmd {
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname (use 'root' for existing simulator environments)
-		sshHost, err := setupSSHConfig(localPort, jobID, "root")
+		sshHost, err := utils.SetupSSHConfig(localPort, jobID, "root")
 		if err != nil {
 			close(statusChan)
 			return envSSHConfiguredMsg{sshHost: "", err: err}
@@ -175,7 +176,7 @@ func NewEnvLauncherModel(client *plato.PlatoClient, simulator *models.SimulatorL
 		simulator:      simulator,
 		artifactID:     artifactID,
 		spinner:        s,
-		stopwatch:      NewStopwatch(),
+		stopwatch:      components.NewStopwatch(),
 		statusMessages: []string{},
 		statusChan:     make(chan string, 10),
 		dataset:        "base", // Default dataset
@@ -298,7 +299,7 @@ func (m EnvLauncherModel) View() string {
 		MarginLeft(4)
 
 	var content string
-	content += RenderHeader() + "\n\n"
+	content += components.RenderHeader() + "\n\n"
 
 	// Show elapsed time if stopwatch is running
 	if m.stopwatch.Running() {

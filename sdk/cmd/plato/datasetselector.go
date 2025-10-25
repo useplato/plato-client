@@ -1,11 +1,11 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/ui/components"
 	"fmt"
 	"strings"
-
 	"plato-sdk/models"
-
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -190,5 +190,5 @@ func (m DatasetSelectorModel) View() string {
 		body.WriteString(helpStyle.Render("↑/↓: navigate • enter: select • /: filter • esc: back"))
 	}
 
-	return RenderHeader() + "\n" + header + "\n" + body.String()
+	return components.RenderHeader() + "\n" + header + "\n" + body.String()
 }

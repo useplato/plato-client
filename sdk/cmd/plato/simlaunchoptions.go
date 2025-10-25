@@ -1,9 +1,10 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/ui/components"
 	plato "plato-sdk"
 	"plato-sdk/models"
-
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -116,7 +117,7 @@ func (m SimLaunchOptionsModel) View() string {
 		MarginBottom(1)
 
 	var content string
-	content += RenderHeader() + "\n"
+	content += components.RenderHeader() + "\n"
 
 	// Show selected simulator name
 	if m.simulator != nil {

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 
+	"plato-sdk/cmd/plato/internal/ui/components"
+	"plato-sdk/cmd/plato/internal/utils"
 	"plato-sdk/models"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -368,14 +370,14 @@ func (m Model) View() string {
 func main() {
 	// Handle version flag
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Printf("Plato CLI version %s\n", version)
-		fmt.Printf("Git commit: %s\n", gitCommit)
-		fmt.Printf("Built: %s\n", buildTime)
+		fmt.Printf("Plato CLI version %s\n", components.Version)
+		fmt.Printf("Git commit: %s\n", components.GitCommit)
+		fmt.Printf("Built: %s\n", components.BuildTime)
 		os.Exit(0)
 	}
 
 	// Initialize debug logger
-	if err := initLogger(); err != nil {
+	if err := utils.InitLogger(); err != nil {
 		fmt.Printf("Warning: failed to initialize logger: %v\n", err)
 	}
 

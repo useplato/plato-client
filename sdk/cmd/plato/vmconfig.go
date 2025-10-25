@@ -7,6 +7,9 @@
 package main
 
 import (
+
+"plato-sdk/cmd/plato/internal/utils"
+"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"fmt"
 	"math/rand"
@@ -14,10 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	plato "plato-sdk"
 	"plato-sdk/models"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
@@ -38,7 +39,7 @@ type VMConfigModel struct {
 	width          int
 	err            error
 	spinner        spinner.Model
-	stopwatch      Stopwatch
+	stopwatch      components.Stopwatch
 	statusMessages []string
 	statusChan     chan string
 	sandbox        *models.Sandbox
@@ -112,7 +113,7 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config using PublicID
-		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID, "root")
+		sshHost, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "root")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -191,7 +192,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname (use 'plato' user for blank VMs)
-		sshHost, err := setupSSHConfig(localPort, sandbox.PublicID, "plato")
+		sshHost, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -244,7 +245,7 @@ func NewVMConfigModelFromConfig(client *plato.PlatoClient, datasetName string, d
 		service:        service,
 		width:          80,
 		spinner:        s,
-		stopwatch:      NewStopwatch(),
+		stopwatch:      components.NewStopwatch(),
 		statusMessages: []string{fmt.Sprintf("Starting VM creation for dataset: %s...", datasetName)},
 		skipForm:       true,
 		dataset:        datasetName,
@@ -288,7 +289,7 @@ func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorList
 		version:        version,
 		width:          80,
 		spinner:        s,
-		stopwatch:      NewStopwatch(),
+		stopwatch:      components.NewStopwatch(),
 		statusMessages: []string{},
 		skipForm:       skipForm,
 		dataset:        datasetValue,
@@ -698,7 +699,7 @@ func (m VMConfigModel) View() string {
 			}
 		}
 
-		return RenderHeader() + content
+		return components.RenderHeader() + content
 	}
 
 	headerStyle := lipgloss.NewStyle().
@@ -714,5 +715,5 @@ func (m VMConfigModel) View() string {
 	header := headerStyle.Render("Configure Virtual Machine")
 	form := m.form.View()
 
-	return RenderHeader() + "\n" + header + "\n" + baseStyle.Render(form)
+	return components.RenderHeader() + "\n" + header + "\n" + baseStyle.Render(form)
 }
