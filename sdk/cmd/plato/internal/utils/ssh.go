@@ -14,6 +14,7 @@ import (
 
 // ReadSSHPublicKey reads the user's SSH public key from ~/.ssh directory
 // It tries common key files in order: id_ed25519.pub, id_rsa.pub
+// Returns both the public key content and the path to the private key file
 func ReadSSHPublicKey() (string, error) {
 	sshDir := filepath.Join(os.Getenv("HOME"), ".ssh")
 
@@ -36,6 +37,28 @@ func ReadSSHPublicKey() (string, error) {
 
 	// No SSH public key found
 	return "", fmt.Errorf("no SSH public key found in %s (tried: %s)", sshDir, strings.Join(keyFiles, ", "))
+}
+
+// GetSSHPrivateKeyPath returns the path to the SSH private key
+// It tries common key files in order and returns the path of the first one found
+func GetSSHPrivateKeyPath() (string, error) {
+	sshDir := filepath.Join(os.Getenv("HOME"), ".ssh")
+
+	// Try common SSH public key file names in order of preference
+	// We check for the public key and return the private key path
+	keyFiles := []string{"id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub"}
+
+	for _, keyFile := range keyFiles {
+		publicKeyPath := filepath.Join(sshDir, keyFile)
+		if _, err := os.Stat(publicKeyPath); err == nil {
+			// Found the public key, return the private key path (remove .pub extension)
+			privateKeyPath := strings.TrimSuffix(publicKeyPath, ".pub")
+			return privateKeyPath, nil
+		}
+	}
+
+	// No SSH key found
+	return "", fmt.Errorf("no SSH private key found in %s", sshDir)
 }
 
 // ReadSSHConfig reads SSH config file, returns empty string if doesn't exist
@@ -106,6 +129,52 @@ func WriteSSHConfig(configContent string) error {
 	return os.WriteFile(sshConfigPath, []byte(content), 0600)
 }
 
+// CreateTempSSHConfig creates a temporary SSH config file for a specific host
+// Returns the path to the temporary config file
+func CreateTempSSHConfig(hostname string, port int, jobGroupID string, username string) (string, error) {
+	// Find proxytunnel path
+	proxytunnelPath, err := exec.LookPath("proxytunnel")
+	if err != nil {
+		return "", fmt.Errorf("proxytunnel not found in PATH: %w", err)
+	}
+
+	// Get the private key path to include in the SSH config
+	privateKeyPath, err := GetSSHPrivateKeyPath()
+	if err != nil {
+		return "", fmt.Errorf("failed to find SSH private key: %w", err)
+	}
+
+	// Create temp config content
+	configContent := fmt.Sprintf(`Host %s
+    HostName localhost
+    Port %d
+    User %s
+    IdentityFile %s
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    ConnectTimeout 10
+    ProxyCommand %s -E -p proxy.plato.so:9000 -P '%s@22:newpass' -d %%h:%%p --no-check-certificate
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+`, hostname, port, username, privateKeyPath, proxytunnelPath, jobGroupID)
+
+	// Create temp file in ~/.plato directory
+	platoDir := filepath.Join(os.Getenv("HOME"), ".plato")
+	if err := os.MkdirAll(platoDir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create .plato directory: %w", err)
+	}
+
+	// Create temp config file with hostname in the name for easier identification
+	tempConfigPath := filepath.Join(platoDir, fmt.Sprintf("ssh_config_%s", hostname))
+	if err := os.WriteFile(tempConfigPath, []byte(configContent), 0600); err != nil {
+		return "", fmt.Errorf("failed to write temp SSH config: %w", err)
+	}
+
+	return tempConfigPath, nil
+}
+
 // AppendSSHHostEntry appends a new SSH host entry to config
 func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username string) error {
 	configContent, err := ReadSSHConfig()
@@ -119,10 +188,18 @@ func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username s
 		return fmt.Errorf("proxytunnel not found in PATH: %w", err)
 	}
 
+	// Get the private key path to include in the SSH config
+	privateKeyPath, err := GetSSHPrivateKeyPath()
+	if err != nil {
+		return fmt.Errorf("failed to find SSH private key: %w", err)
+	}
+
 	configWithProxy := fmt.Sprintf(`Host %s
     HostName localhost
     Port %d
     User %s
+    IdentityFile %s
+    IdentitiesOnly yes
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
     ConnectTimeout 10
@@ -130,7 +207,7 @@ func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username s
     ServerAliveInterval 30
     ServerAliveCountMax 3
     TCPKeepAlive yes
-    `, hostname, port, username, proxytunnelPath, jobGroupID)
+    `, hostname, port, username, privateKeyPath, proxytunnelPath, jobGroupID)
 
 	if configContent != "" {
 		configContent = strings.TrimRight(configContent, "\n") + "\n\n" + configWithProxy
@@ -141,27 +218,19 @@ func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username s
 	return WriteSSHConfig(configContent)
 }
 
-// SetupSSHConfig sets up SSH config with available hostname and returns the hostname
-func SetupSSHConfig(localPort int, jobPublicID string, username string) (string, error) {
-	sshConfigDir := filepath.Join(os.Getenv("HOME"), ".ssh")
-	if err := os.MkdirAll(sshConfigDir, 0700); err != nil {
-		return "", err
-	}
+// SetupSSHConfig creates a temporary SSH config file and returns the hostname and config path
+// Returns (hostname, configPath, error)
+func SetupSSHConfig(localPort int, jobPublicID string, username string) (string, string, error) {
+	// Use jobPublicID as the hostname (since we're using temp configs, no conflict issues)
+	sshHost := fmt.Sprintf("sandbox-%s", jobPublicID)
 
-	// Find next available sandbox hostname
-	existingConfig, err := ReadSSHConfig()
+	// Create temporary SSH config file
+	configPath, err := CreateTempSSHConfig(sshHost, localPort, jobPublicID, username)
 	if err != nil {
-		return "", err
+		return "", "", fmt.Errorf("failed to create temp SSH config: %w", err)
 	}
 
-	sshHost := FindAvailableHostname("sandbox", existingConfig)
-
-	// Add SSH host entry
-	if err := AppendSSHHostEntry(sshHost, localPort, jobPublicID, username); err != nil {
-		return "", fmt.Errorf("failed to append SSH host entry: %w", err)
-	}
-
-	return sshHost, nil
+	return sshHost, configPath, nil
 }
 
 // CleanupSSHConfig removes a SSH host entry from config

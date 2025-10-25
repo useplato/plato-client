@@ -113,7 +113,7 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config using PublicID
-		sshHost, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "root")
+		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "root")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -123,7 +123,7 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 			}
 		}
 
-		statusChan <- fmt.Sprintf("SSH configured: ssh %s", sshHost)
+		statusChan <- fmt.Sprintf("SSH configured: ssh -F %s %s", configPath, sshHost)
 
 		// Setup root SSH access with public key
 		statusChan <- "Setting up root SSH access..."
@@ -202,7 +202,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname (use 'plato' user for blank VMs)
-		sshHost, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "plato")
+		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -211,6 +211,9 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 				err:     fmt.Errorf("SSH config setup failed: %w", err),
 			}
 		}
+
+		// Inform user how to connect
+		statusChan <- fmt.Sprintf("SSH configured: ssh -F %s %s", configPath, sshHost)
 
 		// Generate SSH connection info
 		sshURL := fmt.Sprintf("root@%s", sandbox.PublicID)
