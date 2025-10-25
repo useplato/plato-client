@@ -1,0 +1,186 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Get current version
+        id: get_version
+        run: |
+          cd sdk/cmd/plato
+          if [ -f VERSION ]; then
+            CURRENT_VERSION=$(cat VERSION | tr -d '\n')
+            echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "current_version=1.0.0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine version bump
+        id: bump_version
+        run: |
+          # Get commit messages since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s" HEAD)
+          else
+            COMMITS=$(git log --pretty=format:"%s" ${LAST_TAG}..HEAD)
+          fi
+
+          # Determine bump type based on conventional commits
+          BUMP_TYPE="patch"
+
+          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?:"; then
+            BUMP_TYPE="minor"
+          fi
+
+          if echo "$COMMITS" | grep -qiE "^.+!:|^BREAKING CHANGE:"; then
+            BUMP_TYPE="major"
+          fi
+
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Detected bump type: $BUMP_TYPE"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT="${{ steps.get_version.outputs.current_version }}"
+          BUMP="${{ steps.bump_version.outputs.bump_type }}"
+
+          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT"
+          MAJOR="${VERSION_PARTS[0]}"
+          MINOR="${VERSION_PARTS[1]}"
+          PATCH="${VERSION_PARTS[2]}"
+
+          if [ "$BUMP" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "$BUMP" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update VERSION file
+        run: |
+          cd sdk/cmd/plato
+          echo "${{ steps.new_version.outputs.version }}" > VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: bump version to ${{ steps.new_version.outputs.version }}"
+          git push
+
+      - name: Build binaries
+        run: |
+          cd sdk/cmd/plato
+
+          VERSION="${{ steps.new_version.outputs.version }}"
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
+
+          LDFLAGS="-X 'plato-sdk/cmd/plato/internal/ui/components.Version=${VERSION}' -X 'plato-sdk/cmd/plato/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-sdk/cmd/plato/internal/ui/components.BuildTime=${BUILD_TIME}'"
+
+          # Build for multiple platforms
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o plato-darwin-amd64
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o plato-darwin-arm64
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o plato-linux-amd64
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o plato-linux-arm64
+
+          # Create archives
+          tar -czf plato-darwin-amd64.tar.gz plato-darwin-amd64
+          tar -czf plato-darwin-arm64.tar.gz plato-darwin-arm64
+          tar -czf plato-linux-amd64.tar.gz plato-linux-amd64
+          tar -czf plato-linux-arm64.tar.gz plato-linux-arm64
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" ${LAST_TAG}..HEAD)
+          fi
+
+          NOTES="## Changes in v${{ steps.new_version.outputs.version }}
+
+$COMMITS
+
+## Installation
+
+### macOS (Apple Silicon)
+\`\`\`bash
+curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-arm64.tar.gz | tar xz
+chmod +x plato-darwin-arm64
+mv plato-darwin-arm64 ~/.local/bin/plato
+\`\`\`
+
+### macOS (Intel)
+\`\`\`bash
+curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-amd64.tar.gz | tar xz
+chmod +x plato-darwin-amd64
+mv plato-darwin-amd64 ~/.local/bin/plato
+\`\`\`
+
+### Linux (x86_64)
+\`\`\`bash
+curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-amd64.tar.gz | tar xz
+chmod +x plato-linux-amd64
+sudo mv plato-linux-amd64 /usr/local/bin/plato
+\`\`\`
+
+### Linux (ARM64)
+\`\`\`bash
+curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-arm64.tar.gz | tar xz
+chmod +x plato-linux-arm64
+sudo mv plato-linux-arm64 /usr/local/bin/plato
+\`\`\`"
+
+          # Save to file for multiline output
+          echo "$NOTES" > release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.new_version.outputs.version }}
+          name: v${{ steps.new_version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            sdk/cmd/plato/plato-darwin-amd64.tar.gz
+            sdk/cmd/plato/plato-darwin-arm64.tar.gz
+            sdk/cmd/plato/plato-linux-amd64.tar.gz
+            sdk/cmd/plato/plato-linux-arm64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
