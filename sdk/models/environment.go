@@ -1,3 +1,8 @@
+// Package models provides data structures for environment-related operations.
+//
+// This file defines models for Plato environments, job status, worker status,
+// and reset operations. These models are used when creating, managing, and
+// monitoring Plato environments and their associated jobs.
 package models
 
 // Environment represents a Plato environment

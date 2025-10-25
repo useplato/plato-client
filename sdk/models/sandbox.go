@@ -1,3 +1,8 @@
+// Package models provides data structures for sandbox-related operations.
+//
+// This file defines models for Plato sandboxes (VMs), including sandbox creation,
+// snapshot operations, and worker management. Sandboxes are isolated VM environments
+// used for running simulators and can be monitored via SSE events using correlation IDs.
 package models
 
 type Sandbox struct {

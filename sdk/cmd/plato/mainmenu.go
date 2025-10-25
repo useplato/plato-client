@@ -1,3 +1,7 @@
+// Package main provides the main menu view for the Plato CLI.
+//
+// This file implements the MainMenuModel which displays the primary navigation
+// menu with options to launch environments, view configuration, or quit the CLI.
 package main
 
 import (

@@ -1,3 +1,10 @@
+// Package services provides the sandbox service for Plato API operations.
+//
+// This file implements the SandboxService which handles full VM sandbox operations
+// including creating VMs from simulator configurations, setting up sandboxes with
+// datasets, monitoring operations via SSE streams, managing snapshots, and starting
+// Plato workers. Sandboxes are isolated VM environments used for building and
+// testing simulators before they are versioned and deployed.
 package services
 
 import (

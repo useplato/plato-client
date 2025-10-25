@@ -1,3 +1,9 @@
+// Package main provides an example of using the Plato SDK Sandbox service.
+//
+// This example demonstrates how to create, manage, and delete VM sandboxes
+// using the Plato SDK. It shows the complete lifecycle of a sandbox including
+// creation with custom resource configuration, retrieval of sandbox details,
+// listing all sandboxes, and cleanup via deletion.
 package main
 
 import (

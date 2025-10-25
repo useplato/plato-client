@@ -1,3 +1,7 @@
+// Package main provides debug logging utilities for the Plato CLI.
+//
+// This file implements a debug logger that writes log messages to
+// ~/.plato/debug.log for troubleshooting CLI operations and tracking events.
 package main
 
 import (

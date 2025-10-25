@@ -1,3 +1,8 @@
+// Package models provides data structures for simulator-related operations.
+//
+// This file defines models for Plato simulators and their versions. These models
+// are used when listing available simulators and querying version information
+// including artifact IDs, datasets, and creation timestamps.
 package models
 
 type SimulatorListItem struct {

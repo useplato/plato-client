@@ -1,3 +1,9 @@
+// Package main provides an example of using the Plato SDK Organization service.
+//
+// This example demonstrates how to query organization-level information including
+// running sessions, active jobs, and job performance metrics. These operations
+// help organizations monitor their resource usage and understand job performance
+// characteristics like time-to-start percentiles.
 package main
 
 import (

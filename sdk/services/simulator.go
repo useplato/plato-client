@@ -1,3 +1,9 @@
+// Package services provides the simulator service for Plato API operations.
+//
+// This file implements the SimulatorService which handles simulator-related
+// operations including listing available simulators and querying version
+// information. Simulators are the core environments that can be launched
+// as sandboxes or environments in the Plato platform.
 package services
 
 import (

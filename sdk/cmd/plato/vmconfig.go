@@ -1,3 +1,9 @@
+// Package main provides the VM configuration view for the Plato CLI.
+//
+// This file implements the VMConfigModel which handles configuring and creating
+// VM sandboxes. It presents a form for users to specify VM parameters like alias,
+// dataset, and resource requirements, then orchestrates the VM creation and setup
+// process including monitoring via SSE events.
 package main
 
 import (

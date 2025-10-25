@@ -1,3 +1,9 @@
+// Package main provides the plato-config.yml loader view for the Plato CLI.
+//
+// This file implements the PlatoConfigModel which reads and parses a local
+// plato-config.yml file, then presents the available datasets to the user
+// for launching as VM sandboxes. This allows users to launch VMs from their
+// local simulator configurations.
 package main
 
 import (

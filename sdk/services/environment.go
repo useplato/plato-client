@@ -1,3 +1,10 @@
+// Package services provides the environment service for Plato API operations.
+//
+// This file implements the EnvironmentService which handles environment lifecycle
+// operations including creating environments with simulators, checking worker
+// readiness, resetting environments for new run sessions, and closing environments.
+// Environments represent running instances of simulators with specific configurations
+// and interface types (browser, API, etc.).
 package services
 
 import (

@@ -1,3 +1,9 @@
+// Package services provides the organization service for Plato API operations.
+//
+// This file implements the OrganizationService which handles organization-level
+// operations including querying running sessions, monitoring active jobs, and
+// retrieving job performance metrics (p50, p90, p99 time-to-start). These
+// operations help organizations monitor their resource usage and job performance.
 package services
 
 import (

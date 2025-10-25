@@ -1,3 +1,8 @@
+// Package main provides the configuration management view for the Plato CLI.
+//
+// This file implements the ConfigModel which handles loading and displaying
+// API configuration from environment variables and .env files. It shows the
+// current API key and base URL settings to the user.
 package main
 
 import (

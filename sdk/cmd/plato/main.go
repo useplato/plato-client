@@ -1,3 +1,10 @@
+// Package main provides the Plato CLI application.
+//
+// This is the main entry point for the Plato CLI tool, which provides an interactive
+// terminal UI for managing Plato simulators, environments, and sandboxes. The CLI
+// uses the Bubble Tea framework to provide a view-based navigation system with
+// multiple screens including main menu, configuration, simulator selection,
+// environment launching, and VM management.
 package main
 
 import (

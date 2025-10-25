@@ -1,3 +1,10 @@
+// Package main provides the VM information and management view for the Plato CLI.
+//
+// This file implements the VMInfoModel which displays detailed information about
+// a running VM sandbox including SSH connection details, available actions like
+// creating snapshots, setting up root passwords, starting workers, opening proxy
+// tunnels, and managing the VM lifecycle. It provides an interactive menu for
+// performing various operations on the VM.
 package main
 
 import (
