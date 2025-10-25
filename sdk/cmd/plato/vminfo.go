@@ -353,11 +353,11 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		} else {
 			m.rootPasswordSetup = true
 			// Update SSH config with password and change user to root
-			if m.sshHost != "" {
-				// First, update the username to root
-				if err := utils.UpdateSSHConfigUser(m.sshHost, "root"); err != nil {
+			if m.sshHost != "" && m.sshConfigPath != "" {
+				// First, update the username to root in the per-VM SSH config file
+				if err := utils.UpdateSSHConfigFileUser(m.sshConfigPath, m.sshHost, "root"); err != nil {
 					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config user: %v", err))
-				} else if err := utils.UpdateSSHConfigPassword(m.sshHost, "password"); err != nil {
+				} else if err := utils.UpdateSSHConfigFilePassword(m.sshConfigPath, m.sshHost, "password"); err != nil {
 					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to update SSH config password: %v", err))
 				} else {
 					m.statusMessages = append(m.statusMessages, "✓ Root SSH password configured!")
