@@ -150,12 +150,12 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	items := []list.Item{
+		vmAction{title: "Authenticate ECR", description: "Authenticate Docker with AWS ECR on the VM"},
+		vmAction{title: "Start Service", description: "Start the service defined in plato-config.yml"},
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
 		vmAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		vmAction{title: "Connect to Cursor/VSCode", description: "Open Cursor/VSCode editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
-		vmAction{title: "Authenticate ECR", description: "Authenticate Docker with AWS ECR on the VM"},
-		vmAction{title: "Start Service", description: "Start the service defined in plato-config.yml"},
 		vmAction{title: "Snapshot VM", description: "Create snapshot of current VM state"},
 		vmAction{title: "Close VM", description: "Shutdown and cleanup VM"},
 	}
