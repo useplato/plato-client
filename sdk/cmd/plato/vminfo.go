@@ -141,7 +141,6 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 	items := []list.Item{
 		vmAction{title: "Start Plato Worker", description: "Start the Plato worker process"},
 		vmAction{title: "Set up root SSH", description: "Configure root SSH password access"},
-		vmAction{title: "Connect via SSH", description: "Open SSH connection to VM"},
 		vmAction{title: "Connect to Cursor/VSCode", description: "Open Cursor/VSCode editor connected to VM via SSH"},
 		vmAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
 		vmAction{title: "Push to Plato Hub", description: "Push code to hub.plato.so repository"},
@@ -479,10 +478,7 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 		output.WriteString("\n" + strings.Repeat("─", 50) + "\n\n")
 		output.WriteString("CONNECTION INFO\n\n")
 		if m.sshHost != "" && m.sshConfigPath != "" {
-			// Format SSH command on multiple lines for better readability
-			output.WriteString("SSH Command:\n")
-			output.WriteString(fmt.Sprintf("  ssh -F %s \\\n", m.sshConfigPath))
-			output.WriteString(fmt.Sprintf("      %s\n", m.sshHost))
+			output.WriteString(fmt.Sprintf("SSH:  ssh -F %s %s\n", m.sshConfigPath, m.sshHost))
 		} else if m.sshHost != "" {
 			output.WriteString(fmt.Sprintf("SSH:  ssh %s\n", m.sshHost))
 		} else {
@@ -1023,9 +1019,40 @@ func setupRootPassword(client *plato.PlatoClient, publicID string, sshHost strin
 	}
 }
 
-func openCursor(sshHost string) tea.Cmd {
+func openCursor(sshHost string, sshConfigPath string) tea.Cmd {
 	return func() tea.Msg {
-		utils.LogDebug("Opening VS Code for SSH host: %s", sshHost)
+		utils.LogDebug("Opening VS Code for SSH host: %s with config: %s", sshHost, sshConfigPath)
+
+		// Read the temp SSH config and append it to the user's main SSH config
+		// This allows VSCode Remote SSH to find the host
+		tempConfig, err := os.ReadFile(sshConfigPath)
+		if err != nil {
+			utils.LogDebug("Failed to read temp SSH config: %v", err)
+			return cursorOpenedMsg{err: fmt.Errorf("failed to read SSH config: %w", err)}
+		}
+
+		// Read existing SSH config
+		existingConfig, err := utils.ReadSSHConfig()
+		if err != nil {
+			utils.LogDebug("Failed to read existing SSH config: %v", err)
+			return cursorOpenedMsg{err: fmt.Errorf("failed to read existing SSH config: %w", err)}
+		}
+
+		// Check if host already exists
+		if !strings.Contains(existingConfig, fmt.Sprintf("Host %s", sshHost)) {
+			// Append temp config to user's SSH config
+			newConfig := existingConfig
+			if newConfig != "" && !strings.HasSuffix(newConfig, "\n\n") {
+				newConfig += "\n\n"
+			}
+			newConfig += string(tempConfig)
+
+			if err := utils.WriteSSHConfig(newConfig); err != nil {
+				utils.LogDebug("Failed to write SSH config: %v", err)
+				return cursorOpenedMsg{err: fmt.Errorf("failed to update SSH config: %w", err)}
+			}
+			utils.LogDebug("Added SSH host to ~/.ssh/config")
+		}
 
 		// Find code command
 		codePath, err := exec.LookPath("code")
@@ -1036,9 +1063,7 @@ func openCursor(sshHost string) tea.Cmd {
 		utils.LogDebug("Found code at: %s", codePath)
 
 		// Build code command with SSH remote
-		// code --folder-uri vscode-remote://ssh-remote+{sshHost}/root --remote-platform linux
-		folderURI := fmt.Sprintf("vscode-remote://ssh-remote+%s/root", sshHost)
-		cmd := exec.Command(codePath, "--folder-uri", folderURI, "--remote-platform", "linux")
+		cmd := exec.Command(codePath, "--folder-uri", fmt.Sprintf("vscode-remote://ssh-remote+%s/root", sshHost), "--remote-platform", "linux")
 
 		utils.LogDebug("Starting code command: %v", cmd.Args)
 
@@ -1106,19 +1131,20 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
 		m.runningCommand = true
 		return m, tea.Batch(m.spinner.Tick, setupRootPassword(m.client, m.sandbox.PublicID, m.sshHost))
-	case "Connect via SSH":
-		// TODO: Implement SSH connection
-		m.statusMessages = append(m.statusMessages, "SSH connection not implemented yet")
 	case "Connect to Cursor/VSCode":
 		if m.sshHost == "" {
 			m.statusMessages = append(m.statusMessages, "❌ SSH host not set up yet")
+			return m, nil
+		}
+		if m.sshConfigPath == "" {
+			m.statusMessages = append(m.statusMessages, "❌ SSH config not set up yet")
 			return m, nil
 		}
 
 		// Launch VS Code connected to the VM via SSH
 		m.statusMessages = append(m.statusMessages, "Opening VS Code...")
 		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, openCursor(m.sshHost))
+		return m, tea.Batch(m.spinner.Tick, openCursor(m.sshHost, m.sshConfigPath))
 	case "Open Proxytunnel":
 		// Navigate to port selector
 		return m, func() tea.Msg {
