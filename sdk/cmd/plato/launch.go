@@ -40,22 +40,22 @@ func NewLaunchModel(client *plato.PlatoClient) LaunchModel {
 	var configOption launchOption
 	if configExists {
 		configOption = launchOption{
-			title:       "From Plato Config",
+			title:       "Launch from Plato Config",
 			description: "Launch from plato-config.yml in current directory",
 			disabled:    false,
 		}
 	} else {
 		configOption = launchOption{
-			title:       "From Plato Config",
+			title:       "Launch from Plato Config",
 			description: "Please create config first or start with a blank VM",
 			disabled:    true,
 		}
 	}
 
 	items := []list.Item{
-		launchOption{title: "Blank VM", description: "Configure and launch a fresh virtual machine", disabled: false},
+		launchOption{title: "Launch Blank VM", description: "Configure and launch a fresh virtual machine", disabled: false},
 		configOption,
-		launchOption{title: "By Sim Name", description: "Launch an existing environment by name", disabled: false},
+		launchOption{title: "Resume From Existing Artifact", description: "Launch an existing environment by name", disabled: false},
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 80, 15)
@@ -92,15 +92,15 @@ func (m LaunchModel) Update(msg tea.Msg) (LaunchModel, tea.Cmd) {
 					return m, nil
 				}
 				switch option.title {
-				case "Blank VM":
+				case "Launch Blank VM":
 					return m, func() tea.Msg {
 						return NavigateMsg{view: ViewVMConfig}
 					}
-				case "From Plato Config":
+				case "Launch from Plato Config":
 					return m, func() tea.Msg {
 						return NavigateMsg{view: ViewPlatoConfig}
 					}
-				case "By Sim Name":
+				case "Resume From Existing Artifact":
 					return m, func() tea.Msg {
 						return NavigateMsg{view: ViewSimSelector}
 					}
