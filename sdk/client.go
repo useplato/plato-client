@@ -58,9 +58,10 @@ type RetryConfig struct {
 
 // NewClient creates a new PlatoClient with the given options
 func NewClient(apiKey string, opts ...ClientOption) *PlatoClient {
-	if apiKey == "" {
-		panic("PLATO_API_KEY is not set. Please set your API key in .env file or environment variables")
-	}
+	// Allow empty API key - it will be checked at the CLI level with a friendly message
+	// if apiKey == "" {
+	// 	panic("PLATO_API_KEY is not set. Please set your API key in .env file or environment variables")
+	// }
 
 	client := &PlatoClient{
 		baseURL:      "https://plato.so/api",

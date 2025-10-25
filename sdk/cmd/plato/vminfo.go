@@ -81,7 +81,8 @@ type VMInfoModel struct {
 	config               *models.PlatoConfig
 	lastPushedBranch     string // Tracks the last branch pushed to hub
 	cachedCloneCmd       string // Cached clone command to avoid repeated API calls
-	showInfoPanel        bool   // Whether to show the info panel
+	hubRepoURL           string // Cached hub repository URL
+	infoPanelFocused     bool   // Whether the info panel has focus (vs actions list)
 	runningCommand       bool   // Whether a command is currently running
 }
 
@@ -144,6 +145,10 @@ type ecrAuthenticatedMsg struct {
 	err error
 }
 
+type hubRepoURLMsg struct {
+	url string
+}
+
 func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset string, fromExistingSim bool, artifactID *string, version *string) VMInfoModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -174,6 +179,12 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		BorderForeground(vmInfoIndigo).
 		PaddingLeft(1)
 
+	// Try to load plato-config.yml
+	var config *models.PlatoConfig
+	if cfg, err := LoadPlatoConfig(); err == nil {
+		config = cfg
+	}
+
 	return VMInfoModel{
 		client:               client,
 		sandbox:              sandbox,
@@ -195,7 +206,8 @@ func NewVMInfoModel(client *plato.PlatoClient, sandbox *models.Sandbox, dataset 
 		rootPasswordSetup:    false,
 		proxytunnelProcesses: []*exec.Cmd{},
 		proxytunnelMappings:  []proxytunnelMapping{},
-		showInfoPanel:        false, // Start with info panel hidden
+		config:               config,
+		infoPanelFocused:     false, // Start with actions list focused
 	}
 }
 
@@ -269,6 +281,12 @@ func (m VMInfoModel) Init() tea.Cmd {
 	// Setup should already be done when we reach this view
 	// Start sending heartbeats to keep the VM alive
 	m.startHeartbeat()
+
+	// Fetch hub repository URL in background if we have a config
+	if m.config != nil && m.config.Service != "" {
+		return fetchHubRepoURL(m.client, m.config.Service)
+	}
+
 	return nil
 }
 
@@ -281,6 +299,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			if strings.Contains(msg.message, "complete!") || strings.Contains(msg.message, "✓") {
 				m.runningCommand = false
 			}
+			// Update viewport content to reflect new status
+			m.viewport.SetContent(m.renderVMInfoMarkdown())
 		}
 		if m.settingUp && m.statusChan != nil {
 			return m, waitForStatusUpdates(m.statusChan)
@@ -298,6 +318,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.sshConfigPath = msg.sshConfigPath
 			m.statusMessages = append(m.statusMessages, "✓ Sandbox ready!")
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case rootPasswordSetupMsg:
@@ -321,6 +343,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				m.statusMessages = append(m.statusMessages, "✓ Root password set!")
 			}
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case snapshotCreatedMsg:
@@ -341,16 +365,22 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.lastPushedBranch = ""
 			m.cachedCloneCmd = ""
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case workerStartedMsg:
 		if msg.err != nil {
 			m.runningCommand = false
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Worker start failed: %v", msg.err))
+			// Update viewport content to reflect new status
+			m.viewport.SetContent(m.renderVMInfoMarkdown())
 		} else if msg.response != nil {
 			m.statusMessages = append(m.statusMessages, "✓ Worker start initiated!")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Monitoring progress via correlation ID: %s", msg.response.CorrelationID))
+			// Update viewport content to reflect new status
+			m.viewport.SetContent(m.renderVMInfoMarkdown())
 			// Monitor the operation using SSE events
 			return m, tea.Batch(
 				m.spinner.Tick,
@@ -381,6 +411,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, "💡 To pull code in your VM, SSH in and run:")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   %s", msg.cloneCmd))
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case serviceStartedMsg:
@@ -407,6 +439,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				m.statusMessages = append(m.statusMessages, info)
 			}
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case ecrAuthenticatedMsg:
@@ -425,6 +459,15 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		} else {
 			m.statusMessages = append(m.statusMessages, "✓ Successfully authenticated Docker with AWS ECR")
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
+		return m, nil
+
+	case hubRepoURLMsg:
+		// Cache the hub repo URL for display
+		m.hubRepoURL = msg.url
+		// Update viewport content with new info
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case proxytunnelOpenedMsg:
@@ -441,6 +484,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("✓ Proxytunnel: localhost:%d → remote:%d", msg.localPort, msg.remotePort))
 			utils.LogDebug("Added to lists, now have %d processes and %d mappings", len(m.proxytunnelProcesses), len(m.proxytunnelMappings))
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case cursorOpenedMsg:
@@ -451,6 +496,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		} else {
 			m.statusMessages = append(m.statusMessages, "✓ Cursor opened successfully")
 		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
 	case spinner.TickMsg:
@@ -473,10 +520,10 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "i":
-			// Toggle info panel visibility
-			m.showInfoPanel = !m.showInfoPanel
-			if m.showInfoPanel {
-				// Update viewport content when showing
+			// Toggle focus between actions list and info panel
+			m.infoPanelFocused = !m.infoPanelFocused
+			// Update viewport content when focusing
+			if m.infoPanelFocused {
 				renderedMarkdown := m.renderVMInfoMarkdown()
 				m.viewport.SetContent(renderedMarkdown)
 			}
@@ -497,13 +544,13 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		var cmds []tea.Cmd
 		var cmd tea.Cmd
 
-		// Only update action list if info panel is not shown
-		// This allows viewport to handle arrow keys when shown
-		if !m.showInfoPanel {
+		// Only update the focused component
+		// Actions list or info panel based on focus
+		if !m.infoPanelFocused {
 			m.actionList, cmd = m.actionList.Update(msg)
 			cmds = append(cmds, cmd)
 		} else {
-			// When info panel is shown, viewport handles scrolling
+			// When info panel is focused, viewport handles scrolling
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -529,6 +576,11 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 		output.WriteString(fmt.Sprintf("Version:  %s\n", *m.version))
 	}
 	output.WriteString(fmt.Sprintf("URL:      %s\n", m.sandbox.URL))
+
+	// Show hub.plato.so repository link if we have it cached
+	if m.hubRepoURL != "" {
+		output.WriteString(fmt.Sprintf("Hub Repo: %s\n", m.hubRepoURL))
+	}
 
 	if m.setupComplete {
 		output.WriteString("\n" + strings.Repeat("─", 50) + "\n\n")
@@ -1040,19 +1092,20 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 			return serviceStartedMsg{err: fmt.Errorf("git status failed: %w", err)}
 		}
 
-		// Only commit and push if there are changes
+		// Commit and push if there are changes, otherwise push the branch anyway
 		if len(strings.TrimSpace(string(statusOutput))) > 0 {
 			gitCommit := exec.Command("git", "commit", "-m", fmt.Sprintf("Sync from local workspace"))
 			gitCommit.Dir = tempRepo
 			if output, err := gitCommit.CombinedOutput(); err != nil {
 				return serviceStartedMsg{err: fmt.Errorf("git commit failed: %w\nOutput: %s", err, string(output))}
 			}
+		}
 
-			gitPush := exec.Command("git", "push", "-u", "origin", branchName)
-			gitPush.Dir = tempRepo
-			if output, err := gitPush.CombinedOutput(); err != nil {
-				return serviceStartedMsg{err: fmt.Errorf("git push failed: %w\nOutput: %s", err, string(output))}
-			}
+		// Always push the branch (even if no changes, to ensure it exists on remote)
+		gitPush := exec.Command("git", "push", "-u", "origin", branchName)
+		gitPush.Dir = tempRepo
+		if output, err := gitPush.CombinedOutput(); err != nil {
+			return serviceStartedMsg{err: fmt.Errorf("git push failed: %w\nOutput: %s", err, string(output))}
 		}
 
 		utils.LogDebug("Code pushed successfully, branch: %s", branchName)
@@ -1639,32 +1692,71 @@ func (m VMInfoModel) View() string {
 		return components.RenderHeader() + "\n" + header + "\n" + body
 	}
 
-	// Actions panel (left side)
+	// Actions panel (left side) - no border, just margin
 	actionsPanel := m.lg.NewStyle().
 		Margin(1, 4, 1, 0).
 		Render(m.actionList.View())
 
-	var body string
-	if m.showInfoPanel {
-		// Build VM info panel (right side) using viewport
-		vmInfoPanel := m.viewport.View()
-		body = lipgloss.JoinHorizontal(lipgloss.Left, actionsPanel, vmInfoPanel)
+	// Info panel (right side) - change border brightness based on focus
+	var borderColor lipgloss.Color
+	if m.infoPanelFocused {
+		borderColor = lipgloss.Color("#7D56F4") // Bright purple when focused
 	} else {
-		body = actionsPanel
+		borderColor = lipgloss.Color("#444444") // Dark gray when not focused
 	}
+
+	m.viewport.Style = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		PaddingLeft(1)
+
+	vmInfoPanel := m.viewport.View()
+	body := lipgloss.JoinHorizontal(lipgloss.Left, actionsPanel, vmInfoPanel)
 
 	helpStyle := m.lg.NewStyle().
 		Foreground(lipgloss.Color("240")).
 		MarginTop(1).
 		MarginLeft(2)
 
+	// Update help text based on which panel is focused
 	var helpText string
-	if m.showInfoPanel {
-		helpText = "↑/↓: scroll • pgup/pgdn: page • i: hide info • ctrl+c: quit"
+	if m.infoPanelFocused {
+		helpText = "↑/↓: scroll • pgup/pgdn: page • i: focus actions • ctrl+c: quit"
 	} else {
-		helpText = "enter: select action • i: show info • ctrl+c: quit"
+		helpText = "enter: select action • i: focus info • ctrl+c: quit"
 	}
 	footer := helpStyle.Render(helpText)
 
 	return components.RenderHeader() + "\n" + header + "\n" + body + "\n" + footer
+}
+
+// fetchHubRepoURL fetches the hub repository URL for a service
+func fetchHubRepoURL(client *plato.PlatoClient, serviceName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Fetch simulators
+		simulators, err := client.Gitea.ListSimulators(ctx)
+		if err != nil {
+			return hubRepoURLMsg{url: ""}
+		}
+
+		// Find the simulator by service name
+		for _, sim := range simulators {
+			if strings.EqualFold(sim.Name, serviceName) {
+				if sim.HasRepo {
+					// Get the repository
+					repo, err := client.Gitea.GetSimulatorRepository(ctx, sim.ID)
+					if err == nil {
+						// Return the CloneURL without .git suffix
+						hubURL := strings.TrimSuffix(repo.CloneURL, ".git")
+						return hubRepoURLMsg{url: hubURL}
+					}
+				}
+				break
+			}
+		}
+
+		return hubRepoURLMsg{url: ""}
+	}
 }
