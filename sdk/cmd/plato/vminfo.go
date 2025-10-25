@@ -500,6 +500,13 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		m.viewport.SetContent(m.renderVMInfoMarkdown())
 		return m, nil
 
+	case hubRepoURLMsg:
+		// Cache the hub repo URL for display
+		m.hubRepoURL = msg.url
+		// Update viewport content with new info
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
+		return m, nil
+
 	case proxytunnelOpenedMsg:
 		utils.LogDebug("proxytunnelOpenedMsg received, localPort=%d, remotePort=%d, err=%v", msg.localPort, msg.remotePort, msg.err)
 		m.runningCommand = false
