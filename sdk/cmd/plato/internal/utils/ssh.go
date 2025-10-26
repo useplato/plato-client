@@ -132,7 +132,7 @@ func WriteSSHConfig(configContent string) error {
 
 // CreateTempSSHConfig creates a temporary SSH config file for a specific host
 // Returns the path to the temporary config file
-func CreateTempSSHConfig(hostname string, port int, jobGroupID string, username string) (string, error) {
+func CreateTempSSHConfig(baseURL, hostname string, port int, jobGroupID string, username string) (string, error) {
 	// Find proxytunnel path
 	proxytunnelPath, err := exec.LookPath("proxytunnel")
 	if err != nil {
@@ -145,6 +145,16 @@ func CreateTempSSHConfig(hostname string, port int, jobGroupID string, username 
 		return "", fmt.Errorf("failed to find SSH private key: %w", err)
 	}
 
+	// Get proxy configuration based on base URL
+	proxyConfig := GetProxyConfig(baseURL)
+
+	// Build ProxyCommand
+	proxyCmd := proxytunnelPath
+	if proxyConfig.Secure {
+		proxyCmd += " -E"
+	}
+	proxyCmd += fmt.Sprintf(" -p %s -P '%s@22:newpass' -d %%h:%%p --no-check-certificate", proxyConfig.Server, jobGroupID)
+
 	// Create temp config content
 	configContent := fmt.Sprintf(`Host %s
     HostName localhost
@@ -155,11 +165,11 @@ func CreateTempSSHConfig(hostname string, port int, jobGroupID string, username 
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
     ConnectTimeout 10
-    ProxyCommand %s -E -p proxy.plato.so:9000 -P '%s@22:newpass' -d %%h:%%p --no-check-certificate
+    ProxyCommand %s
     ServerAliveInterval 30
     ServerAliveCountMax 3
     TCPKeepAlive yes
-`, hostname, port, username, privateKeyPath, proxytunnelPath, jobGroupID)
+`, hostname, port, username, privateKeyPath, proxyCmd)
 
 	// Create temp file in ~/.plato directory
 	platoDir := filepath.Join(os.Getenv("HOME"), ".plato")
@@ -179,7 +189,7 @@ func CreateTempSSHConfig(hostname string, port int, jobGroupID string, username 
 }
 
 // AppendSSHHostEntry appends a new SSH host entry to config
-func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username string) error {
+func AppendSSHHostEntry(baseURL, hostname string, port int, jobGroupID string, username string) error {
 	configContent, err := ReadSSHConfig()
 	if err != nil {
 		return err
@@ -197,6 +207,16 @@ func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username s
 		return fmt.Errorf("failed to find SSH private key: %w", err)
 	}
 
+	// Get proxy configuration based on base URL
+	proxyConfig := GetProxyConfig(baseURL)
+
+	// Build ProxyCommand
+	proxyCmd := proxytunnelPath
+	if proxyConfig.Secure {
+		proxyCmd += " -E"
+	}
+	proxyCmd += fmt.Sprintf(" -p %s -P '%s@22:newpass' -d %%h:%%p --no-check-certificate", proxyConfig.Server, jobGroupID)
+
 	configWithProxy := fmt.Sprintf(`Host %s
     HostName localhost
     Port %d
@@ -206,11 +226,11 @@ func AppendSSHHostEntry(hostname string, port int, jobGroupID string, username s
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
     ConnectTimeout 10
-    ProxyCommand %s -E -p proxy.plato.so:9000 -P '%s@22:newpass' -d %%h:%%p --no-check-certificate
+    ProxyCommand %s
     ServerAliveInterval 30
     ServerAliveCountMax 3
     TCPKeepAlive yes
-    `, hostname, port, username, privateKeyPath, proxytunnelPath, jobGroupID)
+    `, hostname, port, username, privateKeyPath, proxyCmd)
 
 	if configContent != "" {
 		configContent = strings.TrimRight(configContent, "\n") + "\n\n" + configWithProxy
@@ -245,13 +265,13 @@ func getNextSandboxNumber() int {
 
 // SetupSSHConfig creates a temporary SSH config file and returns the hostname and config path
 // Returns (hostname, configPath, error)
-func SetupSSHConfig(localPort int, jobPublicID string, username string) (string, string, error) {
+func SetupSSHConfig(baseURL string, localPort int, jobPublicID string, username string) (string, string, error) {
 	// Get next available sandbox number for a simple hostname
 	sandboxNum := getNextSandboxNumber()
 	sshHost := fmt.Sprintf("sandbox-%d", sandboxNum)
 
 	// Create temporary SSH config file with simple name
-	configPath, err := CreateTempSSHConfig(sshHost, localPort, jobPublicID, username)
+	configPath, err := CreateTempSSHConfig(baseURL, sshHost, localPort, jobPublicID, username)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create temp SSH config: %w", err)
 	}

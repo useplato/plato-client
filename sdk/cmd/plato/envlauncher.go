@@ -1,17 +1,17 @@
 package main
 
 import (
-
-"plato-sdk/cmd/plato/internal/utils"
-"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
-	"time"
 	plato "plato-sdk"
+	"plato-sdk/cmd/plato/internal/ui/components"
+	"plato-sdk/cmd/plato/internal/utils"
 	"plato-sdk/models"
 	"plato-sdk/services"
+	"strings"
+	"time"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -132,7 +132,7 @@ func resetEnvironment(client *plato.PlatoClient, jobID string, statusChan chan<-
 	}
 }
 
-func setupSSHForEnvironment(jobID string, statusChan chan<- string) tea.Cmd {
+func setupSSHForEnvironment(client *plato.PlatoClient, jobID string, statusChan chan<- string) tea.Cmd {
 	return func() tea.Msg {
 		statusChan <- "Configuring SSH access..."
 
@@ -140,7 +140,7 @@ func setupSSHForEnvironment(jobID string, statusChan chan<- string) tea.Cmd {
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname (use 'root' for existing simulator environments)
-		sshHost, configPath, err := utils.SetupSSHConfig(localPort, jobID, "root")
+		sshHost, configPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, jobID, "root")
 		if err != nil {
 			close(statusChan)
 			return envSSHConfiguredMsg{sshHost: "", err: err}
@@ -234,7 +234,7 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 			return m, m.stopwatch.Stop()
 		}
 		return m, tea.Batch(
-			setupSSHForEnvironment(m.environment.JobID, m.statusChan),
+			setupSSHForEnvironment(m.client, m.environment.JobID, m.statusChan),
 			waitForEnvStatusUpdates(m.statusChan),
 		)
 
@@ -344,7 +344,7 @@ func getPublicURL(client *plato.PlatoClient, env *models.Environment) string {
 
 	// Determine environment based on base_url
 	if strings.Contains(baseURL, "localhost:8080") {
-		return fmt.Sprintf("http://localhost:8081/%s", identifier)
+		return fmt.Sprintf("http://%s.sims.localhost:8080", identifier)
 	} else if strings.Contains(baseURL, "plato.so") {
 		// Parse subdomain from base URL
 		parts := strings.Split(baseURL, ".")
