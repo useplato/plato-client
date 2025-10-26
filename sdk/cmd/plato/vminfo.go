@@ -468,9 +468,9 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 
 	case triggerECRAuthMsg:
 		// Trigger ECR authentication
-		// m.statusMessages = append(m.statusMessages, "🔐 Authenticating Docker with AWS ECR...")
-		// m.runningCommand = true
-		// return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
+		m.statusMessages = append(m.statusMessages, "🔐 Authenticating Docker with AWS ECR...")
+		m.runningCommand = true
+		return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
 
 	case ecrAuthenticatedMsg:
 		m.runningCommand = false
