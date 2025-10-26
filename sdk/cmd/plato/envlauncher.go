@@ -258,9 +258,9 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 				time.Sleep(1 * time.Second)
 				// Create a sandbox object for compatibility with VMInfo
 				sandbox := &models.Sandbox{
-					PublicID:   m.environment.JobID,
-					JobGroupID: m.environment.JobID,
-					URL:        getPublicURL(m.client, m.environment),
+					PublicId:   m.environment.JobID,
+					JobGroupId: m.environment.JobID,
+					Url:        getPublicURL(m.client, m.environment),
 				}
 				return navigateToVMInfoMsg{
 					sandbox:         sandbox,

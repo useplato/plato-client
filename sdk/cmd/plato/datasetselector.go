@@ -60,7 +60,7 @@ func NewDatasetSelectorModel(service string, params snapshotParams) DatasetSelec
 		for name, dataset := range config.Datasets {
 			// Build description with listener info
 			var desc strings.Builder
-			desc.WriteString(fmt.Sprintf("%dCPU/%dMB", dataset.Compute.CPUs, dataset.Compute.Memory))
+			desc.WriteString(fmt.Sprintf("%dCPU/%dMB", dataset.Compute.Cpus, dataset.Compute.Memory))
 
 			// Add listener info from Listeners map
 			if len(dataset.Listeners) > 0 {
@@ -75,7 +75,7 @@ func NewDatasetSelectorModel(service string, params snapshotParams) DatasetSelec
 			items = append(items, datasetOption{
 				name:        name,
 				description: desc.String(),
-				dataset:     dataset,
+				dataset:     *dataset,
 			})
 		}
 

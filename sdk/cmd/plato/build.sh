@@ -30,6 +30,9 @@ echo "   Commit:     ${GIT_COMMIT}"
 echo "   Build Time: ${BUILD_TIME}"
 echo ""
 
+# Ensure dependencies are up to date
+go mod tidy
+
 go build -ldflags "${LDFLAGS}" -o plato
 
 echo "📦 Installing to ~/.local/bin..."

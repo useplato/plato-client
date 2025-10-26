@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package plato;
+
+option go_package = "plato-sdk/models";
+
+// Compute resource configuration for a simulator
+message SimConfigCompute {
+  int32 cpus = 1;
+  int32 memory = 2;
+  int32 disk = 3;
+  int32 app_port = 4;
+  int32 plato_messaging_port = 5;
+}
+
+// Metadata configuration for a simulator
+message SimConfigMetadata {
+  string favicon = 1;
+  string name = 2;
+  string description = 3;
+  string source_code_url = 4;
+  string start_url = 5;
+  string license = 6;
+  repeated Variable variables = 7;
+  optional string flows_path = 8;
+}
+
+// Environment variable
+message Variable {
+  string name = 1;
+  string value = 2;
+}
+
+// Service configuration (docker-compose or docker)
+message SimConfigService {
+  string type = 1;
+  optional string file = 2;
+  repeated string required_healthy_containers = 3;
+  optional int32 healthy_wait_timeout = 4;
+}
+
+// Database listener configuration
+message SimConfigDBListener {
+  string type = 1;
+  string db_type = 2;
+  string db_host = 3;
+  int32 db_port = 4;
+  string db_user = 5;
+  string db_password = 6;
+  string db_database = 7;
+  repeated string seed_data_paths = 8;
+  repeated string volumes = 9;
+}
+
+// File listener configuration
+message SimConfigFileListener {
+  string type = 1;
+  string target_dir = 2;
+  bool watch_enabled = 3;
+  repeated string watch_patterns = 4;
+  repeated string ignore_patterns = 5;
+  optional string seed_data_path = 6;
+  repeated string volumes = 7;
+}
+
+// Configuration for a simulator dataset
+message SimConfigDataset {
+  SimConfigCompute compute = 1;
+  SimConfigMetadata metadata = 2;
+  map<string, SimConfigService> services = 3;
+  // Listeners are stored as JSON strings for flexibility
+  map<string, string> listeners = 4;
+}
+
+// Complete plato-config.yml structure
+message PlatoConfig {
+  optional string service = 1;
+  map<string, SimConfigDataset> datasets = 2;
+}
+
+// Sandbox (VM) information
+message Sandbox {
+  string job_id = 1;
+  string public_id = 2;
+  string job_group_id = 3;
+  string url = 4;
+  string status = 5;
+  string correlation_id = 6;
+}
+
+// Request to create a VM snapshot
+message CreateSnapshotRequest {
+  optional string service = 1;
+  optional string git_hash = 2;
+  optional string dataset = 3;
+}
+
+// Response from creating a VM snapshot
+message CreateSnapshotResponse {
+  string artifact_id = 1;
+  string status = 2;
+  string timestamp = 3;
+  string correlation_id = 4;
+  string s3_uri = 5;
+  optional string git_hash = 6;
+}
+
+// Request to start the Plato worker
+message StartWorkerRequest {
+  optional string service = 1;
+  string dataset = 2;
+  SimConfigDataset plato_dataset_config = 3;
+  optional int32 timeout = 4;
+}
+
+// Response from starting the Plato worker
+message StartWorkerResponse {
+  string status = 1;
+  string timestamp = 2;
+  string correlation_id = 3;
+}

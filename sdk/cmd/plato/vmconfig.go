@@ -88,18 +88,18 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 			alias = config.Metadata.Name
 		}
 
-		sandbox, err := client.Sandbox.Create(ctx, config, dataset, alias, artifactID, service)
+		sandbox, err := client.Sandbox.Create(ctx, &config, dataset, alias, artifactID, service)
 		if err != nil {
 			close(statusChan)
 			return sandboxCreatedMsg{sandbox: nil, err: err}
 		}
 
-		statusChan <- fmt.Sprintf("VM created (ID: %s)", sandbox.PublicID)
+		statusChan <- fmt.Sprintf("VM created (ID: %s)", sandbox.PublicId)
 		statusChan <- "Monitoring VM provisioning..."
 
 		// Monitor the operation until completion using the correlation_id from the API
 		// Pass statusChan to get real-time event details
-		err = client.Sandbox.MonitorOperationWithEvents(ctx, sandbox.CorrelationID, 20*time.Minute, statusChan)
+		err = client.Sandbox.MonitorOperationWithEvents(ctx, sandbox.CorrelationId, 20*time.Minute, statusChan)
 		if err != nil {
 			return sandboxCreatedMsg{sandbox: sandbox, err: fmt.Errorf("VM provisioning failed: %w", err)}
 		}
@@ -117,9 +117,8 @@ func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, sta
 		// Choose a random port between 2200 and 2299
 		localPort := rand.Intn(100) + 2200
 
-		// Setup SSH config using PublicID with 'plato' user (not root)
-		// This also generates a new SSH key pair for this VM
-		sshHost, configPath, _, privateKeyPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
+		// Setup SSH config using PublicID
+		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicId, "root")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -133,8 +132,34 @@ func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, sta
 
 		statusChan <- fmt.Sprintf("SSH configured: ssh -F %s %s", configPath, sshHost)
 
+		// Setup root SSH access with public key
+		statusChan <- "Setting up root SSH access..."
+		sshPublicKey, err := utils.ReadSSHPublicKey()
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("failed to read SSH public key: %w", err),
+			}
+		}
+
+		err = client.Sandbox.SetupRootPassword(ctx, sandbox.PublicId, sshPublicKey)
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("root SSH setup failed: %w", err),
+			}
+		}
+
+		statusChan <- "Root SSH access configured"
+
 		// Generate SSH connection info
-		sshURL := fmt.Sprintf("plato@%s", sandbox.PublicID)
+		sshURL := fmt.Sprintf("root@%s", sandbox.PublicId)
 
 		statusChan <- "✓ VM ready!"
 		close(statusChan)
@@ -176,8 +201,8 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 
 		statusChan <- "Calling setup-sandbox API..."
 
-		// Call the setup-sandbox API with full config and the newly generated SSH public key
-		correlationID, err := client.Sandbox.SetupSandbox(ctx, sandbox.PublicID, config, dataset, sshPublicKey)
+		// Call the setup-sandbox API with full config and SSH public key
+		correlationID, err := client.Sandbox.SetupSandbox(ctx, sandbox.PublicId, &config, dataset, sshPublicKey)
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -197,11 +222,27 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:            "",
-				sshHost:           "",
-				sshConfigPath:     "",
-				sshPrivateKeyPath: "",
-				err:               fmt.Errorf("setup monitoring failed: %w", err),
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("setup monitoring failed: %w", err),
+			}
+		}
+
+		statusChan <- "Configuring SSH access..."
+
+		// Choose a random port between 2200 and 2299
+		localPort := rand.Intn(100) + 2200
+
+		// Setup SSH config and get the hostname (use 'plato' user for blank VMs)
+		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicId, "plato")
+		if err != nil {
+			close(statusChan)
+			return sandboxSetupCompleteMsg{
+				sshURL:        "",
+				sshHost:       "",
+				sshConfigPath: "",
+				err:           fmt.Errorf("SSH config setup failed: %w", err),
 			}
 		}
 
@@ -209,7 +250,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		statusChan <- fmt.Sprintf("SSH configured: ssh -F %s %s", configPath, sshHost)
 
 		// Generate SSH connection info
-		sshURL := fmt.Sprintf("root@%s", sandbox.PublicID)
+		sshURL := fmt.Sprintf("root@%s", sandbox.PublicId)
 
 		close(statusChan)
 
@@ -443,29 +484,29 @@ func (m VMConfigModel) buildConfig(cpu, memory, disk int) models.SimConfigDatase
 		description = "A Plato simulator environment"
 	}
 
-	compute := models.SimConfigCompute{
-		CPUs:               cpu,
-		Memory:             memory,
-		Disk:               disk,
+	compute := &models.SimConfigCompute{
+		Cpus:               int32(cpu),
+		Memory:             int32(memory),
+		Disk:               int32(disk),
 		AppPort:            8080,
 		PlatoMessagingPort: 7000,
 	}
 
-	metadata := models.SimConfigMetadata{
+	metadata := &models.SimConfigMetadata{
 		Favicon:       "https://plato.so/favicon.ico",
 		Name:          name,
 		Description:   description,
-		SourceCodeURL: "https://github.com/useplato/plato",
-		StartURL:      "http://localhost:8080",
+		SourceCodeUrl: "https://github.com/useplato/plato",
+		StartUrl:      "http://localhost:8080",
 		License:       "MIT",
-		Variables:     []map[string]string{{"name": "PLATO_API_KEY", "value": "your-api-key"}},
+		Variables:     []*models.Variable{{Name: "PLATO_API_KEY", Value: "your-api-key"}},
 	}
 
 	return models.SimConfigDataset{
 		Compute:   compute,
 		Metadata:  metadata,
 		Services:  map[string]*models.SimConfigService{},
-		Listeners: map[string]*models.SimConfigListener{},
+		Listeners: map[string]string{},
 	}
 }
 
@@ -629,15 +670,16 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		// Save config if requested
 		saveConfig := m.form.GetBool("save_config")
 		if saveConfig {
-			config := models.DefaultPlatoConfig(datasetVal)
-			// Set the service name
-			config.Service = serviceVal
-			// Update compute values by recreating the dataset
-			dataset := config.Datasets[datasetVal]
-			dataset.Compute.CPUs = cpu
-			dataset.Compute.Memory = memory
-			dataset.Compute.Disk = disk
-			config.Datasets[datasetVal] = dataset
+			config := &models.PlatoConfig{
+				Service: &serviceVal,
+				Datasets: map[string]*models.SimConfigDataset{
+					datasetVal: &datasetConfig,
+				},
+			}
+			// Update compute values
+			config.Datasets[datasetVal].Compute.Cpus = int32(cpu)
+			config.Datasets[datasetVal].Compute.Memory = int32(memory)
+			config.Datasets[datasetVal].Compute.Disk = int32(disk)
 			if err := SavePlatoConfig(config); err != nil {
 				// Non-fatal: just continue without saving
 				// Could add error handling here if needed

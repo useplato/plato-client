@@ -102,13 +102,20 @@ func GetDBConfigFromPlatoConfig(dataset string) (DBConfig, bool) {
 	}
 
 	// Look for a DB listener in the dataset's listeners
-	for _, listener := range datasetConfig.Listeners {
-		if listener == nil {
+	// Listeners are now stored as map[string]string where values are JSON
+	for listenerName, listenerJSON := range datasetConfig.Listeners {
+		if listenerJSON == "" {
+			continue
+		}
+
+		// Parse the JSON string into a map
+		var listenerMap map[string]interface{}
+		if err := json.Unmarshal([]byte(listenerJSON), &listenerMap); err != nil {
+			LogDebug("Failed to parse listener '%s': %v", listenerName, err)
 			continue
 		}
 
 		// Check if this is a DB listener
-		listenerMap := *listener
 		listenerType, ok := listenerMap["type"].(string)
 		if !ok || listenerType != "db" {
 			continue
@@ -126,8 +133,8 @@ func GetDBConfigFromPlatoConfig(dataset string) (DBConfig, bool) {
 		if dbPassword, ok := listenerMap["db_password"].(string); ok {
 			dbConfig.Password = dbPassword
 		}
-		if dbPort, ok := listenerMap["db_port"].(int); ok {
-			dbConfig.DestPort = dbPort
+		if dbPort, ok := listenerMap["db_port"].(float64); ok {
+			dbConfig.DestPort = int(dbPort)
 		}
 		if dbDatabase, ok := listenerMap["db_database"].(string); ok {
 			dbConfig.Databases = []string{dbDatabase}

@@ -198,7 +198,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.datasetSelector.Init()
 		case ViewAdvanced:
 			// Initialize advanced menu with current VM info
-			m.advancedMenu = NewAdvancedMenuModel(m.vmInfo.sandbox.PublicID, m.vmInfo.sshHost, m.vmInfo.sshConfigPath)
+			m.advancedMenu = NewAdvancedMenuModel(m.vmInfo.sandbox.PublicId, m.vmInfo.sshHost, m.vmInfo.sshConfigPath)
 			return m, m.advancedMenu.Init()
 		}
 		return m, nil
@@ -230,7 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "Open Proxytunnel":
 			// Navigate to proxytunnel port selector
 			return m, func() tea.Msg {
-				return navigateToProxytunnelPortMsg{publicID: m.vmInfo.sandbox.PublicID}
+				return navigateToProxytunnelPortMsg{publicID: m.vmInfo.sandbox.PublicId}
 			}
 		case "Set up root SSH":
 			if m.vmInfo.rootPasswordSetup {
@@ -243,7 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Setting up root SSH password...")
 			m.vmInfo.runningCommand = true
-			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicID, m.vmInfo.sshPrivateKeyPath, m.vmInfo.sshHost))
+			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicId, m.vmInfo.sshHost))
 		}
 		return m, nil
 	}
@@ -295,8 +295,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Trigger snapshot with the user-provided DB config
 		return m, createSnapshotWithConfig(
 			m.config.client,
-			m.vmInfo.sandbox.PublicID,
-			m.vmInfo.sandbox.JobGroupID,
+			m.vmInfo.sandbox.PublicId,
+			m.vmInfo.sandbox.JobGroupId,
 			dbMsg.service,
 			datasetPtr,
 			dbMsg.config,

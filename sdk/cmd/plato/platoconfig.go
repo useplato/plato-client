@@ -40,7 +40,7 @@ type datasetItem struct {
 func (d datasetItem) Title() string       { return d.name }
 func (d datasetItem) Description() string {
 	return fmt.Sprintf("CPUs: %d, Memory: %dMB, Disk: %dMB",
-		d.config.Compute.CPUs,
+		d.config.Compute.Cpus,
 		d.config.Compute.Memory,
 		d.config.Compute.Disk)
 }
@@ -87,7 +87,7 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 		for name, dataset := range m.config.Datasets {
 			items = append(items, datasetItem{
 				name:   name,
-				config: dataset,
+				config: *dataset,
 			})
 		}
 
@@ -120,7 +120,7 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 						return launchFromConfigMsg{
 							datasetName:   dataset.name,
 							datasetConfig: dataset.config,
-							service:       m.config.Service,
+							service:       func() string { if m.config.Service != nil { return *m.config.Service }; return "" }(),
 						}
 					}
 				}

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"plato-sdk/models"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // ClientInterface defines the methods needed from PlatoClient
@@ -40,10 +41,26 @@ func NewSandboxService(client ClientInterface) *SandboxService {
 }
 
 // Create creates a new sandbox from a full SimConfigDataset configuration
-func (s *SandboxService) Create(ctx context.Context, config models.SimConfigDataset, dataset, alias string, artifactID *string, service string) (*models.Sandbox, error) {
+func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDataset, dataset, alias string, artifactID *string, service string) (*models.Sandbox, error) {
+	// Marshal config to JSON using protojson with EmitUnpopulated to include empty fields
+	marshaler := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+		UseProtoNames:   true,
+	}
+	configJSON, err := marshaler.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Unmarshal to map for payload construction
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(configJSON, &configMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
 	payload := map[string]interface{}{
 		"dataset":              dataset,
-		"plato_dataset_config": config,
+		"plato_dataset_config": configMap,
 		"timeout":              1200,
 		"wait_time":            600,
 		"alias":                alias,
@@ -112,11 +129,11 @@ func (s *SandboxService) Create(ctx context.Context, config models.SimConfigData
 
 	// Map to Sandbox model
 	sandbox := &models.Sandbox{
-		PublicID:      createResp.PublicID,
-		JobGroupID:    createResp.JobGroupID,
-		URL:           createResp.URL,
+		PublicId:      createResp.PublicID,
+		JobGroupId:    createResp.JobGroupID,
+		Url:           createResp.URL,
 		Status:        createResp.Status,
-		CorrelationID: createResp.CorrelationID,
+		CorrelationId: createResp.CorrelationID,
 	}
 
 	return sandbox, nil
@@ -304,10 +321,26 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 }
 
 // SetupSandbox sets up a sandbox with optional SSH public key for plato user
-func (s *SandboxService) SetupSandbox(ctx context.Context, jobID string, config models.SimConfigDataset, dataset string, sshPublicKey string) (string, error) {
+func (s *SandboxService) SetupSandbox(ctx context.Context, jobID string, config *models.SimConfigDataset, dataset string, sshPublicKey string) (string, error) {
+	// Marshal config to JSON using protojson with EmitUnpopulated to include empty fields
+	marshaler := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+		UseProtoNames:   true,
+	}
+	configJSON, err := marshaler.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Unmarshal to map for payload construction
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(configJSON, &configMap); err != nil {
+		return "", fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
 	payload := map[string]interface{}{
 		"dataset":              dataset,
-		"plato_dataset_config": config,
+		"plato_dataset_config": configMap,
 	}
 
 	// Add SSH public key if provided
@@ -525,8 +558,8 @@ func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, sshPub
 }
 
 // CreateSnapshot creates a snapshot of a VM
-func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, req models.CreateSnapshotRequest) (*models.CreateSnapshotResponse, error) {
-	body, err := json.Marshal(req)
+func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, req *models.CreateSnapshotRequest) (*models.CreateSnapshotResponse, error) {
+	body, err := protojson.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
@@ -556,8 +589,8 @@ func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, re
 }
 
 // StartWorker starts the Plato worker and listeners on a VM
-func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req models.StartWorkerRequest) (*models.StartWorkerResponse, error) {
-	body, err := json.Marshal(req)
+func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req *models.StartWorkerRequest) (*models.StartWorkerResponse, error) {
+	body, err := protojson.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}

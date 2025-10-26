@@ -223,13 +223,13 @@ func (m VMInfoModel) startHeartbeat() {
 		ctx := context.Background()
 
 		// Send initial heartbeat immediately
-		_ = m.client.Sandbox.SendHeartbeat(ctx, m.sandbox.JobGroupID)
+		_ = m.client.Sandbox.SendHeartbeat(ctx, m.sandbox.JobGroupId)
 
 		for {
 			select {
 			case <-ticker.C:
 				// Send heartbeat
-				if err := m.client.Sandbox.SendHeartbeat(ctx, m.sandbox.JobGroupID); err != nil {
+				if err := m.client.Sandbox.SendHeartbeat(ctx, m.sandbox.JobGroupId); err != nil {
 					// Silently fail - don't interrupt the UI
 					continue
 				}
@@ -296,8 +296,8 @@ func (m VMInfoModel) Init() tea.Cmd {
 	}
 
 	// Fetch hub repository URL in background if we have a config
-	if m.config != nil && m.config.Service != "" {
-		cmds = append(cmds, fetchHubRepoURL(m.client, m.config.Service))
+	if m.config != nil && m.config.Service != nil && *m.config.Service != "" {
+		cmds = append(cmds, fetchHubRepoURL(m.client, *m.config.Service))
 	}
 
 	if len(cmds) > 0 {
@@ -377,13 +377,13 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Snapshot failed: %v", msg.err))
 		} else if msg.response != nil {
 			m.statusMessages = append(m.statusMessages, "✓ Snapshot created successfully!")
-			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Artifact ID: %s", msg.response.ArtifactID))
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Artifact ID: %s", msg.response.ArtifactId))
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
-			if msg.response.GitHash != "" {
-				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Git Hash: %s", msg.response.GitHash))
+			if msg.response.GitHash != nil && *msg.response.GitHash != "" {
+				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Git Hash: %s", *msg.response.GitHash))
 			}
-			if msg.response.S3URI != "" {
-				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3URI))
+			if msg.response.S3Uri != "" {
+				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3Uri))
 			}
 			// Clear the last pushed branch and cached clone cmd since it's been merged
 			m.lastPushedBranch = ""
@@ -402,7 +402,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		} else if msg.response != nil {
 			m.statusMessages = append(m.statusMessages, "✓ Worker start initiated!")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
-			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Monitoring progress via correlation ID: %s", msg.response.CorrelationID))
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Monitoring progress via correlation ID: %s", msg.response.CorrelationId))
 			// Update viewport content to reflect new status
 			m.viewport.SetContent(m.renderVMInfoMarkdown())
 			// Monitor the operation using SSE events
@@ -410,7 +410,7 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				m.spinner.Tick,
 				func() tea.Msg {
 					ctx := context.Background()
-					err := m.client.Sandbox.MonitorOperation(ctx, msg.response.CorrelationID, 10*time.Minute)
+					err := m.client.Sandbox.MonitorOperation(ctx, msg.response.CorrelationId, 10*time.Minute)
 					if err != nil {
 						return workerStartedMsg{err: fmt.Errorf("worker setup failed: %w", err), response: nil}
 					}
@@ -598,7 +598,7 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	// VM Information section
 	output.WriteString("VM INFORMATION\n")
 	output.WriteString(strings.Repeat("─", 50) + "\n\n")
-	output.WriteString(fmt.Sprintf("Job ID:   %s\n", m.sandbox.PublicID))
+	output.WriteString(fmt.Sprintf("Job ID:   %s\n", m.sandbox.PublicId))
 	output.WriteString(fmt.Sprintf("Dataset:  %s\n", m.dataset))
 	if m.artifactID != nil {
 		output.WriteString(fmt.Sprintf("Artifact: %s\n", *m.artifactID))
@@ -606,7 +606,7 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	if m.version != nil {
 		output.WriteString(fmt.Sprintf("Version:  %s\n", *m.version))
 	}
-	output.WriteString(fmt.Sprintf("URL:      %s\n", getSandboxPublicURL(m.client, m.sandbox)))
+	output.WriteString(fmt.Sprintf("URL:      %s\n", m.sandbox.Url))
 
 	// Show hub.plato.so repository link if we have it cached
 	if m.hubRepoURL != "" {
@@ -719,8 +719,8 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 			gitHash = &hash
 		}
 
-		req := models.CreateSnapshotRequest{
-			Service: service,
+		req := &models.CreateSnapshotRequest{
+			Service: &service,
 			Dataset: dataset,
 			GitHash: gitHash,
 		}
@@ -737,7 +737,7 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 			return snapshotCreatedMsg{err: err, response: nil}
 		}
 
-		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactID)
+		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactId)
 		return snapshotCreatedMsg{err: nil, response: resp}
 	}
 }
@@ -756,8 +756,8 @@ func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, s
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		req := models.CreateSnapshotRequest{
-			Service: service,
+		req := &models.CreateSnapshotRequest{
+			Service: &service,
 			Dataset: dataset,
 		}
 
@@ -773,7 +773,7 @@ func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, s
 			return snapshotCreatedMsg{err: err, response: nil}
 		}
 
-		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactID)
+		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactId)
 		return snapshotCreatedMsg{err: nil, response: resp}
 	}
 }
@@ -782,11 +782,12 @@ func startWorker(client *plato.PlatoClient, publicID string, service string, dat
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		req := models.StartWorkerRequest{
-			Service:            service,
+		timeout := int32(600)
+		req := &models.StartWorkerRequest{
+			Service:            &service,
 			Dataset:            dataset,
-			PlatoDatasetConfig: datasetConfig,
-			Timeout:            600, // 10 minutes timeout
+			PlatoDatasetConfig: &datasetConfig,
+			Timeout:            &timeout, // 10 minutes timeout
 		}
 
 		resp, err := client.Sandbox.StartWorker(ctx, publicID, req)
@@ -1185,13 +1186,14 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 			case "docker-compose":
 				// Run docker compose up (Docker Compose V2)
 				composeFile := service.File
-				if composeFile == "" {
-					composeFile = "docker-compose.yml"
+				if composeFile == nil || *composeFile == "" {
+					defaultFile := "docker-compose.yml"
+					composeFile = &defaultFile
 				}
 
 				// Build the docker compose command (V2 syntax without hyphen)
 				// Set DOCKER_HOST to use rootless docker daemon socket
-				composeCmd := fmt.Sprintf("cd %s && DOCKER_HOST=unix:///var/run/docker-user.sock docker compose -f %s up -d", repoDir, composeFile)
+				composeCmd := fmt.Sprintf("cd %s && DOCKER_HOST=unix:///var/run/docker-user.sock docker compose -f %s up -d", repoDir, *composeFile)
 				sshCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, composeCmd)
 
 				output, err := sshCmd.CombinedOutput()
@@ -1513,16 +1515,16 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		// Get service from config
 		service := config.Service
-		if service == "" {
+		if service == nil || *service == "" {
 			errMsg := "❌ Service not specified in plato-config.yml"
 			m.statusMessages = append(m.statusMessages, errMsg)
 			logErrorToFile("plato_error.log", errMsg)
 			return m, nil
 		}
 
-		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting Plato worker for service: %s, dataset: %s", service, m.dataset))
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting Plato worker for service: %s, dataset: %s", *service, m.dataset))
 		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, startWorker(m.client, m.sandbox.PublicID, service, m.dataset, datasetConfig))
+		return m, tea.Batch(m.spinner.Tick, startWorker(m.client, m.sandbox.PublicId, *service, m.dataset, *datasetConfig))
 	case "Set up root SSH":
 		// Check if root password is already set up
 		if m.rootPasswordSetup {
@@ -1538,7 +1540,7 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
 		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, setupRootPassword(m.client, m.sandbox.PublicID, m.sshPrivateKeyPath, m.sshHost))
+		return m, tea.Batch(m.spinner.Tick, setupRootPassword(m.client, m.sandbox.PublicId, m.sshHost))
 	case "Connect to Cursor/VSCode":
 		if m.sshHost == "" {
 			m.statusMessages = append(m.statusMessages, "❌ SSH host not set up yet")
@@ -1571,7 +1573,7 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		// Get service from config
 		service := config.Service
-		if service == "" {
+		if service == nil || *service == "" {
 			errMsg := "❌ Service not specified in plato-config.yml"
 			m.statusMessages = append(m.statusMessages, errMsg)
 			logErrorToFile("plato_error.log", errMsg)
@@ -1587,9 +1589,9 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			return m, nil
 		}
 
-		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting service: %s", service))
+		m.statusMessages = append(m.statusMessages, fmt.Sprintf("Starting service: %s", *service))
 		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, startService(m.client, service, m.dataset, datasetConfig, m.sshHost, m.sshConfigPath))
+		return m, tea.Batch(m.spinner.Tick, startService(m.client, *service, m.dataset, *datasetConfig, m.sshHost, m.sshConfigPath))
 	case "Snapshot VM":
 		// Load the config to get service
 		config, err := LoadPlatoConfig()
@@ -1602,7 +1604,7 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		// Get service from config
 		service := config.Service
-		if service == "" {
+		if service == nil || *service == "" {
 			errMsg := "❌ Service not specified in plato-config.yml"
 			m.statusMessages = append(m.statusMessages, errMsg)
 			logErrorToFile("plato_error.log", errMsg)
@@ -1612,9 +1614,9 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		// Navigate to dataset selector to let user choose which dataset to snapshot as
 		return m, func() tea.Msg {
 			return navigateToDatasetSelectorMsg{
-				service:          service,
-				publicID:         m.sandbox.PublicID,
-				jobGroupID:       m.sandbox.JobGroupID,
+				service:          *service,
+				publicID:         m.sandbox.PublicId,
+				jobGroupID:       m.sandbox.JobGroupId,
 				lastPushedBranch: m.lastPushedBranch,
 			}
 		}
@@ -1675,12 +1677,12 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			utils.LogDebug("Calling DeleteVM for: %s", m.sandbox.PublicID)
-			if err := m.client.Sandbox.DeleteVM(ctx, m.sandbox.PublicID); err != nil {
+			utils.LogDebug("Calling DeleteVM for: %s", m.sandbox.PublicId)
+			if err := m.client.Sandbox.DeleteVM(ctx, m.sandbox.PublicId); err != nil {
 				// Log error but still navigate away
 				utils.LogDebug("Warning: failed to delete VM: %v", err)
 			} else {
-				utils.LogDebug("Successfully deleted VM: %s", m.sandbox.PublicID)
+				utils.LogDebug("Successfully deleted VM: %s", m.sandbox.PublicId)
 			}
 			return NavigateMsg{view: ViewMainMenu}
 		}
