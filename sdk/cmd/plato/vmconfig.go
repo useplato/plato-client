@@ -26,29 +26,30 @@ import (
 )
 
 type VMConfigModel struct {
-	client         *plato.PlatoClient
-	simulator      *models.SimulatorListItem // Optional: for launching from existing sim
-	artifactID     *string                   // Optional: for launching with artifact
-	version        *string                   // Optional: version string for the artifact
-	service        string                    // Service name from config
-	form           *huh.Form
-	lg             *lipgloss.Renderer
-	creating       bool
-	settingUp      bool
-	started        bool // Track if we've started the creation process
-	width          int
-	err            error
-	spinner        spinner.Model
-	stopwatch      components.Stopwatch
-	statusMessages []string
-	statusChan     chan string
-	sandbox        *models.Sandbox
-	dataset        string
-	datasetConfig  models.SimConfigDataset
-	sshURL         string
-	sshHost        string
-	sshConfigPath  string
-	skipForm       bool // Skip form and use defaults when launching from simulator
+	client            *plato.PlatoClient
+	simulator         *models.SimulatorListItem // Optional: for launching from existing sim
+	artifactID        *string                   // Optional: for launching with artifact
+	version           *string                   // Optional: version string for the artifact
+	service           string                    // Service name from config
+	form              *huh.Form
+	lg                *lipgloss.Renderer
+	creating          bool
+	settingUp         bool
+	started           bool // Track if we've started the creation process
+	width             int
+	err               error
+	spinner           spinner.Model
+	stopwatch         components.Stopwatch
+	statusMessages    []string
+	statusChan        chan string
+	sandbox           *models.Sandbox
+	dataset           string
+	datasetConfig     models.SimConfigDataset
+	sshURL            string
+	sshHost           string
+	sshConfigPath     string
+	sshPrivateKeyPath string
+	skipForm          bool // Skip form and use defaults when launching from simulator
 }
 
 var (
@@ -61,10 +62,11 @@ type sandboxCreatedMsg struct {
 }
 
 type sandboxSetupCompleteMsg struct {
-	sshURL        string
-	sshHost       string
-	sshConfigPath string
-	err           error
+	sshURL            string
+	sshHost           string
+	sshConfigPath     string
+	sshPrivateKeyPath string
+	err               error
 }
 
 type statusUpdateMsg struct {
@@ -113,14 +115,16 @@ func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, sta
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config using PublicID with 'plato' user (not root)
-		sshHost, configPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
+		// This also generates a new SSH key pair for this VM
+		sshHost, configPath, _, privateKeyPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("SSH config setup failed: %w", err),
+				sshURL:            "",
+				sshHost:           "",
+				sshConfigPath:     "",
+				sshPrivateKeyPath: "",
+				err:               fmt.Errorf("SSH config setup failed: %w", err),
 			}
 		}
 
@@ -133,10 +137,11 @@ func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, sta
 		close(statusChan)
 
 		return sandboxSetupCompleteMsg{
-			sshURL:        sshURL,
-			sshHost:       sshHost,
-			sshConfigPath: configPath,
-			err:           nil,
+			sshURL:            sshURL,
+			sshHost:           sshHost,
+			sshConfigPath:     configPath,
+			sshPrivateKeyPath: privateKeyPath,
+			err:               nil,
 		}
 	}
 }
@@ -147,30 +152,37 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 
 		statusChan <- "Setting up sandbox environment..."
 
-		// Read SSH public key for plato user
-		statusChan <- "Reading SSH public key..."
-		sshPublicKey, err := utils.ReadSSHPublicKey()
+		// Generate a new SSH key pair for this VM
+		statusChan <- "Generating SSH key pair..."
+
+		// Choose a random port between 2200 and 2299
+		localPort := rand.Intn(100) + 2200
+
+		// Setup SSH config and generate new key pair
+		sshHost, configPath, sshPublicKey, privateKeyPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("failed to read SSH public key: %w", err),
+				sshURL:            "",
+				sshHost:           "",
+				sshConfigPath:     "",
+				sshPrivateKeyPath: "",
+				err:               fmt.Errorf("failed to setup SSH: %w", err),
 			}
 		}
 
 		statusChan <- "Calling setup-sandbox API..."
 
-		// Call the setup-sandbox API with full config and SSH public key
+		// Call the setup-sandbox API with full config and the newly generated SSH public key
 		correlationID, err := client.Sandbox.SetupSandbox(ctx, sandbox.PublicID, config, dataset, sshPublicKey)
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           err,
+				sshURL:            "",
+				sshHost:           "",
+				sshConfigPath:     "",
+				sshPrivateKeyPath: "",
+				err:               err,
 			}
 		}
 
@@ -182,27 +194,11 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("setup monitoring failed: %w", err),
-			}
-		}
-
-		statusChan <- "Configuring SSH access..."
-
-		// Choose a random port between 2200 and 2299
-		localPort := rand.Intn(100) + 2200
-
-		// Setup SSH config and get the hostname (use 'plato' user for blank VMs)
-		sshHost, configPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
-		if err != nil {
-			close(statusChan)
-			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("SSH config setup failed: %w", err),
+				sshURL:            "",
+				sshHost:           "",
+				sshConfigPath:     "",
+				sshPrivateKeyPath: "",
+				err:               fmt.Errorf("setup monitoring failed: %w", err),
 			}
 		}
 
@@ -215,10 +211,11 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		close(statusChan)
 
 		return sandboxSetupCompleteMsg{
-			sshURL:        sshURL,
-			sshHost:       sshHost,
-			sshConfigPath: configPath,
-			err:           nil,
+			sshURL:            sshURL,
+			sshHost:           sshHost,
+			sshConfigPath:     configPath,
+			sshPrivateKeyPath: privateKeyPath,
+			err:               nil,
 		}
 	}
 }
@@ -532,6 +529,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		m.sshURL = msg.sshURL
 		m.sshHost = msg.sshHost
 		m.sshConfigPath = msg.sshConfigPath
+		m.sshPrivateKeyPath = msg.sshPrivateKeyPath
 
 		// Wait a moment to show success, then navigate to VM info view
 		return m, tea.Batch(
@@ -539,14 +537,15 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 			func() tea.Msg {
 				time.Sleep(1 * time.Second)
 				return navigateToVMInfoMsg{
-					sandbox:         m.sandbox,
-					dataset:         m.dataset,
-					sshURL:          msg.sshURL,
-					sshHost:         msg.sshHost,
-					sshConfigPath:   msg.sshConfigPath,
-					fromExistingSim: m.artifactID != nil, // True if launched with artifact ID
-					artifactID:      m.artifactID,
-					version:         m.version,
+					sandbox:           m.sandbox,
+					dataset:           m.dataset,
+					sshURL:            msg.sshURL,
+					sshHost:           msg.sshHost,
+					sshConfigPath:     msg.sshConfigPath,
+					sshPrivateKeyPath: msg.sshPrivateKeyPath,
+					fromExistingSim:   m.artifactID != nil, // True if launched with artifact ID
+					artifactID:        m.artifactID,
+					version:           m.version,
 				}
 			},
 		)

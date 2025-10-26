@@ -140,7 +140,8 @@ func setupSSHForEnvironment(client *plato.PlatoClient, jobID string, statusChan 
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname (use 'root' for existing simulator environments)
-		sshHost, configPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, jobID, "root")
+		// This also generates a new SSH key pair for this environment
+		sshHost, configPath, _, _, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, jobID, "root")
 		if err != nil {
 			close(statusChan)
 			return envSSHConfiguredMsg{sshHost: "", err: err}

@@ -25,14 +25,15 @@ type NavigateMsg struct {
 }
 
 type navigateToVMInfoMsg struct {
-	sandbox         *models.Sandbox
-	dataset         string
-	sshURL          string
-	sshHost         string
-	sshConfigPath   string
-	fromExistingSim bool
-	artifactID      *string
-	version         *string
+	sandbox           *models.Sandbox
+	dataset           string
+	sshURL            string
+	sshHost           string
+	sshConfigPath     string
+	sshPrivateKeyPath string
+	fromExistingSim   bool
+	artifactID        *string
+	version           *string
 }
 
 type navigateToProxytunnelPortMsg struct {
@@ -113,6 +114,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vmInfo.sshURL = navMsg.sshURL
 		vmInfo.sshHost = navMsg.sshHost
 		vmInfo.sshConfigPath = navMsg.sshConfigPath
+		vmInfo.sshPrivateKeyPath = navMsg.sshPrivateKeyPath
 		m.vmInfo = vmInfo
 		m.currentView = ViewVMInfo
 		return m, m.vmInfo.Init()
@@ -241,7 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Setting up root SSH password...")
 			m.vmInfo.runningCommand = true
-			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicID, m.vmInfo.sshHost))
+			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicID, m.vmInfo.sshPrivateKeyPath, m.vmInfo.sshHost))
 		}
 		return m, nil
 	}

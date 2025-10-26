@@ -5,12 +5,17 @@
 package utils
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // ReadSSHPublicKey reads the user's SSH public key from ~/.ssh directory
@@ -38,6 +43,65 @@ func ReadSSHPublicKey() (string, error) {
 
 	// No SSH public key found
 	return "", fmt.Errorf("no SSH public key found in %s (tried: %s)", sshDir, strings.Join(keyFiles, ", "))
+}
+
+// GenerateSSHKeyPair generates a new ed25519 SSH key pair for a specific sandbox
+// Returns (publicKey, privateKeyPath, error)
+func GenerateSSHKeyPair(sandboxNum int) (string, string, error) {
+	platoDir := filepath.Join(os.Getenv("HOME"), ".plato")
+	if err := os.MkdirAll(platoDir, 0700); err != nil {
+		return "", "", fmt.Errorf("failed to create .plato directory: %w", err)
+	}
+
+	// Generate key pair in ~/.plato/ssh_{num}_key (private) and ssh_{num}_key.pub (public)
+	privateKeyPath := filepath.Join(platoDir, fmt.Sprintf("ssh_%d_key", sandboxNum))
+	publicKeyPath := privateKeyPath + ".pub"
+
+	// Remove existing keys if they exist
+	os.Remove(privateKeyPath)
+	os.Remove(publicKeyPath)
+
+	// Generate ed25519 key pair using native Go crypto
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate key pair: %w", err)
+	}
+
+	// Convert to SSH format
+	sshPublicKey, err := ssh.NewPublicKey(publicKey)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to convert public key: %w", err)
+	}
+
+	// Format public key in OpenSSH authorized_keys format
+	comment := fmt.Sprintf("plato-sandbox-%d", sandboxNum)
+	pubKeyBytes := ssh.MarshalAuthorizedKey(sshPublicKey)
+	// Add comment to public key (MarshalAuthorizedKey includes a newline)
+	pubKeyStr := strings.TrimSpace(string(pubKeyBytes)) + " " + comment + "\n"
+
+	// Write public key with 0644 permissions (standard for .pub files)
+	if err := os.WriteFile(publicKeyPath, []byte(pubKeyStr), 0644); err != nil {
+		return "", "", fmt.Errorf("failed to write public key: %w", err)
+	}
+
+	// Marshal private key in OpenSSH format
+	privKeyPEM, err := ssh.MarshalPrivateKey(privateKey, comment)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to marshal private key: %w", err)
+	}
+
+	// Encode PEM block to bytes
+	privKeyBytes := pem.EncodeToMemory(privKeyPEM)
+	if privKeyBytes == nil {
+		return "", "", fmt.Errorf("failed to encode private key to PEM")
+	}
+
+	// Write private key with 0600 permissions (required for SSH to accept it)
+	if err := os.WriteFile(privateKeyPath, privKeyBytes, 0600); err != nil {
+		return "", "", fmt.Errorf("failed to write private key: %w", err)
+	}
+
+	return strings.TrimSpace(pubKeyStr), privateKeyPath, nil
 }
 
 // GetSSHPrivateKeyPath returns the path to the SSH private key
@@ -132,17 +196,11 @@ func WriteSSHConfig(configContent string) error {
 
 // CreateTempSSHConfig creates a temporary SSH config file for a specific host
 // Returns the path to the temporary config file
-func CreateTempSSHConfig(baseURL, hostname string, port int, jobGroupID string, username string) (string, error) {
+func CreateTempSSHConfig(baseURL, hostname string, port int, jobGroupID string, username string, privateKeyPath string) (string, error) {
 	// Find proxytunnel path
 	proxytunnelPath, err := exec.LookPath("proxytunnel")
 	if err != nil {
 		return "", fmt.Errorf("proxytunnel not found in PATH: %w", err)
-	}
-
-	// Get the private key path to include in the SSH config
-	privateKeyPath, err := GetSSHPrivateKeyPath()
-	if err != nil {
-		return "", fmt.Errorf("failed to find SSH private key: %w", err)
 	}
 
 	// Get proxy configuration based on base URL
@@ -263,20 +321,26 @@ func getNextSandboxNumber() int {
 	return maxNum + 1
 }
 
-// SetupSSHConfig creates a temporary SSH config file and returns the hostname and config path
-// Returns (hostname, configPath, error)
-func SetupSSHConfig(baseURL string, localPort int, jobPublicID string, username string) (string, string, error) {
+// SetupSSHConfig creates a temporary SSH config file and generates a new SSH key pair
+// Returns (hostname, configPath, publicKey, privateKeyPath, error)
+func SetupSSHConfig(baseURL string, localPort int, jobPublicID string, username string) (string, string, string, string, error) {
 	// Get next available sandbox number for a simple hostname
 	sandboxNum := getNextSandboxNumber()
 	sshHost := fmt.Sprintf("sandbox-%d", sandboxNum)
 
-	// Create temporary SSH config file with simple name
-	configPath, err := CreateTempSSHConfig(baseURL, sshHost, localPort, jobPublicID, username)
+	// Generate a new SSH key pair for this VM
+	publicKey, privateKeyPath, err := GenerateSSHKeyPair(sandboxNum)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create temp SSH config: %w", err)
+		return "", "", "", "", fmt.Errorf("failed to generate SSH key pair: %w", err)
 	}
 
-	return sshHost, configPath, nil
+	// Create temporary SSH config file with the new private key
+	configPath, err := CreateTempSSHConfig(baseURL, sshHost, localPort, jobPublicID, username, privateKeyPath)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("failed to create temp SSH config: %w", err)
+	}
+
+	return sshHost, configPath, publicKey, privateKeyPath, nil
 }
 
 // CleanupSSHConfig removes a SSH host entry from config
@@ -292,6 +356,27 @@ func CleanupSSHConfig(hostname string) error {
 
 	updatedConfig := RemoveSSHHostFromConfig(hostname, existingConfig)
 	return WriteSSHConfig(updatedConfig)
+}
+
+// CleanupSSHKeyPair removes the SSH key pair files for a sandbox
+func CleanupSSHKeyPair(privateKeyPath string) error {
+	if privateKeyPath == "" {
+		return nil
+	}
+
+	publicKeyPath := privateKeyPath + ".pub"
+
+	// Remove private key
+	if err := os.Remove(privateKeyPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove private key: %w", err)
+	}
+
+	// Remove public key
+	if err := os.Remove(publicKeyPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove public key: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateSSHConfigPassword updates an existing SSH host entry to enable password authentication

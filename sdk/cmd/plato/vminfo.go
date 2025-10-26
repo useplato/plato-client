@@ -70,6 +70,7 @@ type VMInfoModel struct {
 	sshURL               string
 	sshHost              string
 	sshConfigPath        string
+	sshPrivateKeyPath    string
 	viewport             viewport.Model
 	viewportReady        bool
 	heartbeatStop        chan struct{}
@@ -1391,19 +1392,27 @@ func openProxytunnelWithPort(client *plato.PlatoClient, publicID string, remoteP
 	}
 }
 
-func setupRootPassword(client *plato.PlatoClient, publicID string, sshHost string) tea.Cmd {
+func setupRootPassword(client *plato.PlatoClient, publicID string, privateKeyPath string, sshHost string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
 		utils.LogDebug("Setting up root SSH access for VM: %s", publicID)
 
-		// Read SSH public key
-		sshPublicKey, err := utils.ReadSSHPublicKey()
-		if err != nil {
-			utils.LogDebug("Failed to read SSH public key: %v", err)
-			logErrorToFile("plato_error.log", fmt.Sprintf("Failed to read SSH public key: %v", err))
-			return rootPasswordSetupMsg{err: fmt.Errorf("failed to read SSH public key: %w", err)}
+		// Determine the correct public key path
+		var publicKeyPath string
+		if privateKeyPath != "" && filepath.IsAbs(privateKeyPath) {
+			// Use the provided private key path
+			publicKeyPath = privateKeyPath + ".pub"
 		}
+
+		// Read the generated SSH public key for this VM
+		publicKeyData, err := os.ReadFile(publicKeyPath)
+		if err != nil {
+			utils.LogDebug("Failed to read SSH public key from %s: %v", publicKeyPath, err)
+			logErrorToFile("plato_error.log", fmt.Sprintf("Failed to read SSH public key: %v", err))
+			return rootPasswordSetupMsg{err: fmt.Errorf("failed to read SSH public key from %s: %w", publicKeyPath, err)}
+		}
+		sshPublicKey := strings.TrimSpace(string(publicKeyData))
 
 		// Call the SetupRootPassword API with SSH public key
 		err = client.Sandbox.SetupRootPassword(ctx, publicID, sshPublicKey)
@@ -1529,7 +1538,7 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
 		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, setupRootPassword(m.client, m.sandbox.PublicID, m.sshHost))
+		return m, tea.Batch(m.spinner.Tick, setupRootPassword(m.client, m.sandbox.PublicID, m.sshPrivateKeyPath, m.sshHost))
 	case "Connect to Cursor/VSCode":
 		if m.sshHost == "" {
 			m.statusMessages = append(m.statusMessages, "❌ SSH host not set up yet")
@@ -1640,6 +1649,24 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 				utils.LogDebug("Error cleaning up SSH config: %v", err)
 			} else {
 				utils.LogDebug("Successfully cleaned up SSH config for host: %s", m.sshHost)
+			}
+		}
+
+		// Delete the temporary SSH config file
+		if m.sshConfigPath != "" {
+			if err := os.Remove(m.sshConfigPath); err != nil {
+				utils.LogDebug("Error removing SSH config file %s: %v", m.sshConfigPath, err)
+			} else {
+				utils.LogDebug("Successfully removed SSH config file: %s", m.sshConfigPath)
+			}
+		}
+
+		// Delete the SSH key pair files
+		if m.sshPrivateKeyPath != "" {
+			if err := utils.CleanupSSHKeyPair(m.sshPrivateKeyPath); err != nil {
+				utils.LogDebug("Error cleaning up SSH key pair: %v", err)
+			} else {
+				utils.LogDebug("Successfully cleaned up SSH key pair: %s", m.sshPrivateKeyPath)
 			}
 		}
 		// Call VM cleanup API
