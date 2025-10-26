@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"plato-sdk/cmd/plato/internal/utils"
 	"strings"
 )
 
@@ -81,7 +82,7 @@ func writeSSHConfig(configContent string) error {
 }
 
 // appendSSHHostEntry appends a new SSH host entry to config
-func appendSSHHostEntry(hostname string, port int, jobGroupID string, username string) error {
+func appendSSHHostEntry(baseURL, hostname string, port int, jobGroupID string, username string) error {
 	configContent, err := readSSHConfig()
 	if err != nil {
 		return err
@@ -93,6 +94,16 @@ func appendSSHHostEntry(hostname string, port int, jobGroupID string, username s
 		return fmt.Errorf("proxytunnel not found in PATH: %w", err)
 	}
 
+	// Get proxy configuration based on base URL
+	proxyConfig := utils.GetProxyConfig(baseURL)
+
+	// Build ProxyCommand
+	proxyCmd := proxytunnelPath
+	if proxyConfig.Secure {
+		proxyCmd += " -E"
+	}
+	proxyCmd += fmt.Sprintf(" -p %s -P '%s@22:newpass' -d %%h:%%p --no-check-certificate", proxyConfig.Server, jobGroupID)
+
 	configWithProxy := fmt.Sprintf(`Host %s
     HostName localhost
     Port %d
@@ -100,11 +111,11 @@ func appendSSHHostEntry(hostname string, port int, jobGroupID string, username s
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
     ConnectTimeout 10
-    ProxyCommand %s -E -p proxy.plato.so:9000 -P '%s@22:newpass' -d %%h:%%p --no-check-certificate
+    ProxyCommand %s
     ServerAliveInterval 30
     ServerAliveCountMax 3
     TCPKeepAlive yes
-    `, hostname, port, username, proxytunnelPath, jobGroupID)
+    `, hostname, port, username, proxyCmd)
 
 	if configContent != "" {
 		configContent = strings.TrimRight(configContent, "\n") + "\n\n" + configWithProxy
@@ -116,7 +127,7 @@ func appendSSHHostEntry(hostname string, port int, jobGroupID string, username s
 }
 
 // setupSSHConfig sets up SSH config with available hostname and returns the hostname
-func setupSSHConfig(localPort int, jobPublicID string, username string) (string, error) {
+func setupSSHConfig(baseURL string, localPort int, jobPublicID string, username string) (string, error) {
 	sshConfigDir := filepath.Join(os.Getenv("HOME"), ".ssh")
 	if err := os.MkdirAll(sshConfigDir, 0700); err != nil {
 		return "", err
@@ -131,7 +142,7 @@ func setupSSHConfig(localPort int, jobPublicID string, username string) (string,
 	sshHost := findAvailableHostname("sandbox", existingConfig)
 
 	// Add SSH host entry
-	if err := appendSSHHostEntry(sshHost, localPort, jobPublicID, username); err != nil {
+	if err := appendSSHHostEntry(baseURL, sshHost, localPort, jobPublicID, username); err != nil {
 		return "", fmt.Errorf("failed to append SSH host entry: %w", err)
 	}
 

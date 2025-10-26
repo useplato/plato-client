@@ -1,12 +1,12 @@
 package main
 
 import (
-
-"plato-sdk/cmd/plato/internal/utils"
-"plato-sdk/cmd/plato/internal/ui/components"
 	"fmt"
+	"plato-sdk/cmd/plato/internal/ui/components"
+	"plato-sdk/cmd/plato/internal/utils"
 	"strconv"
 	"strings"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -23,7 +23,7 @@ type DBEntryModel struct {
 
 type dbConfigEnteredMsg struct {
 	service string
-	config  DBConfig
+	config  utils.DBConfig
 }
 
 func NewDBEntryModel(service string) DBEntryModel {
@@ -137,7 +137,7 @@ func (m DBEntryModel) Update(msg tea.Msg) (DBEntryModel, tea.Cmd) {
 				}
 
 				// Create config
-				config := DBConfig{
+				config := utils.DBConfig{
 					DBType:    dbType,
 					User:      user,
 					Password:  password,
@@ -146,15 +146,7 @@ func (m DBEntryModel) Update(msg tea.Msg) (DBEntryModel, tea.Cmd) {
 				}
 
 				// Save and return
-				// Convert local DBConfig to utils.DBConfig
-			utilsConfig := utils.DBConfig{
-				DBType:    config.DBType,
-				User:      config.User,
-				Password:  config.Password,
-				DestPort:  config.DestPort,
-				Databases: config.Databases,
-			}
-			if err := utils.SaveCustomDBConfig(m.service, utilsConfig); err != nil {
+				if err := utils.SaveCustomDBConfig(m.service, config); err != nil {
 					m.err = fmt.Sprintf("Failed to save config: %v", err)
 					return m, nil
 				}

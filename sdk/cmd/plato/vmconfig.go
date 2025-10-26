@@ -7,18 +7,18 @@
 package main
 
 import (
-
-"plato-sdk/cmd/plato/internal/utils"
-"plato-sdk/cmd/plato/internal/ui/components"
 	"context"
 	"fmt"
 	"math/rand"
 	"os"
+	plato "plato-sdk"
+	"plato-sdk/cmd/plato/internal/ui/components"
+	"plato-sdk/cmd/plato/internal/utils"
+	"plato-sdk/models"
 	"strconv"
 	"strings"
 	"time"
-	plato "plato-sdk"
-	"plato-sdk/models"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
@@ -105,17 +105,15 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 	}
 }
 
-func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, statusChan chan<- string) tea.Cmd {
+func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, statusChan chan<- string) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
-
 		statusChan <- "Configuring SSH access..."
 
 		// Choose a random port between 2200 and 2299
 		localPort := rand.Intn(100) + 2200
 
-		// Setup SSH config using PublicID
-		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "root")
+		// Setup SSH config using PublicID with 'plato' user (not root)
+		sshHost, configPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -128,34 +126,8 @@ func setupSSHAndRootPasswordForArtifact(client *plato.PlatoClient, sandbox *mode
 
 		statusChan <- fmt.Sprintf("SSH configured: ssh -F %s %s", configPath, sshHost)
 
-		// Setup root SSH access with public key
-		statusChan <- "Setting up root SSH access..."
-		sshPublicKey, err := utils.ReadSSHPublicKey()
-		if err != nil {
-			close(statusChan)
-			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("failed to read SSH public key: %w", err),
-			}
-		}
-
-		err = client.Sandbox.SetupRootPassword(ctx, sandbox.PublicID, sshPublicKey)
-		if err != nil {
-			close(statusChan)
-			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("root SSH setup failed: %w", err),
-			}
-		}
-
-		statusChan <- "Root SSH access configured"
-
 		// Generate SSH connection info
-		sshURL := fmt.Sprintf("root@%s", sandbox.PublicID)
+		sshURL := fmt.Sprintf("plato@%s", sandbox.PublicID)
 
 		statusChan <- "✓ VM ready!"
 		close(statusChan)
@@ -223,7 +195,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and get the hostname (use 'plato' user for blank VMs)
-		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicID, "plato")
+		sshHost, configPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -523,12 +495,12 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		// Don't add another success message - SSE events already showed completion
 		m.sandbox = msg.sandbox
 
-		// If artifact ID is present, skip sandbox setup and just configure SSH + root password
+		// If artifact ID is present, skip sandbox setup and just configure SSH (without root password)
 		if m.artifactID != nil {
 			m.settingUp = true
 			m.statusChan = make(chan string, 10)
 			return m, tea.Batch(
-				setupSSHAndRootPasswordForArtifact(m.client, msg.sandbox, m.statusChan),
+				setupSSHForArtifact(m.client, msg.sandbox, m.statusChan),
 				waitForStatusUpdates(m.statusChan),
 			)
 		}

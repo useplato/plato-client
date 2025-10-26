@@ -179,7 +179,7 @@ func GetDBConfigForDataset(service string, dataset string) (DBConfig, bool) {
 }
 
 // OpenTemporaryProxytunnel opens a proxytunnel for the duration of a cleanup operation
-func OpenTemporaryProxytunnel(publicID string, remotePort int) (*exec.Cmd, int, error) {
+func OpenTemporaryProxytunnel(baseURL, publicID string, remotePort int) (*exec.Cmd, int, error) {
 	LogDebug("Opening temporary proxytunnel for port %d", remotePort)
 
 	localPort, err := FindFreePortPreferred(remotePort)
@@ -192,16 +192,25 @@ func OpenTemporaryProxytunnel(publicID string, remotePort int) (*exec.Cmd, int, 
 		return nil, 0, fmt.Errorf("proxytunnel not found in PATH: %w", err)
 	}
 
-	cmd := exec.Command(
-		proxytunnelPath,
-		"-E",
-		"-p", "proxy.plato.so:9000",
+	// Get proxy configuration based on base URL
+	proxyConfig := GetProxyConfig(baseURL)
+	LogDebug("Using proxy server: %s (secure: %v)", proxyConfig.Server, proxyConfig.Secure)
+
+	// Build proxytunnel command arguments
+	args := []string{}
+	if proxyConfig.Secure {
+		args = append(args, "-E")
+	}
+	args = append(args,
+		"-p", proxyConfig.Server,
 		"-P", fmt.Sprintf("%s@%d:newpass", publicID, remotePort),
 		"-d", fmt.Sprintf("127.0.0.1:%d", remotePort),
 		"-a", fmt.Sprintf("%d", localPort),
 		"-v",
 		"--no-check-certificate",
 	)
+
+	cmd := exec.Command(proxytunnelPath, args...)
 
 	if err := cmd.Start(); err != nil {
 		return nil, 0, fmt.Errorf("failed to start proxytunnel: %w", err)
@@ -355,7 +364,7 @@ func PreSnapshotCleanup(client *plato.PlatoClient, publicID, jobGroupID, service
 		return true, nil
 	}
 
-	tunnelCmd, localPort, err := OpenTemporaryProxytunnel(publicID, dbConfig.DestPort)
+	tunnelCmd, localPort, err := OpenTemporaryProxytunnel(client.GetBaseURL(), publicID, dbConfig.DestPort)
 	if err != nil {
 		return false, fmt.Errorf("failed to open proxytunnel: %w", err)
 	}
@@ -377,7 +386,7 @@ func PreSnapshotCleanup(client *plato.PlatoClient, publicID, jobGroupID, service
 func PreSnapshotCleanupWithConfig(client *plato.PlatoClient, publicID, jobGroupID string, dbConfig DBConfig) error {
 	LogDebug("Starting pre-snapshot cleanup with provided config")
 
-	tunnelCmd, localPort, err := OpenTemporaryProxytunnel(publicID, dbConfig.DestPort)
+	tunnelCmd, localPort, err := OpenTemporaryProxytunnel(client.GetBaseURL(), publicID, dbConfig.DestPort)
 	if err != nil {
 		return fmt.Errorf("failed to open proxytunnel: %w", err)
 	}

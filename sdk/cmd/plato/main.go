@@ -138,7 +138,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Open the tunnel and go back to VM info
 		m.currentView = ViewVMInfo
 		logDebug("Switched to ViewVMInfo and calling openProxytunnelWithPort")
-		return m, openProxytunnelWithPort(openMsg.publicID, openMsg.remotePort)
+		return m, openProxytunnelWithPort(m.vmInfo.client, openMsg.publicID, openMsg.remotePort)
 	}
 
 	// Handle navigation to sim launch options with simulator data
@@ -252,7 +252,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentView = ViewVMInfo
 
 		// Check if DB config exists for this service
-		_, hasConfig := getDBConfig(datasetMsg.params.service)
+		_, hasConfig := utils.GetDBConfig(datasetMsg.params.service)
 		if !hasConfig {
 			// Navigate to DB entry view
 			logDebug("No DB config for service %s, navigating to DB entry", datasetMsg.params.service)
