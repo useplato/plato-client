@@ -22,7 +22,7 @@ fi
 BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 
 # Build ldflags
-LDFLAGS="-X 'plato-sdk/cmd/plato/internal/ui/components.Version=${VERSION}' -X 'plato-sdk/cmd/plato/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-sdk/cmd/plato/internal/ui/components.BuildTime=${BUILD_TIME}'"
+LDFLAGS="-X 'plato-cli/internal/ui/components.Version=${VERSION}' -X 'plato-cli/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-cli/internal/ui/components.BuildTime=${BUILD_TIME}'"
 
 echo "🔨 Building Plato CLI..."
 echo "   Version:    ${VERSION}"

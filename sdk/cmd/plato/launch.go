@@ -7,7 +7,7 @@ package main
 
 import (
 
-"plato-sdk/cmd/plato/internal/ui/components"
+"plato-cli/internal/ui/components"
 	plato "plato-sdk"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

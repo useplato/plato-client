@@ -7,7 +7,7 @@ package main
 
 import (
 
-"plato-sdk/cmd/plato/internal/ui/components"
+"plato-cli/internal/ui/components"
 	"os"
 	"strings"
 	plato "plato-sdk"

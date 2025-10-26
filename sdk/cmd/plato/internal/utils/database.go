@@ -15,7 +15,7 @@ import (
 	"time"
 
 	plato "plato-sdk"
-	"plato-sdk/cmd/plato/internal/config"
+	"plato-cli/internal/config"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"

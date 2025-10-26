@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"os"
 
-	"plato-sdk/cmd/plato/internal/ui/components"
-	"plato-sdk/cmd/plato/internal/utils"
+	"plato-cli/internal/ui/components"
+	"plato-cli/internal/utils"
 	"plato-sdk/models"
 
 	tea "github.com/charmbracelet/bubbletea"

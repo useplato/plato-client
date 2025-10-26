@@ -2,7 +2,7 @@ package main
 
 import (
 
-"plato-sdk/cmd/plato/internal/ui/components"
+"plato-cli/internal/ui/components"
 	"fmt"
 	"strings"
 	"plato-sdk/models"

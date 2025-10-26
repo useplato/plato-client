@@ -2,7 +2,7 @@ package main
 
 import (
 
-"plato-sdk/cmd/plato/internal/ui/components"
+"plato-cli/internal/ui/components"
 	plato "plato-sdk"
 	"plato-sdk/models"
 	"github.com/charmbracelet/bubbles/list"

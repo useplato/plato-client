@@ -7,6 +7,9 @@
 package main
 
 import (
+
+"plato-cli/internal/utils"
+"plato-cli/internal/ui/components"
 	"context"
 	"fmt"
 	"math/rand"
