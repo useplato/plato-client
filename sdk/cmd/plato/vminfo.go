@@ -468,9 +468,9 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 
 	case triggerECRAuthMsg:
 		// Trigger ECR authentication
-		m.statusMessages = append(m.statusMessages, "🔐 Authenticating Docker with AWS ECR...")
-		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
+		// m.statusMessages = append(m.statusMessages, "🔐 Authenticating Docker with AWS ECR...")
+		// m.runningCommand = true
+		// return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
 
 	case ecrAuthenticatedMsg:
 		m.runningCommand = false
@@ -605,7 +605,7 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	if m.version != nil {
 		output.WriteString(fmt.Sprintf("Version:  %s\n", *m.version))
 	}
-	output.WriteString(fmt.Sprintf("URL:      %s\n", m.sandbox.URL))
+	output.WriteString(fmt.Sprintf("URL:      %s\n", getSandboxPublicURL(m.client, m.sandbox)))
 
 	// Show hub.plato.so repository link if we have it cached
 	if m.hubRepoURL != "" {
@@ -741,19 +741,11 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 	}
 }
 
-func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string, dbConfig DBConfig) tea.Cmd {
+func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, service string, dataset *string, dbConfig utils.DBConfig) tea.Cmd {
 	return func() tea.Msg {
 		// Step 1: Perform pre-snapshot cleanup with provided config
 		utils.LogDebug("Starting pre-snapshot cleanup with provided DB config for service: %s", service)
-		// Convert local DBConfig to utils.DBConfig
-		utilsConfig := utils.DBConfig{
-			DBType:    dbConfig.DBType,
-			User:      dbConfig.User,
-			Password:  dbConfig.Password,
-			DestPort:  dbConfig.DestPort,
-			Databases: dbConfig.Databases,
-		}
-		if err := utils.PreSnapshotCleanupWithConfig(client, publicID, jobGroupID, utilsConfig); err != nil {
+		if err := utils.PreSnapshotCleanupWithConfig(client, publicID, jobGroupID, dbConfig); err != nil {
 			utils.LogDebug("Pre-snapshot cleanup failed: %v", err)
 			// Don't fail the snapshot if cleanup fails, just log it
 		}
@@ -1342,7 +1334,7 @@ func copyFilesRespectingGitignore(src, dst string) error {
 // Keeping empty stubs here for reference, but they should be removed
 // and all calls should use utils.FindFreePort() and utils.FindFreePortPreferred()
 
-func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
+func openProxytunnelWithPort(client *plato.PlatoClient, publicID string, remotePort int) tea.Cmd {
 	return func() tea.Msg {
 		utils.LogDebug("openProxytunnelWithPort called, publicID=%s, remotePort=%d", publicID, remotePort)
 
@@ -1362,18 +1354,25 @@ func openProxytunnelWithPort(publicID string, remotePort int) tea.Cmd {
 		}
 		utils.LogDebug("Found proxytunnel at: %s", proxytunnelPath)
 
-		// Build proxytunnel command
-		// proxytunnel -E -p proxy.plato.so:9000 -P '{publicID}@{remotePort}:newpass' -d 127.0.0.1:{remotePort} -a {localPort} -v --no-check-certificate
-		cmd := exec.Command(
-			proxytunnelPath,
-			"-E",
-			"-p", "proxy.plato.so:9000",
+		// Get proxy configuration based on base URL
+		proxyConfig := utils.GetProxyConfig(client.GetBaseURL())
+		utils.LogDebug("Using proxy server: %s (secure: %v)", proxyConfig.Server, proxyConfig.Secure)
+
+		// Build proxytunnel command arguments
+		args := []string{}
+		if proxyConfig.Secure {
+			args = append(args, "-E")
+		}
+		args = append(args,
+			"-p", proxyConfig.Server,
 			"-P", fmt.Sprintf("%s@%d:newpass", publicID, remotePort),
 			"-d", fmt.Sprintf("127.0.0.1:%d", remotePort),
 			"-a", fmt.Sprintf("%d", localPort),
 			"-v",
 			"--no-check-certificate",
 		)
+
+		cmd := exec.Command(proxytunnelPath, args...)
 		utils.LogDebug("Starting proxytunnel command: %v", cmd.Args)
 
 		// Start the process
@@ -1792,4 +1791,32 @@ func fetchHubRepoURL(client *plato.PlatoClient, serviceName string) tea.Cmd {
 
 		return hubRepoURLMsg{url: ""}
 	}
+}
+
+// getSandboxPublicURL computes the public URL for a sandbox based on the base URL
+func getSandboxPublicURL(client *plato.PlatoClient, sandbox *models.Sandbox) string {
+	baseURL := client.GetBaseURL()
+	identifier := sandbox.JobGroupID
+	if identifier == "" {
+		identifier = sandbox.PublicID
+	}
+
+	// Determine environment based on base_url
+	if strings.Contains(baseURL, "localhost:8080") {
+		return fmt.Sprintf("http://%s.sims.localhost:8080", identifier)
+	} else if strings.Contains(baseURL, "plato.so") {
+		// Parse subdomain from base URL
+		parts := strings.Split(baseURL, ".")
+		if len(parts) >= 3 {
+			// Extract subdomain (e.g., "dev", "staging")
+			subdomain := strings.TrimPrefix(parts[0], "https://")
+			subdomain = strings.TrimPrefix(subdomain, "http://")
+			if subdomain != "plato" {
+				return fmt.Sprintf("https://%s.%s.sims.plato.so", identifier, subdomain)
+			}
+		}
+		return fmt.Sprintf("https://%s.sims.plato.so", identifier)
+	}
+
+	return ""
 }
