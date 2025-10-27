@@ -259,7 +259,7 @@ func logAPICall(method, path string, statusCode int, err error) {
 	} else {
 		logMsg = fmt.Sprintf("[%s] API: %s %s - STATUS: %d\n", timestamp, method, path, statusCode)
 	}
-	f.WriteString(logMsg)
+	_, _ = f.WriteString(logMsg) // Ignore write errors for logging
 }
 
 func (c *PlatoClient) Do(req *http.Request) (*http.Response, error) {
