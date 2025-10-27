@@ -188,6 +188,24 @@ func plato_get_simulator_versions(clientID *C.char, simulatorName *C.char) *C.ch
 	return C.CString(string(result))
 }
 
+//export plato_monitor_operation
+func plato_monitor_operation(clientID *C.char, correlationID *C.char, timeoutSeconds C.int) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	ctx := context.Background()
+	timeout := time.Duration(timeoutSeconds) * time.Second
+
+	err := client.Sandbox.MonitorOperation(ctx, C.GoString(correlationID), timeout)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	return C.CString(`{"success": true, "status": "completed"}`)
+}
+
 //export plato_free_string
 func plato_free_string(s *C.char) {
 	C.free(unsafe.Pointer(s))

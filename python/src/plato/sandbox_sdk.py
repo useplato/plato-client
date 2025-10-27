@@ -91,6 +91,9 @@ def _get_lib():
         _lib.plato_get_simulator_versions.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_get_simulator_versions.restype = ctypes.c_void_p
 
+        _lib.plato_monitor_operation.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+        _lib.plato_monitor_operation.restype = ctypes.c_void_p
+
         _lib.plato_free_string.argtypes = [ctypes.c_void_p]
         _lib.plato_free_string.restype = None
 
@@ -163,7 +166,9 @@ class PlatoSandboxClient:
         dataset: str = "base",
         alias: str = "sandbox",
         artifact_id: Optional[str] = None,
-        service: str = ""
+        service: str = "",
+        wait: bool = False,
+        timeout: int = 600
     ) -> Sandbox:
         """
         Create a new VM sandbox
@@ -179,13 +184,15 @@ class PlatoSandboxClient:
             alias: Human-readable alias (default: 'sandbox')
             artifact_id: Optional artifact ID to launch from snapshot
             service: Service name
+            wait: If True, blocks until sandbox is ready (default: False)
+            timeout: Timeout in seconds when wait=True (default: 600)
 
         Returns:
             Sandbox object with public_id, url, status, etc.
 
         Raises:
             ValueError: If neither config nor artifact_id is provided
-            RuntimeError: If sandbox creation fails
+            RuntimeError: If sandbox creation fails or times out
 
         Examples:
             # Create from configuration
@@ -196,8 +203,9 @@ class PlatoSandboxClient:
             ... )
             >>> sandbox = client.create_sandbox(config=config)
 
-            # Create from artifact ID (uses default config)
-            >>> sandbox = client.create_sandbox(artifact_id="art_123456")
+            # Create from artifact ID and wait until ready
+            >>> sandbox = client.create_sandbox(artifact_id="art_123456", wait=True)
+            >>> print(f"Sandbox ready at {sandbox.url}")
         """
         # Validation: Must provide either config or artifact_id
         if config is None and artifact_id is None:
@@ -251,7 +259,13 @@ class PlatoSandboxClient:
         if 'error' in response:
             raise RuntimeError(f"Failed to create sandbox: {response['error']}")
 
-        return Sandbox(**response)
+        sandbox = Sandbox(**response)
+
+        # Wait for sandbox to be ready if requested
+        if wait and sandbox.correlation_id:
+            self.wait_until_ready(sandbox.correlation_id, timeout=timeout)
+
+        return sandbox
 
     def delete_sandbox(self, public_id: str) -> None:
         """
@@ -442,3 +456,39 @@ class PlatoSandboxClient:
             raise RuntimeError(f"Failed to get versions: {response['error']}")
 
         return response
+
+    def wait_until_ready(
+        self,
+        correlation_id: str,
+        timeout: int = 600
+    ) -> None:
+        """
+        Wait until an operation completes by monitoring SSE events
+
+        This function blocks until the operation completes or times out.
+        Used after creating a sandbox to wait for it to be ready.
+
+        Args:
+            correlation_id: Correlation ID from the sandbox creation response
+            timeout: Timeout in seconds (default: 600 = 10 minutes)
+
+        Raises:
+            RuntimeError: If operation fails or times out
+
+        Example:
+            >>> sandbox = client.create_sandbox(artifact_id="art_123")
+            >>> client.wait_until_ready(sandbox.correlation_id)
+            >>> print(f"Sandbox ready at {sandbox.url}")
+        """
+        lib = _get_lib()
+        result_ptr = lib.plato_monitor_operation(
+            self._client_id.encode('utf-8'),
+            correlation_id.encode('utf-8'),
+            ctypes.c_int(timeout)
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            raise RuntimeError(f"Operation failed: {response['error']}")
