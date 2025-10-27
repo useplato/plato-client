@@ -27,7 +27,6 @@ typedef struct {
 import "C"
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"runtime"
 	"sync"
@@ -36,6 +35,7 @@ import (
 
 	plato "plato-sdk"
 	"plato-sdk/models"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 
@@ -132,12 +132,12 @@ func freeCSandbox(cs *C.CSandbox) {
 
 func sandboxToC(s *models.Sandbox) *C.CSandbox {
 	cs := (*C.CSandbox)(C.malloc(C.size_t(unsafe.Sizeof(C.CSandbox{}))))
-	cs.job_id = cString(s.JobID)
-	cs.public_id = cString(s.PublicID)
-	cs.job_group_id = cString(s.JobGroupID)
-	cs.url = cString(s.URL)
+	cs.job_id = cString(s.JobId)
+	cs.public_id = cString(s.PublicId)
+	cs.job_group_id = cString(s.JobGroupId)
+	cs.url = cString(s.Url)
 	cs.status = cString(s.Status)
-	cs.correlation_id = cString(s.CorrelationID)
+	cs.correlation_id = cString(s.CorrelationId)
 	return cs
 }
 
@@ -183,9 +183,9 @@ func PlatoSandboxCreate(clientHandle C.int64_t, configJSON *C.char, dataset *C.c
 		return nil
 	}
 
-	// Parse config JSON
-	var config models.SimConfigDataset
-	if err := json.Unmarshal([]byte(goString(configJSON)), &config); err != nil {
+	// Parse config JSON using protojson
+	config := &models.SimConfigDataset{}
+	if err := protojson.Unmarshal([]byte(goString(configJSON)), config); err != nil {
 		*errOut = makeError(fmt.Sprintf("failed to parse config: %v", err), 2)
 		return nil
 	}
@@ -228,8 +228,8 @@ func PlatoSandboxSetup(clientHandle C.int64_t, jobID *C.char, configJSON *C.char
 		return nil
 	}
 
-	var config models.SimConfigDataset
-	if err := json.Unmarshal([]byte(goString(configJSON)), &config); err != nil {
+	config := &models.SimConfigDataset{}
+	if err := protojson.Unmarshal([]byte(goString(configJSON)), config); err != nil {
 		*errOut = makeError(fmt.Sprintf("failed to parse config: %v", err), 2)
 		return nil
 	}
