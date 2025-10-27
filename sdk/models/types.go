@@ -127,4 +127,5 @@ type SSHInfo struct {
 	PublicID       string `json:"public_id"`
 	PublicKey      string `json:"public_key"`
 	PrivateKeyPath string `json:"private_key_path"`
+	CorrelationID  string `json:"correlation_id"`
 }

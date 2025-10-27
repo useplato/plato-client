@@ -132,7 +132,7 @@ def _get_lib():
         _lib.plato_gitea_merge_to_main.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_gitea_merge_to_main.restype = ctypes.c_void_p
 
-        _lib.plato_setup_ssh.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p]
+        _lib.plato_setup_ssh.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_setup_ssh.restype = ctypes.c_void_p
 
         _lib.plato_free_string.argtypes = [ctypes.c_void_p]
@@ -805,6 +805,8 @@ class PlatoSandboxClient:
     def setup_ssh(
         self,
         sandbox: Sandbox,
+        config: SimConfigDataset,
+        dataset: str = "base",
         local_port: int = 2200,
         username: str = "plato"
     ) -> Dict[str, str]:
@@ -814,10 +816,13 @@ class PlatoSandboxClient:
         This method:
         1. Generates a new ED25519 SSH key pair
         2. Creates SSH config file with ProxyCommand for tunnel connection
-        3. Returns SSH connection details
+        3. Uploads the public key to the sandbox
+        4. Returns SSH connection details
 
         Args:
             sandbox: Sandbox object with public_id and job_group_id
+            config: Sandbox configuration (same as used in create_sandbox)
+            dataset: Dataset name (default: "base")
             local_port: Local port for SSH connection (default: 2200)
             username: SSH username (default: "plato")
 
@@ -829,24 +834,32 @@ class PlatoSandboxClient:
                 - 'public_key': Generated SSH public key
                 - 'private_key_path': Path to private key file
                 - 'public_id': Sandbox public ID
+                - 'correlation_id': Correlation ID for monitoring setup
 
         Raises:
             RuntimeError: If SSH setup fails
 
         Example:
             >>> sandbox = client.create_sandbox(config=config, wait=False)
-            >>> ssh_info = client.setup_ssh(sandbox)
+            >>> ssh_info = client.setup_ssh(sandbox, config, dataset="base")
             >>> print(f"Connect with: {ssh_info['ssh_command']}")
             >>> # Or directly: ssh -F {ssh_info['ssh_config_path']} {ssh_info['ssh_host']}
         """
         logger.info(f"Setting up SSH for sandbox {sandbox.public_id}")
+
+        # Convert config to JSON
+        config_dict = config.model_dump(mode='json', exclude_none=True)
+        config_json = json.dumps(config_dict)
+
         lib = _get_lib()
         result_ptr = lib.plato_setup_ssh(
             self._client_id.encode('utf-8'),
             self._base_url.encode('utf-8'),
             ctypes.c_int(local_port),
             sandbox.public_id.encode('utf-8'),
-            username.encode('utf-8')
+            username.encode('utf-8'),
+            config_json.encode('utf-8'),
+            dataset.encode('utf-8')
         )
 
         result_str = _call_and_free(lib, result_ptr)

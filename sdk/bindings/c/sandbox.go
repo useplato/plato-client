@@ -511,7 +511,7 @@ func plato_gitea_merge_to_main(clientID *C.char, serviceName *C.char, branchName
 }
 
 //export plato_setup_ssh
-func plato_setup_ssh(clientID *C.char, baseURL *C.char, localPort C.int, jobPublicID *C.char, username *C.char) *C.char {
+func plato_setup_ssh(clientID *C.char, baseURL *C.char, localPort C.int, jobPublicID *C.char, username *C.char, configJSON *C.char, dataset *C.char) *C.char {
 	client, ok := clients[C.GoString(clientID)]
 	if !ok {
 		return C.CString(`{"error": "invalid client ID"}`)
@@ -520,11 +520,19 @@ func plato_setup_ssh(clientID *C.char, baseURL *C.char, localPort C.int, jobPubl
 	baseURLStr := C.GoString(baseURL)
 	publicIDStr := C.GoString(jobPublicID)
 	usernameStr := C.GoString(username)
+	datasetStr := C.GoString(dataset)
 	port := int(localPort)
+
+	// Parse config JSON
+	var config models.SimConfigDataset
+	if err := json.Unmarshal([]byte(C.GoString(configJSON)), &config); err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to parse config: %v"}`, err))
+	}
 
 	logDebug("Setting up SSH for sandbox: publicID=%s, username=%s, port=%d", publicIDStr, usernameStr, port)
 
-	sshInfo, err := client.Sandbox.SetupSSHAndGetInfo(baseURLStr, port, publicIDStr, usernameStr)
+	ctx := context.Background()
+	sshInfo, err := client.Sandbox.SetupSSHAndGetInfo(ctx, baseURLStr, port, publicIDStr, usernameStr, &config, datasetStr)
 	if err != nil {
 		logDebug("Failed to setup SSH: %v", err)
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))

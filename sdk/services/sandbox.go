@@ -631,12 +631,18 @@ func (s *SandboxService) CreateSnapshotWithGit(ctx context.Context, publicID str
 }
 
 // SetupSSHAndGetInfo sets up SSH configuration for a sandbox and returns connection information
-// This generates SSH keys, creates config file with proxy tunnel, and returns connection details
-func (s *SandboxService) SetupSSHAndGetInfo(baseURL string, localPort int, jobPublicID string, username string) (*models.SSHInfo, error) {
-	// Use the utils.SetupSSHConfig function to do the heavy lifting
+// This generates SSH keys, creates config file with proxy tunnel, uploads the public key, and returns connection details
+func (s *SandboxService) SetupSSHAndGetInfo(ctx context.Context, baseURL string, localPort int, jobPublicID string, username string, config *models.SimConfigDataset, dataset string) (*models.SSHInfo, error) {
+	// Use the utils.SetupSSHConfig function to generate keys and config
 	sshHost, configPath, publicKey, privateKeyPath, err := utils.SetupSSHConfig(baseURL, localPort, jobPublicID, username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup SSH: %w", err)
+	}
+
+	// Upload the public key to the sandbox via SetupSandbox API
+	correlationID, err := s.SetupSandbox(ctx, jobPublicID, config, dataset, publicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload SSH key to sandbox: %w", err)
 	}
 
 	// Build SSH command
@@ -649,5 +655,6 @@ func (s *SandboxService) SetupSSHAndGetInfo(baseURL string, localPort int, jobPu
 		PublicID:       jobPublicID,
 		PublicKey:      publicKey,
 		PrivateKeyPath: privateKeyPath,
+		CorrelationID:  correlationID,
 	}, nil
 }
