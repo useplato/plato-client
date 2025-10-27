@@ -44,7 +44,7 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Build Python SDK with C bindings
+      - name: Build Python SDK with C bindings and CLI
         run: ./scripts/build-python.sh
 
       - name: Test Python SDK imports and library loading

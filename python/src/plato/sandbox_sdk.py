@@ -274,15 +274,15 @@ class PlatoSandboxClient:
 
         return sandbox
 
-    def delete_sandbox(self, public_id: str) -> None:
+    def close_sandbox(self, public_id: str) -> None:
         """
-        Delete a VM sandbox
+        Close a VM sandbox
 
         Args:
-            public_id: Public ID of the sandbox to delete
+            public_id: Public ID of the sandbox to close
 
         Raises:
-            RuntimeError: If deletion fails
+            RuntimeError: If closing fails
         """
         lib = _get_lib()
         result_ptr = lib.plato_delete_sandbox(
@@ -294,19 +294,7 @@ class PlatoSandboxClient:
         response = json.loads(result_str)
 
         if 'error' in response:
-            raise RuntimeError(f"Failed to delete sandbox: {response['error']}")
-
-    def close_sandbox(self, public_id: str) -> None:
-        """
-        Close a VM sandbox (alias for delete_sandbox)
-
-        Args:
-            public_id: Public ID of the sandbox to close
-
-        Raises:
-            RuntimeError: If closing fails
-        """
-        self.delete_sandbox(public_id)
+            raise RuntimeError(f"Failed to close sandbox: {response['error']}")
 
     def create_snapshot(
         self,

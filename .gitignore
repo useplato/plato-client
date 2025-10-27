@@ -83,3 +83,4 @@ sdk/bindings/c/*.h
 # Logs
 *.log
 cli/bin/plato
+python/src/plato/bin

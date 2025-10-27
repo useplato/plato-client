@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Build Plato Python SDK with C bindings
+# Build Plato Python SDK with C bindings and CLI
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BINDINGS_DIR="$PROJECT_ROOT/sdk/bindings/c"
+CLI_DIR="$PROJECT_ROOT/cli"
 PYTHON_DIR="$PROJECT_ROOT/python"
 
 echo "🔨 Building Plato Python SDK"
@@ -12,7 +13,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Step 1: Build C shared library
-echo "Step 1/3: Building C shared library"
+echo "Step 1/4: Building C shared library"
 echo "────────────────────────────────────────"
 cd "$BINDINGS_DIR"
 
@@ -45,15 +46,50 @@ fi
 echo ""
 
 # Step 2: Copy library to Python package
-echo "Step 2/3: Copying library to Python package"
+echo "Step 2/4: Copying library to Python package"
 echo "────────────────────────────────────────"
 PYTHON_PKG_DIR="$PYTHON_DIR/src/plato"
 cp "$LIB_NAME" "$PYTHON_PKG_DIR/"
 echo "✅ Copied to $PYTHON_PKG_DIR/$LIB_NAME"
 echo ""
 
-# Step 3: Build Python package
-echo "Step 3/3: Building Python package"
+# Step 3: Build CLI binary
+echo "Step 3/4: Building CLI binary"
+echo "────────────────────────────────────────"
+cd "$CLI_DIR"
+
+# Initialize/update Go module if needed
+if [ ! -f "go.mod" ]; then
+    echo "📦 Initializing Go module..."
+    go mod tidy
+fi
+
+# Use a consistent binary name for the bundled CLI
+BINARY_NAME="plato-cli"
+
+# Add .exe extension for Windows
+if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    BINARY_NAME="plato-cli.exe"
+fi
+
+echo "📦 Building CLI binary: $BINARY_NAME..."
+if go build -o "$BINARY_NAME" .; then
+    CLI_SIZE=$(du -h "$BINARY_NAME" | cut -f1)
+    echo "✅ Built $BINARY_NAME ($CLI_SIZE)"
+
+    # Copy to Python package
+    mkdir -p "$PYTHON_PKG_DIR/bin"
+    cp "$BINARY_NAME" "$PYTHON_PKG_DIR/bin/"
+    chmod +x "$PYTHON_PKG_DIR/bin/$BINARY_NAME"
+    echo "✅ Copied to $PYTHON_PKG_DIR/bin/$BINARY_NAME"
+else
+    echo "❌ CLI build failed"
+    exit 1
+fi
+echo ""
+
+# Step 4: Build Python package
+echo "Step 4/4: Building Python package"
 echo "────────────────────────────────────────"
 cd "$PYTHON_DIR"
 
@@ -84,7 +120,8 @@ echo "✨ Python SDK ready!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "C Library: $BINDINGS_DIR/$LIB_NAME"
-echo "Python Package: $PYTHON_PKG_DIR/$LIB_NAME"
+echo "CLI Binary: $PYTHON_PKG_DIR/bin/$BINARY_NAME"
+echo "Python Package: $PYTHON_PKG_DIR/"
 echo "Distribution: $PYTHON_DIR/dist/"
 echo ""
 echo "To install locally:"

@@ -1,3 +1,4 @@
 global-include *.so
 global-include *.dylib
 global-include *.dll
+recursive-include src/plato/bin *
