@@ -47,7 +47,7 @@ except Exception as e:
 print()
 print("4. Testing client initialization...")
 try:
-    client = PlatoSandboxClient('https://plato.so/api', 'test-key')
+    client = PlatoSandboxClient('test-key')
     print(f"   ✅ Client created: {client._client_id}")
 except Exception as e:
     print(f"   ❌ Client creation failed: {e}")
