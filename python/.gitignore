@@ -8,3 +8,8 @@ wheels/
 
 # venv
 .venv
+
+# C shared libraries (built by build script)
+src/plato/*.so
+src/plato/*.dylib
+src/plato/*.dll
