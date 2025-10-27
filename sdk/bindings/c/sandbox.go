@@ -187,30 +187,6 @@ func plato_create_snapshot(clientID *C.char, publicID *C.char, requestJSON *C.ch
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// If service is provided and git_hash is empty, automatically push and merge
-	if req.Service != "" && req.GitHash == "" {
-		logDebug("Auto git push enabled for service: %s", req.Service)
-
-		// Push to hub
-		pushResult, err := client.Gitea.PushToHub(ctx, req.Service, "")
-		if err != nil {
-			logDebug("Auto git push failed: %v", err)
-			// Continue without git hash if push fails
-		} else {
-			logDebug("Auto pushed to branch: %s", pushResult.BranchName)
-
-			// Merge to main
-			gitHash, err := client.Gitea.MergeToMain(ctx, req.Service, pushResult.BranchName)
-			if err != nil {
-				logDebug("Auto merge to main failed: %v", err)
-				// Continue without git hash if merge fails
-			} else {
-				logDebug("Auto merged to main, git_hash: %s", gitHash)
-				req.GitHash = gitHash
-			}
-		}
-	}
-
 	resp, err := client.Sandbox.CreateSnapshot(ctx, C.GoString(publicID), &req)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
