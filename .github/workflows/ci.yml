@@ -105,6 +105,10 @@ jobs:
     name: Build Python SDK
     runs-on: ubuntu-latest
 
+    env:
+      TWINE_USERNAME: __token__
+      TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -186,10 +190,10 @@ jobs:
             f.write(f"- **Bumped Version:** `{bumped_version}` (patch + 1)\n")
             f.write(f"- **Dev Version:** `{dev_version}`\n")
             f.write(f"- **Timestamp:** {now}\n")
-            f.write(f"- **Repository:** TestPyPI\n")
+            f.write(f"- **Repository:** PyPI\n")
             f.write(f"\n### Install Command\n")
             f.write(f"```bash\n")
-            f.write(f"pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ plato-sdk=={dev_version}\n")
+            f.write(f"pip install plato-sdk=={dev_version}\n")
             f.write(f"```\n")
 
       - name: Install build tooling
@@ -203,27 +207,26 @@ jobs:
 
       - name: Debug token
         run: |
-          echo "Token length: ${#TWINE_PASSWORD}"
-          echo "Token starts with: ${TWINE_PASSWORD:0:5}"
-        env:
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "ERROR: TWINE_PASSWORD is empty!"
+          else
+            echo "Token length: ${#TWINE_PASSWORD}"
+            echo "Token starts with: ${TWINE_PASSWORD:0:5}..."
+          fi
 
-      - name: Publish to TestPyPI
+      - name: Publish to PyPI
         working-directory: python
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
         run: |
-          python -m twine upload --repository testpypi --skip-existing --verbose dist/*
+          python -m twine upload --skip-existing --verbose dist/*
 
       - name: Summary
         run: |
-          echo "✅ Published to TestPyPI"
+          echo "✅ Published to PyPI"
           echo ""
           echo "📦 Package: plato-sdk"
           echo "🏷️  Version: ${{ env.DEV_VERSION }}"
-          echo "📍 URL: https://test.pypi.org/project/plato-sdk/${{ env.DEV_VERSION }}/"
+          echo "📍 URL: https://pypi.org/project/plato-sdk/${{ env.DEV_VERSION }}/"
           echo ""
           echo "Install with:"
-          echo "  pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ plato-sdk==${{ env.DEV_VERSION }}"
+          echo "  pip install plato-sdk==${{ env.DEV_VERSION }}"
 
