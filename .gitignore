@@ -82,3 +82,4 @@ sdk/bindings/c/*.h
 
 # Logs
 *.log
+cli/bin/plato
