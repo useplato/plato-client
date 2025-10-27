@@ -564,7 +564,7 @@ async def handle_create_snapshot(sandbox):
         console.print(f"[red]❌ Error creating snapshot: {e}[/red]")
 
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def hub(
     ctx: typer.Context,
 ):
@@ -574,7 +574,15 @@ def hub(
     The hub command opens the Go-based Plato CLI which provides an interactive
     terminal UI for browsing simulators, launching environments, and managing VMs.
 
-    This uses the bundled Plato CLI binary that comes with the Python SDK.
+    Available subcommands:
+    - clone <service>: Clone a service from Plato Hub
+    - credentials: Display your Plato Hub credentials
+    - (no args): Start interactive TUI mode
+
+    Examples:
+        plato hub clone espocrm
+        plato hub credentials
+        plato hub
     """
     # Find the bundled CLI binary
     plato_bin = _find_bundled_cli()
