@@ -75,7 +75,7 @@ func NewDatasetSelectorModel(service string, params snapshotParams) DatasetSelec
 			items = append(items, datasetOption{
 				name:        name,
 				description: desc.String(),
-				dataset:     *dataset,
+				dataset:     dataset,
 			})
 		}
 

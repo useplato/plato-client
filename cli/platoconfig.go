@@ -87,7 +87,7 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 		for name, dataset := range m.config.Datasets {
 			items = append(items, datasetItem{
 				name:   name,
-				config: *dataset,
+				config: dataset,
 			})
 		}
 
@@ -120,7 +120,7 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 						return launchFromConfigMsg{
 							datasetName:   dataset.name,
 							datasetConfig: dataset.config,
-							service:       func() string { if m.config.Service != nil { return *m.config.Service }; return "" }(),
+							service:       m.config.Service,
 						}
 					}
 				}

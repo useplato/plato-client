@@ -456,7 +456,7 @@ func (m VMConfigModel) buildConfig(cpu, memory, disk int) models.SimConfigDatase
 		description = "A Plato simulator environment"
 	}
 
-	compute := &models.SimConfigCompute{
+	compute := models.SimConfigCompute{
 		Cpus:               int32(cpu),
 		Memory:             int32(memory),
 		Disk:               int32(disk),
@@ -464,21 +464,30 @@ func (m VMConfigModel) buildConfig(cpu, memory, disk int) models.SimConfigDatase
 		PlatoMessagingPort: 7000,
 	}
 
-	metadata := &models.SimConfigMetadata{
+	var variables []models.Variable
+	if cpu > 0 { // Only add variables if this is a real config
+		variables = []models.Variable{{Name: "PLATO_API_KEY", Value: "your-api-key"}}
+	}
+
+	metadata := models.SimConfigMetadata{
 		Favicon:       "https://plato.so/favicon.ico",
 		Name:          name,
 		Description:   description,
 		SourceCodeUrl: "https://github.com/useplato/plato",
 		StartUrl:      "http://localhost:8080",
 		License:       "MIT",
-		Variables:     []*models.Variable{{Name: "PLATO_API_KEY", Value: "your-api-key"}},
+		Variables:     variables,
 	}
+
+	// Initialize empty maps to ensure they're sent as {} not null
+	services := make(map[string]models.SimConfigService)
+	listeners := make(map[string]models.SimConfigListener)
 
 	return models.SimConfigDataset{
 		Compute:   compute,
 		Metadata:  metadata,
-		Services:  map[string]*models.SimConfigService{},
-		Listeners: map[string]*models.SimConfigListener{},
+		Services:  services,
+		Listeners: listeners,
 	}
 }
 
@@ -642,17 +651,19 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		// Save config if requested
 		saveConfig := m.form.GetBool("save_config")
 		if saveConfig {
-			config := &models.PlatoConfig{
-				Service: &serviceVal,
-				Datasets: map[string]*models.SimConfigDataset{
-					datasetVal: &datasetConfig,
+			config := models.PlatoConfig{
+				Service: serviceVal,
+				Datasets: map[string]models.SimConfigDataset{
+					datasetVal: datasetConfig,
 				},
 			}
 			// Update compute values
-			config.Datasets[datasetVal].Compute.Cpus = int32(cpu)
-			config.Datasets[datasetVal].Compute.Memory = int32(memory)
-			config.Datasets[datasetVal].Compute.Disk = int32(disk)
-			if err := SavePlatoConfig(config); err != nil {
+			dc := config.Datasets[datasetVal]
+			dc.Compute.Cpus = int32(cpu)
+			dc.Compute.Memory = int32(memory)
+			dc.Compute.Disk = int32(disk)
+			config.Datasets[datasetVal] = dc
+			if err := SavePlatoConfig(&config); err != nil {
 				// Non-fatal: just continue without saving
 				// Could add error handling here if needed
 			}

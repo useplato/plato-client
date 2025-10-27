@@ -1,0 +1,206 @@
+openapi: 3.0.0
+info:
+  title: Plato Models
+  version: 1.0.0
+  description: Data models for Plato platform
+
+paths: {}
+
+components:
+  schemas:
+    SimConfigCompute:
+      type: object
+      required:
+        - cpus
+        - memory
+        - disk
+        - app_port
+        - plato_messaging_port
+      properties:
+        cpus:
+          type: integer
+          format: int32
+        memory:
+          type: integer
+          format: int32
+        disk:
+          type: integer
+          format: int32
+        app_port:
+          type: integer
+          format: int32
+        plato_messaging_port:
+          type: integer
+          format: int32
+
+    Variable:
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+
+    SimConfigMetadata:
+      type: object
+      required:
+        - name
+      properties:
+        favicon:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        source_code_url:
+          type: string
+        start_url:
+          type: string
+        license:
+          type: string
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/Variable'
+        flows_path:
+          type: string
+
+    SimConfigService:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+        file:
+          type: string
+        required_healthy_containers:
+          type: array
+          items:
+            type: string
+        healthy_wait_timeout:
+          type: integer
+          format: int32
+
+    SimConfigListener:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [db, file, proxy]
+        # DB listener fields
+        db_type:
+          type: string
+        db_host:
+          type: string
+        db_port:
+          type: integer
+          format: int32
+        db_user:
+          type: string
+        db_password:
+          type: string
+        db_database:
+          type: string
+        # File listener fields
+        target_dir:
+          type: string
+        watch_enabled:
+          type: boolean
+        watch_patterns:
+          type: array
+          items:
+            type: string
+        ignore_patterns:
+          type: array
+          items:
+            type: string
+        seed_data_path:
+          type: string
+        # Common fields
+        seed_data_paths:
+          type: array
+          items:
+            type: string
+        volumes:
+          type: array
+          items:
+            type: string
+
+    SimConfigDataset:
+      type: object
+      required:
+        - compute
+        - metadata
+      properties:
+        compute:
+          $ref: '#/components/schemas/SimConfigCompute'
+        metadata:
+          $ref: '#/components/schemas/SimConfigMetadata'
+        services:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SimConfigService'
+        listeners:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SimConfigListener'
+
+    PlatoConfig:
+      type: object
+      properties:
+        service:
+          type: string
+        datasets:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SimConfigDataset'
+
+    Sandbox:
+      type: object
+      required:
+        - job_id
+        - public_id
+        - job_group_id
+      properties:
+        job_id:
+          type: string
+        public_id:
+          type: string
+        job_group_id:
+          type: string
+        url:
+          type: string
+        status:
+          type: string
+        correlation_id:
+          type: string
+
+    Environment:
+      type: object
+      required:
+        - job_id
+      properties:
+        job_id:
+          type: string
+        alias:
+          type: string
+        status:
+          type: string
+
+    SimulatorListItem:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        artifact_id:
+          type: string

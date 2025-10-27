@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 
@@ -25,21 +24,8 @@ func LoadPlatoConfig() (*models.PlatoConfig, error) {
 		return nil, err
 	}
 
-	// First unmarshal YAML to a generic map
-	var yamlData map[string]interface{}
-	if err := yaml.Unmarshal(data, &yamlData); err != nil {
-		return nil, err
-	}
-
-	// Then marshal to JSON and unmarshal to protobuf struct
-	// This uses the protobuf JSON tags which match our YAML snake_case fields
-	jsonData, err := json.Marshal(yamlData)
-	if err != nil {
-		return nil, err
-	}
-
 	var config models.PlatoConfig
-	if err := json.Unmarshal(jsonData, &config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, err
 	}
 
