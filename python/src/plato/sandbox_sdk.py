@@ -170,10 +170,11 @@ class PlatoSandboxClient:
 
         You can create a sandbox in two ways:
         1. From a configuration: Provide `config` with full VM configuration
-        2. From an artifact: Provide `artifact_id` to launch from a snapshot (config optional)
+        2. From an artifact: Provide `artifact_id` to launch from a snapshot
 
         Args:
-            config: Sandbox configuration (SimConfigDataset or dict). Required if artifact_id not provided.
+            config: Sandbox configuration (SimConfigDataset or dict). If not provided with artifact_id,
+                   a default boilerplate config will be used.
             dataset: Dataset name (default: 'base')
             alias: Human-readable alias (default: 'sandbox')
             artifact_id: Optional artifact ID to launch from snapshot
@@ -195,7 +196,7 @@ class PlatoSandboxClient:
             ... )
             >>> sandbox = client.create_sandbox(config=config)
 
-            # Create from artifact ID
+            # Create from artifact ID (uses default config)
             >>> sandbox = client.create_sandbox(artifact_id="art_123456")
         """
         # Validation: Must provide either config or artifact_id
@@ -206,8 +207,26 @@ class PlatoSandboxClient:
                 "or 'artifact_id' to create from an existing snapshot."
             )
 
-        # Convert config to dict if it's a Pydantic model
-        if config is not None:
+        # If artifact_id is provided but no config, use a default boilerplate config
+        # TODO(API): The API should fetch the proper config from the artifact metadata
+        # instead of requiring the client to send a boilerplate config
+        if config is None and artifact_id is not None:
+            # Default boilerplate config - actual config should be fetched from artifact on API side
+            config_dict = {
+                "compute": {
+                    "cpus": 1,
+                    "memory": 512,
+                    "disk": 10240,
+                    "app_port": 8080,
+                    "plato_messaging_port": 7000
+                },
+                "metadata": {
+                    "name": "Default"
+                }
+            }
+            config_json = json.dumps(config_dict)
+        elif config is not None:
+            # Convert config to dict if it's a Pydantic model
             if isinstance(config, SimConfigDataset):
                 config_dict = config.model_dump(exclude_none=True)
             else:
