@@ -68,26 +68,42 @@ jobs:
           base = base.split("+")[0]
           base = re.sub(r'(a|b|rc|dev).*$', "", base)
 
-          # Build a unique dev version: <base>.devYYYYMMDDHHMMSS (PEP 440 compliant)
+          # Parse semantic version
+          parts = base.split(".")
+          if len(parts) != 3:
+            print(f"ERROR: Invalid semantic version format: {base}", file=sys.stderr)
+            sys.exit(1)
+
+          major, minor, patch = map(int, parts)
+
+          # Auto-bump patch version for dev releases
+          patch += 1
+          bumped_version = f"{major}.{minor}.{patch}"
+
+          # Build a unique dev version: <bumped>.devYYYYMMDDHHMMSS (PEP 440 compliant)
           now = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
-          dev_version = f"{base}.dev{now}"
+          dev_version = f"{bumped_version}.dev{now}"
 
           patched = re.sub(r'(?m)^(\s*version\s*=\s*")([^"]+)(")',
                            r'\g<1>' + dev_version + r'\3', text)
           p.write_text(patched, encoding="utf-8")
-          print(f"Patched version: {dev_version}")
+          print(f"Patched version: {current} -> {dev_version}")
 
           # Write to GITHUB_OUTPUT and GITHUB_ENV
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"dev_version={dev_version}\n")
+            f.write(f"bumped_version={bumped_version}\n")
+            f.write(f"current_version={current}\n")
           with open(os.environ["GITHUB_ENV"], "a") as f:
             f.write(f"DEV_VERSION={dev_version}\n")
+            f.write(f"BUMPED_VERSION={bumped_version}\n")
 
           # Write to step summary
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
             f.write(f"## 📦 Dev Package Published\n")
-            f.write(f"- **Version:** `{dev_version}`\n")
-            f.write(f"- **Base Version:** `{base}`\n")
+            f.write(f"- **Current Version:** `{current}`\n")
+            f.write(f"- **Bumped Version:** `{bumped_version}` (patch + 1)\n")
+            f.write(f"- **Dev Version:** `{dev_version}`\n")
             f.write(f"- **Timestamp:** {now}\n")
             f.write(f"- **Repository:** TestPyPI\n")
             f.write(f"\n### Install Command\n")
