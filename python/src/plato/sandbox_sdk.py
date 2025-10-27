@@ -132,6 +132,9 @@ def _get_lib():
         _lib.plato_gitea_merge_to_main.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_gitea_merge_to_main.restype = ctypes.c_void_p
 
+        _lib.plato_get_ssh_info.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+        _lib.plato_get_ssh_info.restype = ctypes.c_void_p
+
         _lib.plato_free_string.argtypes = [ctypes.c_void_p]
         _lib.plato_free_string.restype = None
 
@@ -797,3 +800,42 @@ class PlatoSandboxClient:
         git_hash = response.get('git_hash', '')
         logger.info(f"Merged to main: git_hash={git_hash}")
         return git_hash
+
+    def get_ssh_info(self, public_id: str, user: str = "root") -> Dict[str, str]:
+        """
+        Get SSH connection information for a sandbox.
+
+        Args:
+            public_id: Public ID of the sandbox
+            user: SSH user (default: "root")
+
+        Returns:
+            Dict with 'ssh_command', 'ssh_host', 'ssh_config_path', 'public_id'
+
+        Raises:
+            RuntimeError: If getting SSH info fails
+
+        Example:
+            >>> info = client.get_ssh_info(sandbox.public_id)
+            >>> print(f"Connect with: {info['ssh_command']}")
+            >>> # Or access individual parts:
+            >>> print(f"SSH host: {info['ssh_host']}")
+            >>> print(f"Config path: {info['ssh_config_path']}")
+        """
+        logger.debug(f"Getting SSH info for sandbox: public_id={public_id}, user={user}")
+        lib = _get_lib()
+        result_ptr = lib.plato_get_ssh_info(
+            self._client_id.encode('utf-8'),
+            public_id.encode('utf-8'),
+            user.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            logger.error(f"Failed to get SSH info: {response['error']}")
+            raise RuntimeError(f"Failed to get SSH info: {response['error']}")
+
+        logger.info(f"Got SSH info for {public_id}: {response['ssh_command']}")
+        return response

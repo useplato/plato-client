@@ -623,8 +623,33 @@ func (s *SandboxService) CreateSnapshotWithGit(ctx context.Context, publicID str
 	type giteaClient interface {
 		GetGiteaService() interface{}
 	}
-	
+
 	// For now, just call CreateSnapshot without git workflow
 	// The git workflow should be called explicitly by the user via C bindings
 	return s.CreateSnapshot(ctx, publicID, req)
+}
+
+// GetSSHInfo returns SSH connection information for a sandbox
+// This includes the SSH command, host, and config path
+func (s *SandboxService) GetSSHInfo(publicID string, user string) (*models.SSHInfo, error) {
+	// Default user is "root"
+	if user == "" {
+		user = "root"
+	}
+
+	// SSH host format: user@publicID
+	sshHost := fmt.Sprintf("%s@%s", user, publicID)
+
+	// SSH config path (standard location)
+	sshConfigPath := "~/.ssh/config"
+
+	// SSH command format: ssh -F <config_path> <host>
+	sshCommand := fmt.Sprintf("ssh -F %s %s", sshConfigPath, sshHost)
+
+	return &models.SSHInfo{
+		SSHCommand:    sshCommand,
+		SSHHost:       sshHost,
+		SSHConfigPath: sshConfigPath,
+		PublicID:      publicID,
+	}, nil
 }

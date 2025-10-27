@@ -510,4 +510,31 @@ func plato_gitea_merge_to_main(clientID *C.char, serviceName *C.char, branchName
 	return C.CString(string(resultJSON))
 }
 
+//export plato_get_ssh_info
+func plato_get_ssh_info(clientID *C.char, publicID *C.char, user *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	publicIDStr := C.GoString(publicID)
+	userStr := C.GoString(user)
+	logDebug("Getting SSH info for sandbox: publicID=%s, user=%s", publicIDStr, userStr)
+
+	sshInfo, err := client.Sandbox.GetSSHInfo(publicIDStr, userStr)
+	if err != nil {
+		logDebug("Failed to get SSH info: %v", err)
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	logDebug("SSH info: command=%s", sshInfo.SSHCommand)
+
+	result, err := json.Marshal(sshInfo)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
+	}
+
+	return C.CString(string(result))
+}
+
 func main() {}

@@ -123,3 +123,11 @@ class StartWorkerResponse(BaseModel):
     status: str
     timestamp: str
     correlation_id: str
+
+
+class SSHInfo(BaseModel):
+    """SSH connection information for a sandbox"""
+    ssh_command: str
+    ssh_host: str
+    ssh_config_path: str
+    public_id: str

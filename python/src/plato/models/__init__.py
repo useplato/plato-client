@@ -12,6 +12,7 @@ from .sandbox import (
     StartWorkerRequest,
     StartWorkerResponse,
     SimulatorListItem,
+    SSHInfo,
 )
 
 
@@ -31,4 +32,5 @@ __all__ = [
     "StartWorkerRequest",
     "StartWorkerResponse",
     "SimulatorListItem",
+    "SSHInfo",
 ]

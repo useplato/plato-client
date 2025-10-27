@@ -118,3 +118,11 @@ type StartWorkerResponse struct {
 	Timestamp     string `json:"timestamp"`
 	CorrelationId string `json:"correlation_id"`
 }
+
+// SSHInfo contains SSH connection information for a sandbox
+type SSHInfo struct {
+	SSHCommand    string `json:"ssh_command"`
+	SSHHost       string `json:"ssh_host"`
+	SSHConfigPath string `json:"ssh_config_path"`
+	PublicID      string `json:"public_id"`
+}
