@@ -299,7 +299,7 @@ class PlatoSandboxClient:
     def create_snapshot(
         self,
         public_id: str,
-        request: Union[CreateSnapshotRequest, Dict[str, Any]]
+        request: CreateSnapshotRequest
     ) -> CreateSnapshotResponse:
         """
         Create a snapshot of a sandbox
@@ -320,10 +320,7 @@ class PlatoSandboxClient:
             >>> print(snapshot.artifact_id)
         """
         # Convert to dict if Pydantic model
-        if isinstance(request, CreateSnapshotRequest):
-            request_dict = request.model_dump(exclude_none=True)
-        else:
-            request_dict = request
+        request_dict = request.model_dump(exclude_none=True)
         request_json = json.dumps(request_dict)
 
         lib = _get_lib()
