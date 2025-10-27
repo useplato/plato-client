@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoTaskMetadata, PlatoEnvironment
 from plato.models.task import ScoringType
@@ -7,6 +7,8 @@ from plato.exceptions import PlatoClientError
 from plato.models.task import EvaluationResult
 
 import aiohttp
+import json
+from pathlib import Path
 import os
 import logging
 import time
@@ -34,6 +36,7 @@ class Plato:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         feature_flags: Optional[Dict[str, Any]] = None,
+        telemetry: bool = False,
     ):
         """Initialize a new Plato.
 
@@ -48,6 +51,11 @@ class Plato:
         self.base_url = base_url or config.base_url
         self.feature_flags = feature_flags or {}
         self._http_session: Optional[aiohttp.ClientSession] = None
+        self._telemetry_token_cache_path = (
+            Path.home() / ".plato" / "telemetry_token.json"
+        )
+        self._telemetry: bool = telemetry
+        self._telemetry_headers: Dict[str, str] | None = None
 
     @property
     def http_session(self) -> aiohttp.ClientSession:
@@ -80,6 +88,15 @@ class Plato:
                     {name: str(value) for name, value in self.feature_flags.items()},
                     response_url=URL(self.base_url),
                 )
+            # Initialize telemetry token if requested
+            if self._telemetry:
+                # fire and forget init; errors will surface on exporter usage
+                try:
+                    import asyncio as _asyncio
+
+                    _asyncio.create_task(self._init_telemetry())
+                except Exception:
+                    pass
         return self._http_session
 
     async def close(self):
@@ -87,6 +104,80 @@ class Plato:
         if self._http_session is not None and not self._http_session.closed:
             await self._http_session.close()
             self._http_session = None
+
+    async def _init_telemetry(self) -> None:
+        if not self._telemetry:
+            return
+        token_data = None
+        try:
+            if self._telemetry_token_cache_path.exists():
+                token_data = json.loads(self._telemetry_token_cache_path.read_text())
+        except Exception:
+            token_data = None
+
+        needs_refresh = True
+        if token_data and token_data.get("expires_at"):
+            try:
+                # simple ttl check: refresh if < 24h to expiry
+                import datetime as _dt
+
+                exp = _dt.datetime.fromisoformat(token_data["expires_at"])
+                if exp - _dt.datetime.utcnow() > _dt.timedelta(hours=24):
+                    needs_refresh = False
+            except Exception:
+                needs_refresh = True
+
+        if needs_refresh:
+            headers = {"X-API-Key": self.api_key}
+            body = {"service_name": "plato-sdk", "environment": "client"}
+            async with self.http_session.post(
+                f"{self.base_url}/telemetry/init", json=body, headers=headers
+            ) as resp:
+                await self._handle_response_error(resp)
+                token_data = await resp.json()
+            # persist
+            try:
+                self._telemetry_token_cache_path.parent.mkdir(
+                    parents=True, exist_ok=True
+                )
+                self._telemetry_token_cache_path.write_text(json.dumps(token_data))
+            except Exception:
+                pass
+
+        if token_data:
+            token = token_data.get("access_token")
+            if token:
+                self._telemetry_headers = {"Authorization": f"Bearer {token}"}
+                try:
+                    self._configure_otel_from_token(token_data)
+                except Exception as _e:
+                    logger.debug(f"Failed to initialize OTEL exporter: {_e}")
+
+    def _configure_otel_from_token(self, token_data: Dict[str, Any]) -> None:
+        """Configure OpenTelemetry tracing exporter using token data from server.
+
+        Sets a TracerProvider with an OTLP HTTP exporter that sends Authorization header.
+        """
+        from opentelemetry import trace as _trace
+        from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
+        from opentelemetry.sdk.trace.export import (
+            BatchSpanProcessor as _BatchSpanProcessor,
+        )
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter as _OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.resources import Resource as _Resource
+
+        resource_attrs = token_data.get("resource_attributes", {})
+        endpoint = token_data.get("otlp_base_url", "").rstrip("/") + "/v1/traces"
+
+        provider = _TracerProvider(resource=_Resource.create(resource_attrs))
+        exporter = _OTLPSpanExporter(
+            endpoint=endpoint, headers=self._telemetry_headers or {}
+        )
+        processor = _BatchSpanProcessor(exporter)
+        provider.add_span_processor(processor)
+        _trace.set_tracer_provider(provider)
 
     async def _handle_response_error(self, response: aiohttp.ClientResponse) -> None:
         """Handle HTTP error responses by extracting the actual error message.

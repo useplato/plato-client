@@ -11,6 +11,18 @@ import os
 import logging
 import time
 import requests
+import json
+from pathlib import Path
+
+from opentelemetry import trace as _trace
+from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor as _BatchSpanProcessor,
+)
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter as _OTLPSpanExporter,
+)
+from opentelemetry.sdk.resources import Resource as _Resource
 
 
 logger = logging.getLogger(__name__)
@@ -35,6 +47,7 @@ class SyncPlato:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         feature_flags: Optional[Dict[str, Any]] = None,
+        telemetry: bool = False,
     ):
         """Initialize a new SyncPlato.
 
@@ -49,6 +62,11 @@ class SyncPlato:
         self.base_url = base_url or config.base_url
         self.feature_flags = feature_flags or {}
         self._http_session: Optional[requests.Session] = None
+        self._telemetry: bool = telemetry
+        self._telemetry_headers: Dict[str, str] | None = None
+        self._telemetry_token_cache_path = (
+            Path.home() / ".plato" / "telemetry_token.json"
+        )
 
     @property
     def http_session(self) -> requests.Session:
@@ -64,6 +82,11 @@ class SyncPlato:
             if self.feature_flags:
                 for name, value in self.feature_flags.items():
                     self._http_session.cookies.set(name, str(value))
+            if self._telemetry:
+                try:
+                    self._init_telemetry()
+                except Exception as _e:
+                    logger.debug(f"Failed to initialize telemetry: {_e}")
         return self._http_session
 
     def close(self):
@@ -71,6 +94,62 @@ class SyncPlato:
         if self._http_session is not None:
             self._http_session.close()
             self._http_session = None
+
+    def _init_telemetry(self) -> None:
+        if not self._telemetry:
+            return
+        token_data: Dict[str, Any] | None = None
+        try:
+            if self._telemetry_token_cache_path.exists():
+                token_data = json.loads(self._telemetry_token_cache_path.read_text())
+        except Exception:
+            token_data = None
+
+        needs_refresh = True
+        if token_data and token_data.get("expires_at"):
+            try:
+                from datetime import datetime as _dt, timedelta as _td
+
+                exp = _dt.fromisoformat(token_data["expires_at"])  # type: ignore[arg-type]
+                if exp - _dt.utcnow() > _td(hours=24):
+                    needs_refresh = False
+            except Exception:
+                needs_refresh = True
+
+        if needs_refresh:
+            headers = {"X-API-Key": self.api_key}
+            body = {"service_name": "plato-sdk", "environment": "client"}
+            resp = self.http_session.post(
+                f"{self.base_url}/telemetry/init", json=body, headers=headers
+            )
+            self._handle_response_error(resp)
+            token_data = resp.json()
+            try:
+                self._telemetry_token_cache_path.parent.mkdir(
+                    parents=True, exist_ok=True
+                )
+                self._telemetry_token_cache_path.write_text(json.dumps(token_data))
+            except Exception:
+                pass
+
+        if token_data and token_data.get("access_token"):
+            token = token_data["access_token"]
+            self._telemetry_headers = {"Authorization": f"Bearer {token}"}
+            try:
+                self._configure_otel_from_token(token_data)
+            except Exception as _e:
+                logger.debug(f"Failed to initialize OTEL exporter: {_e}")
+
+    def _configure_otel_from_token(self, token_data: Dict[str, Any]) -> None:
+        resource_attrs = token_data.get("resource_attributes", {})
+        endpoint = token_data.get("otlp_base_url", "").rstrip("/") + "/v1/traces"
+        provider = _TracerProvider(resource=_Resource.create(resource_attrs))
+        exporter = _OTLPSpanExporter(
+            endpoint=endpoint, headers=self._telemetry_headers or {}
+        )
+        processor = _BatchSpanProcessor(exporter)
+        provider.add_span_processor(processor)
+        _trace.set_tracer_provider(provider)
 
     def _handle_response_error(self, response: requests.Response) -> None:
         """Handle HTTP error responses by extracting the actual error message.
