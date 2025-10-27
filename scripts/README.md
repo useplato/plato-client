@@ -1,168 +1,334 @@
-# Build Scripts
+# Plato Build Scripts
 
-Organized build scripts for the Plato client project.
+Automated build and development scripts for the Plato SDK project.
 
 ## Quick Start
 
 ```bash
-# Build everything (proto + SDK + bindings + CLI)
+# Setup development environment (first time only)
+./scripts/dev-setup.sh
+
+# Build everything
 ./scripts/build-all.sh
 
-# Or build individual components
-./scripts/generate-proto.sh  # Generate protobuf code
-./scripts/build-sdk.sh       # Build Go SDK
-./scripts/build-bindings.sh  # Build C shared library
-./scripts/build-cli.sh       # Build CLI tool
+# Or build individually
+./scripts/build-sdk.sh     # Go SDK
+./scripts/build-cli.sh     # CLI tool
+./scripts/build-python.sh  # Python SDK with C bindings
 ```
 
-## Scripts
+## Available Scripts
 
-### `generate-proto.sh`
-Generates Protocol Buffer code from `sdk/proto/plato.proto`.
+### Setup & Development
 
-**Output:**
-- `sdk/models/plato.pb.go` - Generated Go models
+#### `dev-setup.sh`
+Setup the complete development environment.
 
-**Requirements:**
-- `protoc` (Protocol Buffer compiler)
-- `protoc-gen-go` (Go protobuf plugin)
+- Checks for required tools (Go, Python, uv)
+- Installs missing tools (uv)
+- Initializes all Go modules
+- Installs Python dependencies
 
-### `build-sdk.sh`
-Builds the core Go SDK.
-
-**Steps:**
-1. Runs `go mod tidy` to update dependencies
-2. Builds all packages with `go build ./...`
-3. Runs tests with `go test ./...`
-
-**Output:** Compiled SDK packages
-
-### `build-bindings.sh`
-Builds the C shared library for language bindings.
-
-**Steps:**
-1. Updates dependencies in `sdk/bindings/c/`
-2. Builds shared library with `go build -buildmode=c-shared`
-
-**Output:**
-- `sdk/bindings/c/libplato.dylib` (macOS)
-- `sdk/bindings/c/libplato.so` (Linux)
-
-### `build-cli.sh`
-Builds the Plato CLI tool with version information.
-
-**Steps:**
-1. Updates dependencies in `cli/`
-2. Builds binary with version/commit/timestamp ldflags
-3. Creates `cli/plato` binary
-
-**Output:** `cli/plato` executable
-
-### `build-all.sh`
-Runs all build scripts in sequence for a complete build.
-
-**Order:**
-1. Generate protobuf code
-2. Build SDK
-3. Build C bindings
-4. Build CLI
-
-## Development Workflow
-
-### Making Model Changes
-
+**Usage:**
 ```bash
-# 1. Edit the proto file
-vim sdk/proto/plato.proto
+./scripts/dev-setup.sh
+```
 
-# 2. Regenerate code
-./scripts/generate-proto.sh
+**First time setup:**
+1. Install Go 1.23+ from https://go.dev/dl/
+2. Install Python 3.10+ from https://python.org
+3. Run `./scripts/dev-setup.sh`
 
-# 3. Build and test
+---
+
+### Build Scripts
+
+#### `build-all.sh`
+Build all components in order: SDK → CLI → Python.
+
+**Usage:**
+```bash
 ./scripts/build-all.sh
 ```
 
-### Working on SDK
+**Output:**
+- SDK: Verified and tested
+- CLI: Binary in `cli/bin/plato`
+- Python: Wheel in `python/dist/`
 
+---
+
+#### `build-sdk.sh`
+Build and test the Go SDK.
+
+**What it does:**
+1. Syncs Go dependencies (`go mod tidy`)
+2. Runs all tests
+3. Verifies SDK builds
+
+**Usage:**
 ```bash
-# Make changes to SDK code
-vim sdk/services/sandbox.go
-
-# Build and test
 ./scripts/build-sdk.sh
 ```
 
-### Working on CLI
+**Output:**
+- Go SDK ready for use by CLI and Python bindings
+- Test results displayed
+
+---
+
+#### `build-cli.sh`
+Build the Plato CLI binary.
+
+**What it does:**
+1. Syncs Go dependencies
+2. Builds CLI binary
+3. Tests the binary (`plato --version`)
+
+**Usage:**
+```bash
+./scripts/build-cli.sh
+```
+
+**Output:**
+- Binary: `cli/bin/plato` (or `plato.exe` on Windows)
+- Install instructions displayed
+
+**Install globally:**
+```bash
+sudo cp cli/bin/plato /usr/local/bin/
+```
+
+---
+
+#### `build-python.sh`
+Build the Python SDK with C bindings.
+
+**What it does:**
+1. Builds C shared library from Go code (`libplato.dylib/so/dll`)
+2. Copies library to Python package (`python/src/plato/`)
+3. Builds Python wheel distribution
+
+**Usage:**
+```bash
+./scripts/build-python.sh
+```
+
+**Output:**
+- C library: `sdk/bindings/c/libplato.dylib` (or `.so`/`.dll`)
+- Package library: `python/src/plato/libplato.dylib`
+- Python wheel: `python/dist/plato_sdk-*.whl`
+
+**Install locally:**
+```bash
+cd python
+uv pip install -e .
+```
+
+**Publish to PyPI:**
+```bash
+cd python
+uv publish
+```
+
+---
+
+### Test Scripts
+
+#### `test-sdk.sh`
+Run Go SDK tests with coverage.
+
+**Usage:**
+```bash
+./scripts/test-sdk.sh
+```
+
+**Output:**
+- Test results
+- Coverage report
+- `sdk/coverage.out` file
+
+**View detailed coverage:**
+```bash
+cd sdk
+go tool cover -html=coverage.out
+```
+
+---
+
+#### `test-python.sh`
+Run Python SDK tests.
+
+**What it does:**
+1. Checks if C library exists (builds if needed)
+2. Runs pytest tests if available
+3. Runs example test scripts
+
+**Usage:**
+```bash
+./scripts/test-python.sh
+```
+
+**Requirements:**
+- C library must be built first (script builds automatically if missing)
+- Tests in `python/tests/` or `python/test_*.py`
+
+---
+
+### Utility Scripts
+
+#### `clean.sh`
+Remove all build artifacts and caches.
+
+**What it cleans:**
+- Go build caches and coverage files
+- C shared libraries (`libplato.*`)
+- CLI binaries (`cli/bin/`)
+- Python dist, build, egg-info, `__pycache__`
+- Python package libraries (`python/src/plato/libplato.*`)
+
+**Usage:**
+```bash
+./scripts/clean.sh
+```
+
+**Note:** Does not remove dependencies (Go modules, Python packages)
+
+---
+
+## Architecture
+
+The build scripts follow this dependency order:
+
+```
+┌─────────────┐
+│   Go SDK    │  (Core SDK)
+└──────┬──────┘
+       │
+       ├────────────────┬────────────────┐
+       ▼                ▼                ▼
+┌──────────┐     ┌──────────┐    ┌──────────┐
+│   CLI    │     │ C Bindings│    │  Future  │
+└──────────┘     └─────┬─────┘    └──────────┘
+                       │
+                       ▼
+                 ┌──────────┐
+                 │  Python  │
+                 └──────────┘
+```
+
+1. **Go SDK** (`sdk/`): Core SDK with services and models
+2. **CLI** (`cli/`): Command-line tool using Go SDK
+3. **C Bindings** (`sdk/bindings/c/`): cgo exports for foreign language support
+4. **Python SDK** (`python/`): Python wrapper using C bindings via ctypes
+
+## Common Workflows
+
+### Development Workflow
 
 ```bash
-# Make changes to CLI code
-vim cli/main.go
+# First time setup
+./scripts/dev-setup.sh
 
-# Build CLI
+# Make changes to SDK
+cd sdk
+# ... edit code ...
+
+# Test your changes
+./scripts/test-sdk.sh
+
+# Build CLI with your changes
 ./scripts/build-cli.sh
 
-# Test it
-./cli/plato
+# Test CLI
+./cli/bin/plato --version
 ```
 
-### Full Clean Build
+### Python Development Workflow
 
 ```bash
-# Clean and rebuild everything
-rm -rf sdk/models/plato.pb.go
-rm -rf sdk/bindings/c/libplato.*
-rm -rf cli/plato
+# Make changes to Go SDK or C bindings
+cd sdk
+# ... edit code ...
+
+# Rebuild Python bindings
+./scripts/build-python.sh
+
+# Test Python SDK
+cd python
+uv run python3 test_full_workflow.py
+```
+
+### Release Workflow
+
+```bash
+# Clean everything
+./scripts/clean.sh
+
+# Fresh build
 ./scripts/build-all.sh
-```
 
-## Project Structure
+# If all builds succeed, tag and push
+git tag v1.0.94
+git push origin v1.0.94
 
-```
-plato-client/
-├── scripts/               # Build scripts (this directory)
-│   ├── generate-proto.sh
-│   ├── build-sdk.sh
-│   ├── build-bindings.sh
-│   ├── build-cli.sh
-│   ├── build-all.sh
-│   └── README.md
-├── sdk/                   # Core Go SDK
-│   ├── proto/            # Protobuf definitions
-│   ├── models/           # Generated models
-│   ├── services/         # Service implementations
-│   └── bindings/         # Language bindings
-│       └── c/           # C shared library
-└── cli/                  # CLI tool
-    └── plato            # Built binary
-```
-
-## Make Everything Executable
-
-```bash
-chmod +x scripts/*.sh
+# GitHub Actions will automatically:
+# 1. Build CLI for multiple platforms
+# 2. Build Python SDK with C bindings
+# 3. Publish to PyPI
 ```
 
 ## Troubleshooting
 
-### "protoc not found"
+### "Go not found"
+Install Go 1.23+ from https://go.dev/dl/
+
+### "Python3 not found"
+Install Python 3.10+ from https://python.org
+
+### "uv not found"
+Run: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+### "libplato not found" (Python)
+The C library wasn't built. Run:
 ```bash
-brew install protobuf
+./scripts/build-python.sh
 ```
 
-### "protoc-gen-go not found"
+### Build fails with "cannot find module"
+Run dev setup again:
 ```bash
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+./scripts/dev-setup.sh
 ```
 
-### "missing go.sum entry"
+### Tests fail
+Make sure dependencies are installed:
 ```bash
-# Run in the affected directory
-go mod tidy
+cd sdk && go mod download
+cd python && uv sync
 ```
 
-### Build fails after proto changes
-```bash
-# Clean and rebuild
-./scripts/generate-proto.sh
-./scripts/build-all.sh
-```
+## Platform Notes
+
+### macOS
+- C library: `libplato.dylib`
+- CLI binary: `plato`
+
+### Linux
+- C library: `libplato.so`
+- CLI binary: `plato`
+
+### Windows
+- C library: `libplato.dll`
+- CLI binary: `plato.exe`
+
+All scripts detect the platform automatically.
+
+## Contributing
+
+When adding new build steps:
+
+1. Add the step to the appropriate script
+2. Update this README
+3. Test on all platforms (use GitHub Actions)
+4. Keep scripts idempotent (safe to run multiple times)
