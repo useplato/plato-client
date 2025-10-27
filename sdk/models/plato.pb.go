@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.10
 // 	protoc        v6.33.0
-// source: plato.proto
+// source: proto/plato.proto
 
 package models
 
@@ -35,7 +35,7 @@ type SimConfigCompute struct {
 
 func (x *SimConfigCompute) Reset() {
 	*x = SimConfigCompute{}
-	mi := &file_plato_proto_msgTypes[0]
+	mi := &file_proto_plato_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +47,7 @@ func (x *SimConfigCompute) String() string {
 func (*SimConfigCompute) ProtoMessage() {}
 
 func (x *SimConfigCompute) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[0]
+	mi := &file_proto_plato_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +60,7 @@ func (x *SimConfigCompute) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimConfigCompute.ProtoReflect.Descriptor instead.
 func (*SimConfigCompute) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{0}
+	return file_proto_plato_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *SimConfigCompute) GetCpus() int32 {
@@ -115,7 +115,7 @@ type SimConfigMetadata struct {
 
 func (x *SimConfigMetadata) Reset() {
 	*x = SimConfigMetadata{}
-	mi := &file_plato_proto_msgTypes[1]
+	mi := &file_proto_plato_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -127,7 +127,7 @@ func (x *SimConfigMetadata) String() string {
 func (*SimConfigMetadata) ProtoMessage() {}
 
 func (x *SimConfigMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[1]
+	mi := &file_proto_plato_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -140,7 +140,7 @@ func (x *SimConfigMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimConfigMetadata.ProtoReflect.Descriptor instead.
 func (*SimConfigMetadata) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{1}
+	return file_proto_plato_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *SimConfigMetadata) GetFavicon() string {
@@ -210,7 +210,7 @@ type Variable struct {
 
 func (x *Variable) Reset() {
 	*x = Variable{}
-	mi := &file_plato_proto_msgTypes[2]
+	mi := &file_proto_plato_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +222,7 @@ func (x *Variable) String() string {
 func (*Variable) ProtoMessage() {}
 
 func (x *Variable) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[2]
+	mi := &file_proto_plato_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +235,7 @@ func (x *Variable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Variable.ProtoReflect.Descriptor instead.
 func (*Variable) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{2}
+	return file_proto_plato_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Variable) GetName() string {
@@ -265,7 +265,7 @@ type SimConfigService struct {
 
 func (x *SimConfigService) Reset() {
 	*x = SimConfigService{}
-	mi := &file_plato_proto_msgTypes[3]
+	mi := &file_proto_plato_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -277,7 +277,7 @@ func (x *SimConfigService) String() string {
 func (*SimConfigService) ProtoMessage() {}
 
 func (x *SimConfigService) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[3]
+	mi := &file_proto_plato_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -290,7 +290,7 @@ func (x *SimConfigService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimConfigService.ProtoReflect.Descriptor instead.
 func (*SimConfigService) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{3}
+	return file_proto_plato_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SimConfigService) GetType() string {
@@ -321,37 +321,45 @@ func (x *SimConfigService) GetHealthyWaitTimeout() int32 {
 	return 0
 }
 
-// Database listener configuration
-type SimConfigDBListener struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	DbType        string                 `protobuf:"bytes,2,opt,name=db_type,json=dbType,proto3" json:"db_type,omitempty"`
-	DbHost        string                 `protobuf:"bytes,3,opt,name=db_host,json=dbHost,proto3" json:"db_host,omitempty"`
-	DbPort        int32                  `protobuf:"varint,4,opt,name=db_port,json=dbPort,proto3" json:"db_port,omitempty"`
-	DbUser        string                 `protobuf:"bytes,5,opt,name=db_user,json=dbUser,proto3" json:"db_user,omitempty"`
-	DbPassword    string                 `protobuf:"bytes,6,opt,name=db_password,json=dbPassword,proto3" json:"db_password,omitempty"`
-	DbDatabase    string                 `protobuf:"bytes,7,opt,name=db_database,json=dbDatabase,proto3" json:"db_database,omitempty"`
-	SeedDataPaths []string               `protobuf:"bytes,8,rep,name=seed_data_paths,json=seedDataPaths,proto3" json:"seed_data_paths,omitempty"`
-	Volumes       []string               `protobuf:"bytes,9,rep,name=volumes,proto3" json:"volumes,omitempty"`
+// Listener configuration - can be DB or File type
+type SimConfigListener struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// DB listener fields
+	DbType     *string `protobuf:"bytes,2,opt,name=db_type,json=dbType,proto3,oneof" json:"db_type,omitempty"`
+	DbHost     *string `protobuf:"bytes,3,opt,name=db_host,json=dbHost,proto3,oneof" json:"db_host,omitempty"`
+	DbPort     *int32  `protobuf:"varint,4,opt,name=db_port,json=dbPort,proto3,oneof" json:"db_port,omitempty"`
+	DbUser     *string `protobuf:"bytes,5,opt,name=db_user,json=dbUser,proto3,oneof" json:"db_user,omitempty"`
+	DbPassword *string `protobuf:"bytes,6,opt,name=db_password,json=dbPassword,proto3,oneof" json:"db_password,omitempty"`
+	DbDatabase *string `protobuf:"bytes,7,opt,name=db_database,json=dbDatabase,proto3,oneof" json:"db_database,omitempty"`
+	// File listener fields
+	TargetDir      *string  `protobuf:"bytes,10,opt,name=target_dir,json=targetDir,proto3,oneof" json:"target_dir,omitempty"`
+	WatchEnabled   *bool    `protobuf:"varint,11,opt,name=watch_enabled,json=watchEnabled,proto3,oneof" json:"watch_enabled,omitempty"`
+	WatchPatterns  []string `protobuf:"bytes,12,rep,name=watch_patterns,json=watchPatterns,proto3" json:"watch_patterns,omitempty"`
+	IgnorePatterns []string `protobuf:"bytes,13,rep,name=ignore_patterns,json=ignorePatterns,proto3" json:"ignore_patterns,omitempty"`
+	SeedDataPath   *string  `protobuf:"bytes,14,opt,name=seed_data_path,json=seedDataPath,proto3,oneof" json:"seed_data_path,omitempty"`
+	// Common fields
+	SeedDataPaths []string `protobuf:"bytes,20,rep,name=seed_data_paths,json=seedDataPaths,proto3" json:"seed_data_paths,omitempty"`
+	Volumes       []string `protobuf:"bytes,21,rep,name=volumes,proto3" json:"volumes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SimConfigDBListener) Reset() {
-	*x = SimConfigDBListener{}
-	mi := &file_plato_proto_msgTypes[4]
+func (x *SimConfigListener) Reset() {
+	*x = SimConfigListener{}
+	mi := &file_proto_plato_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SimConfigDBListener) String() string {
+func (x *SimConfigListener) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SimConfigDBListener) ProtoMessage() {}
+func (*SimConfigListener) ProtoMessage() {}
 
-func (x *SimConfigDBListener) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[4]
+func (x *SimConfigListener) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plato_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,161 +370,103 @@ func (x *SimConfigDBListener) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SimConfigDBListener.ProtoReflect.Descriptor instead.
-func (*SimConfigDBListener) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use SimConfigListener.ProtoReflect.Descriptor instead.
+func (*SimConfigListener) Descriptor() ([]byte, []int) {
+	return file_proto_plato_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *SimConfigDBListener) GetType() string {
+func (x *SimConfigListener) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *SimConfigDBListener) GetDbType() string {
-	if x != nil {
-		return x.DbType
+func (x *SimConfigListener) GetDbType() string {
+	if x != nil && x.DbType != nil {
+		return *x.DbType
 	}
 	return ""
 }
 
-func (x *SimConfigDBListener) GetDbHost() string {
-	if x != nil {
-		return x.DbHost
+func (x *SimConfigListener) GetDbHost() string {
+	if x != nil && x.DbHost != nil {
+		return *x.DbHost
 	}
 	return ""
 }
 
-func (x *SimConfigDBListener) GetDbPort() int32 {
-	if x != nil {
-		return x.DbPort
+func (x *SimConfigListener) GetDbPort() int32 {
+	if x != nil && x.DbPort != nil {
+		return *x.DbPort
 	}
 	return 0
 }
 
-func (x *SimConfigDBListener) GetDbUser() string {
-	if x != nil {
-		return x.DbUser
+func (x *SimConfigListener) GetDbUser() string {
+	if x != nil && x.DbUser != nil {
+		return *x.DbUser
 	}
 	return ""
 }
 
-func (x *SimConfigDBListener) GetDbPassword() string {
-	if x != nil {
-		return x.DbPassword
+func (x *SimConfigListener) GetDbPassword() string {
+	if x != nil && x.DbPassword != nil {
+		return *x.DbPassword
 	}
 	return ""
 }
 
-func (x *SimConfigDBListener) GetDbDatabase() string {
-	if x != nil {
-		return x.DbDatabase
+func (x *SimConfigListener) GetDbDatabase() string {
+	if x != nil && x.DbDatabase != nil {
+		return *x.DbDatabase
 	}
 	return ""
 }
 
-func (x *SimConfigDBListener) GetSeedDataPaths() []string {
-	if x != nil {
-		return x.SeedDataPaths
-	}
-	return nil
-}
-
-func (x *SimConfigDBListener) GetVolumes() []string {
-	if x != nil {
-		return x.Volumes
-	}
-	return nil
-}
-
-// File listener configuration
-type SimConfigFileListener struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Type           string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	TargetDir      string                 `protobuf:"bytes,2,opt,name=target_dir,json=targetDir,proto3" json:"target_dir,omitempty"`
-	WatchEnabled   bool                   `protobuf:"varint,3,opt,name=watch_enabled,json=watchEnabled,proto3" json:"watch_enabled,omitempty"`
-	WatchPatterns  []string               `protobuf:"bytes,4,rep,name=watch_patterns,json=watchPatterns,proto3" json:"watch_patterns,omitempty"`
-	IgnorePatterns []string               `protobuf:"bytes,5,rep,name=ignore_patterns,json=ignorePatterns,proto3" json:"ignore_patterns,omitempty"`
-	SeedDataPath   *string                `protobuf:"bytes,6,opt,name=seed_data_path,json=seedDataPath,proto3,oneof" json:"seed_data_path,omitempty"`
-	Volumes        []string               `protobuf:"bytes,7,rep,name=volumes,proto3" json:"volumes,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SimConfigFileListener) Reset() {
-	*x = SimConfigFileListener{}
-	mi := &file_plato_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SimConfigFileListener) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SimConfigFileListener) ProtoMessage() {}
-
-func (x *SimConfigFileListener) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SimConfigFileListener.ProtoReflect.Descriptor instead.
-func (*SimConfigFileListener) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *SimConfigFileListener) GetType() string {
-	if x != nil {
-		return x.Type
+func (x *SimConfigListener) GetTargetDir() string {
+	if x != nil && x.TargetDir != nil {
+		return *x.TargetDir
 	}
 	return ""
 }
 
-func (x *SimConfigFileListener) GetTargetDir() string {
-	if x != nil {
-		return x.TargetDir
-	}
-	return ""
-}
-
-func (x *SimConfigFileListener) GetWatchEnabled() bool {
-	if x != nil {
-		return x.WatchEnabled
+func (x *SimConfigListener) GetWatchEnabled() bool {
+	if x != nil && x.WatchEnabled != nil {
+		return *x.WatchEnabled
 	}
 	return false
 }
 
-func (x *SimConfigFileListener) GetWatchPatterns() []string {
+func (x *SimConfigListener) GetWatchPatterns() []string {
 	if x != nil {
 		return x.WatchPatterns
 	}
 	return nil
 }
 
-func (x *SimConfigFileListener) GetIgnorePatterns() []string {
+func (x *SimConfigListener) GetIgnorePatterns() []string {
 	if x != nil {
 		return x.IgnorePatterns
 	}
 	return nil
 }
 
-func (x *SimConfigFileListener) GetSeedDataPath() string {
+func (x *SimConfigListener) GetSeedDataPath() string {
 	if x != nil && x.SeedDataPath != nil {
 		return *x.SeedDataPath
 	}
 	return ""
 }
 
-func (x *SimConfigFileListener) GetVolumes() []string {
+func (x *SimConfigListener) GetSeedDataPaths() []string {
+	if x != nil {
+		return x.SeedDataPaths
+	}
+	return nil
+}
+
+func (x *SimConfigListener) GetVolumes() []string {
 	if x != nil {
 		return x.Volumes
 	}
@@ -525,19 +475,18 @@ func (x *SimConfigFileListener) GetVolumes() []string {
 
 // Configuration for a simulator dataset
 type SimConfigDataset struct {
-	state    protoimpl.MessageState       `protogen:"open.v1"`
-	Compute  *SimConfigCompute            `protobuf:"bytes,1,opt,name=compute,proto3" json:"compute,omitempty"`
-	Metadata *SimConfigMetadata           `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	Services map[string]*SimConfigService `protobuf:"bytes,3,rep,name=services,proto3" json:"services,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Listeners are stored as JSON strings for flexibility
-	Listeners     map[string]string `protobuf:"bytes,4,rep,name=listeners,proto3" json:"listeners,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state         protoimpl.MessageState        `protogen:"open.v1"`
+	Compute       *SimConfigCompute             `protobuf:"bytes,1,opt,name=compute,proto3" json:"compute,omitempty"`
+	Metadata      *SimConfigMetadata            `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Services      map[string]*SimConfigService  `protobuf:"bytes,3,rep,name=services,proto3" json:"services,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Listeners     map[string]*SimConfigListener `protobuf:"bytes,4,rep,name=listeners,proto3" json:"listeners,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SimConfigDataset) Reset() {
 	*x = SimConfigDataset{}
-	mi := &file_plato_proto_msgTypes[6]
+	mi := &file_proto_plato_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +498,7 @@ func (x *SimConfigDataset) String() string {
 func (*SimConfigDataset) ProtoMessage() {}
 
 func (x *SimConfigDataset) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[6]
+	mi := &file_proto_plato_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,7 +511,7 @@ func (x *SimConfigDataset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimConfigDataset.ProtoReflect.Descriptor instead.
 func (*SimConfigDataset) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{6}
+	return file_proto_plato_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SimConfigDataset) GetCompute() *SimConfigCompute {
@@ -586,7 +535,7 @@ func (x *SimConfigDataset) GetServices() map[string]*SimConfigService {
 	return nil
 }
 
-func (x *SimConfigDataset) GetListeners() map[string]string {
+func (x *SimConfigDataset) GetListeners() map[string]*SimConfigListener {
 	if x != nil {
 		return x.Listeners
 	}
@@ -604,7 +553,7 @@ type PlatoConfig struct {
 
 func (x *PlatoConfig) Reset() {
 	*x = PlatoConfig{}
-	mi := &file_plato_proto_msgTypes[7]
+	mi := &file_proto_plato_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -616,7 +565,7 @@ func (x *PlatoConfig) String() string {
 func (*PlatoConfig) ProtoMessage() {}
 
 func (x *PlatoConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[7]
+	mi := &file_proto_plato_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -629,7 +578,7 @@ func (x *PlatoConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlatoConfig.ProtoReflect.Descriptor instead.
 func (*PlatoConfig) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{7}
+	return file_proto_plato_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PlatoConfig) GetService() string {
@@ -661,7 +610,7 @@ type Sandbox struct {
 
 func (x *Sandbox) Reset() {
 	*x = Sandbox{}
-	mi := &file_plato_proto_msgTypes[8]
+	mi := &file_proto_plato_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -673,7 +622,7 @@ func (x *Sandbox) String() string {
 func (*Sandbox) ProtoMessage() {}
 
 func (x *Sandbox) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[8]
+	mi := &file_proto_plato_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,7 +635,7 @@ func (x *Sandbox) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sandbox.ProtoReflect.Descriptor instead.
 func (*Sandbox) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{8}
+	return file_proto_plato_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Sandbox) GetJobId() string {
@@ -743,7 +692,7 @@ type CreateSnapshotRequest struct {
 
 func (x *CreateSnapshotRequest) Reset() {
 	*x = CreateSnapshotRequest{}
-	mi := &file_plato_proto_msgTypes[9]
+	mi := &file_proto_plato_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -755,7 +704,7 @@ func (x *CreateSnapshotRequest) String() string {
 func (*CreateSnapshotRequest) ProtoMessage() {}
 
 func (x *CreateSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[9]
+	mi := &file_proto_plato_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -768,7 +717,7 @@ func (x *CreateSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*CreateSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{9}
+	return file_proto_plato_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CreateSnapshotRequest) GetService() string {
@@ -807,7 +756,7 @@ type CreateSnapshotResponse struct {
 
 func (x *CreateSnapshotResponse) Reset() {
 	*x = CreateSnapshotResponse{}
-	mi := &file_plato_proto_msgTypes[10]
+	mi := &file_proto_plato_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -819,7 +768,7 @@ func (x *CreateSnapshotResponse) String() string {
 func (*CreateSnapshotResponse) ProtoMessage() {}
 
 func (x *CreateSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[10]
+	mi := &file_proto_plato_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -832,7 +781,7 @@ func (x *CreateSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*CreateSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{10}
+	return file_proto_plato_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CreateSnapshotResponse) GetArtifactId() string {
@@ -890,7 +839,7 @@ type StartWorkerRequest struct {
 
 func (x *StartWorkerRequest) Reset() {
 	*x = StartWorkerRequest{}
-	mi := &file_plato_proto_msgTypes[11]
+	mi := &file_proto_plato_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -902,7 +851,7 @@ func (x *StartWorkerRequest) String() string {
 func (*StartWorkerRequest) ProtoMessage() {}
 
 func (x *StartWorkerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[11]
+	mi := &file_proto_plato_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -915,7 +864,7 @@ func (x *StartWorkerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartWorkerRequest.ProtoReflect.Descriptor instead.
 func (*StartWorkerRequest) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{11}
+	return file_proto_plato_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StartWorkerRequest) GetService() string {
@@ -958,7 +907,7 @@ type StartWorkerResponse struct {
 
 func (x *StartWorkerResponse) Reset() {
 	*x = StartWorkerResponse{}
-	mi := &file_plato_proto_msgTypes[12]
+	mi := &file_proto_plato_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +919,7 @@ func (x *StartWorkerResponse) String() string {
 func (*StartWorkerResponse) ProtoMessage() {}
 
 func (x *StartWorkerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plato_proto_msgTypes[12]
+	mi := &file_proto_plato_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +932,7 @@ func (x *StartWorkerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartWorkerResponse.ProtoReflect.Descriptor instead.
 func (*StartWorkerResponse) Descriptor() ([]byte, []int) {
-	return file_plato_proto_rawDescGZIP(), []int{12}
+	return file_proto_plato_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StartWorkerResponse) GetStatus() string {
@@ -1007,11 +956,11 @@ func (x *StartWorkerResponse) GetCorrelationId() string {
 	return ""
 }
 
-var File_plato_proto protoreflect.FileDescriptor
+var File_proto_plato_proto protoreflect.FileDescriptor
 
-const file_plato_proto_rawDesc = "" +
+const file_proto_plato_proto_rawDesc = "" +
 	"\n" +
-	"\vplato.proto\x12\x05plato\"\x9f\x01\n" +
+	"\x11proto/plato.proto\x12\x05plato\"\x9f\x01\n" +
 	"\x10SimConfigCompute\x12\x12\n" +
 	"\x04cpus\x18\x01 \x01(\x05R\x04cpus\x12\x16\n" +
 	"\x06memory\x18\x02 \x01(\x05R\x06memory\x12\x12\n" +
@@ -1038,29 +987,39 @@ const file_plato_proto_rawDesc = "" +
 	"\x1brequired_healthy_containers\x18\x03 \x03(\tR\x19requiredHealthyContainers\x125\n" +
 	"\x14healthy_wait_timeout\x18\x04 \x01(\x05H\x01R\x12healthyWaitTimeout\x88\x01\x01B\a\n" +
 	"\x05_fileB\x17\n" +
-	"\x15_healthy_wait_timeout\"\x91\x02\n" +
-	"\x13SimConfigDBListener\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x17\n" +
-	"\adb_type\x18\x02 \x01(\tR\x06dbType\x12\x17\n" +
-	"\adb_host\x18\x03 \x01(\tR\x06dbHost\x12\x17\n" +
-	"\adb_port\x18\x04 \x01(\x05R\x06dbPort\x12\x17\n" +
-	"\adb_user\x18\x05 \x01(\tR\x06dbUser\x12\x1f\n" +
-	"\vdb_password\x18\x06 \x01(\tR\n" +
-	"dbPassword\x12\x1f\n" +
-	"\vdb_database\x18\a \x01(\tR\n" +
-	"dbDatabase\x12&\n" +
-	"\x0fseed_data_paths\x18\b \x03(\tR\rseedDataPaths\x12\x18\n" +
-	"\avolumes\x18\t \x03(\tR\avolumes\"\x97\x02\n" +
-	"\x15SimConfigFileListener\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1d\n" +
+	"\x15_healthy_wait_timeout\"\xfa\x04\n" +
+	"\x11SimConfigListener\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1c\n" +
+	"\adb_type\x18\x02 \x01(\tH\x00R\x06dbType\x88\x01\x01\x12\x1c\n" +
+	"\adb_host\x18\x03 \x01(\tH\x01R\x06dbHost\x88\x01\x01\x12\x1c\n" +
+	"\adb_port\x18\x04 \x01(\x05H\x02R\x06dbPort\x88\x01\x01\x12\x1c\n" +
+	"\adb_user\x18\x05 \x01(\tH\x03R\x06dbUser\x88\x01\x01\x12$\n" +
+	"\vdb_password\x18\x06 \x01(\tH\x04R\n" +
+	"dbPassword\x88\x01\x01\x12$\n" +
+	"\vdb_database\x18\a \x01(\tH\x05R\n" +
+	"dbDatabase\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"target_dir\x18\x02 \x01(\tR\ttargetDir\x12#\n" +
-	"\rwatch_enabled\x18\x03 \x01(\bR\fwatchEnabled\x12%\n" +
-	"\x0ewatch_patterns\x18\x04 \x03(\tR\rwatchPatterns\x12'\n" +
-	"\x0fignore_patterns\x18\x05 \x03(\tR\x0eignorePatterns\x12)\n" +
-	"\x0eseed_data_path\x18\x06 \x01(\tH\x00R\fseedDataPath\x88\x01\x01\x12\x18\n" +
-	"\avolumes\x18\a \x03(\tR\avolumesB\x11\n" +
-	"\x0f_seed_data_path\"\x98\x03\n" +
+	"target_dir\x18\n" +
+	" \x01(\tH\x06R\ttargetDir\x88\x01\x01\x12(\n" +
+	"\rwatch_enabled\x18\v \x01(\bH\aR\fwatchEnabled\x88\x01\x01\x12%\n" +
+	"\x0ewatch_patterns\x18\f \x03(\tR\rwatchPatterns\x12'\n" +
+	"\x0fignore_patterns\x18\r \x03(\tR\x0eignorePatterns\x12)\n" +
+	"\x0eseed_data_path\x18\x0e \x01(\tH\bR\fseedDataPath\x88\x01\x01\x12&\n" +
+	"\x0fseed_data_paths\x18\x14 \x03(\tR\rseedDataPaths\x12\x18\n" +
+	"\avolumes\x18\x15 \x03(\tR\avolumesB\n" +
+	"\n" +
+	"\b_db_typeB\n" +
+	"\n" +
+	"\b_db_hostB\n" +
+	"\n" +
+	"\b_db_portB\n" +
+	"\n" +
+	"\b_db_userB\x0e\n" +
+	"\f_db_passwordB\x0e\n" +
+	"\f_db_databaseB\r\n" +
+	"\v_target_dirB\x10\n" +
+	"\x0e_watch_enabledB\x11\n" +
+	"\x0f_seed_data_path\"\xb2\x03\n" +
 	"\x10SimConfigDataset\x121\n" +
 	"\acompute\x18\x01 \x01(\v2\x17.plato.SimConfigComputeR\acompute\x124\n" +
 	"\bmetadata\x18\x02 \x01(\v2\x18.plato.SimConfigMetadataR\bmetadata\x12A\n" +
@@ -1068,10 +1027,10 @@ const file_plato_proto_rawDesc = "" +
 	"\tlisteners\x18\x04 \x03(\v2&.plato.SimConfigDataset.ListenersEntryR\tlisteners\x1aT\n" +
 	"\rServicesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.plato.SimConfigServiceR\x05value:\x028\x01\x1a<\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.plato.SimConfigServiceR\x05value:\x028\x01\x1aV\n" +
 	"\x0eListenersEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcc\x01\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12.\n" +
+	"\x05value\x18\x02 \x01(\v2\x18.plato.SimConfigListenerR\x05value:\x028\x01\"\xcc\x01\n" +
 	"\vPlatoConfig\x12\x1d\n" +
 	"\aservice\x18\x01 \x01(\tH\x00R\aservice\x88\x01\x01\x12<\n" +
 	"\bdatasets\x18\x02 \x03(\v2 .plato.PlatoConfig.DatasetsEntryR\bdatasets\x1aT\n" +
@@ -1121,80 +1080,80 @@ const file_plato_proto_rawDesc = "" +
 	"\x0ecorrelation_id\x18\x03 \x01(\tR\rcorrelationIdB\x12Z\x10plato-sdk/modelsb\x06proto3"
 
 var (
-	file_plato_proto_rawDescOnce sync.Once
-	file_plato_proto_rawDescData []byte
+	file_proto_plato_proto_rawDescOnce sync.Once
+	file_proto_plato_proto_rawDescData []byte
 )
 
-func file_plato_proto_rawDescGZIP() []byte {
-	file_plato_proto_rawDescOnce.Do(func() {
-		file_plato_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_plato_proto_rawDesc), len(file_plato_proto_rawDesc)))
+func file_proto_plato_proto_rawDescGZIP() []byte {
+	file_proto_plato_proto_rawDescOnce.Do(func() {
+		file_proto_plato_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_plato_proto_rawDesc), len(file_proto_plato_proto_rawDesc)))
 	})
-	return file_plato_proto_rawDescData
+	return file_proto_plato_proto_rawDescData
 }
 
-var file_plato_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
-var file_plato_proto_goTypes = []any{
+var file_proto_plato_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_proto_plato_proto_goTypes = []any{
 	(*SimConfigCompute)(nil),       // 0: plato.SimConfigCompute
 	(*SimConfigMetadata)(nil),      // 1: plato.SimConfigMetadata
 	(*Variable)(nil),               // 2: plato.Variable
 	(*SimConfigService)(nil),       // 3: plato.SimConfigService
-	(*SimConfigDBListener)(nil),    // 4: plato.SimConfigDBListener
-	(*SimConfigFileListener)(nil),  // 5: plato.SimConfigFileListener
-	(*SimConfigDataset)(nil),       // 6: plato.SimConfigDataset
-	(*PlatoConfig)(nil),            // 7: plato.PlatoConfig
-	(*Sandbox)(nil),                // 8: plato.Sandbox
-	(*CreateSnapshotRequest)(nil),  // 9: plato.CreateSnapshotRequest
-	(*CreateSnapshotResponse)(nil), // 10: plato.CreateSnapshotResponse
-	(*StartWorkerRequest)(nil),     // 11: plato.StartWorkerRequest
-	(*StartWorkerResponse)(nil),    // 12: plato.StartWorkerResponse
-	nil,                            // 13: plato.SimConfigDataset.ServicesEntry
-	nil,                            // 14: plato.SimConfigDataset.ListenersEntry
-	nil,                            // 15: plato.PlatoConfig.DatasetsEntry
+	(*SimConfigListener)(nil),      // 4: plato.SimConfigListener
+	(*SimConfigDataset)(nil),       // 5: plato.SimConfigDataset
+	(*PlatoConfig)(nil),            // 6: plato.PlatoConfig
+	(*Sandbox)(nil),                // 7: plato.Sandbox
+	(*CreateSnapshotRequest)(nil),  // 8: plato.CreateSnapshotRequest
+	(*CreateSnapshotResponse)(nil), // 9: plato.CreateSnapshotResponse
+	(*StartWorkerRequest)(nil),     // 10: plato.StartWorkerRequest
+	(*StartWorkerResponse)(nil),    // 11: plato.StartWorkerResponse
+	nil,                            // 12: plato.SimConfigDataset.ServicesEntry
+	nil,                            // 13: plato.SimConfigDataset.ListenersEntry
+	nil,                            // 14: plato.PlatoConfig.DatasetsEntry
 }
-var file_plato_proto_depIdxs = []int32{
+var file_proto_plato_proto_depIdxs = []int32{
 	2,  // 0: plato.SimConfigMetadata.variables:type_name -> plato.Variable
 	0,  // 1: plato.SimConfigDataset.compute:type_name -> plato.SimConfigCompute
 	1,  // 2: plato.SimConfigDataset.metadata:type_name -> plato.SimConfigMetadata
-	13, // 3: plato.SimConfigDataset.services:type_name -> plato.SimConfigDataset.ServicesEntry
-	14, // 4: plato.SimConfigDataset.listeners:type_name -> plato.SimConfigDataset.ListenersEntry
-	15, // 5: plato.PlatoConfig.datasets:type_name -> plato.PlatoConfig.DatasetsEntry
-	6,  // 6: plato.StartWorkerRequest.plato_dataset_config:type_name -> plato.SimConfigDataset
+	12, // 3: plato.SimConfigDataset.services:type_name -> plato.SimConfigDataset.ServicesEntry
+	13, // 4: plato.SimConfigDataset.listeners:type_name -> plato.SimConfigDataset.ListenersEntry
+	14, // 5: plato.PlatoConfig.datasets:type_name -> plato.PlatoConfig.DatasetsEntry
+	5,  // 6: plato.StartWorkerRequest.plato_dataset_config:type_name -> plato.SimConfigDataset
 	3,  // 7: plato.SimConfigDataset.ServicesEntry.value:type_name -> plato.SimConfigService
-	6,  // 8: plato.PlatoConfig.DatasetsEntry.value:type_name -> plato.SimConfigDataset
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	4,  // 8: plato.SimConfigDataset.ListenersEntry.value:type_name -> plato.SimConfigListener
+	5,  // 9: plato.PlatoConfig.DatasetsEntry.value:type_name -> plato.SimConfigDataset
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
-func init() { file_plato_proto_init() }
-func file_plato_proto_init() {
-	if File_plato_proto != nil {
+func init() { file_proto_plato_proto_init() }
+func file_proto_plato_proto_init() {
+	if File_proto_plato_proto != nil {
 		return
 	}
-	file_plato_proto_msgTypes[1].OneofWrappers = []any{}
-	file_plato_proto_msgTypes[3].OneofWrappers = []any{}
-	file_plato_proto_msgTypes[5].OneofWrappers = []any{}
-	file_plato_proto_msgTypes[7].OneofWrappers = []any{}
-	file_plato_proto_msgTypes[9].OneofWrappers = []any{}
-	file_plato_proto_msgTypes[10].OneofWrappers = []any{}
-	file_plato_proto_msgTypes[11].OneofWrappers = []any{}
+	file_proto_plato_proto_msgTypes[1].OneofWrappers = []any{}
+	file_proto_plato_proto_msgTypes[3].OneofWrappers = []any{}
+	file_proto_plato_proto_msgTypes[4].OneofWrappers = []any{}
+	file_proto_plato_proto_msgTypes[6].OneofWrappers = []any{}
+	file_proto_plato_proto_msgTypes[8].OneofWrappers = []any{}
+	file_proto_plato_proto_msgTypes[9].OneofWrappers = []any{}
+	file_proto_plato_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plato_proto_rawDesc), len(file_plato_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_plato_proto_rawDesc), len(file_proto_plato_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_plato_proto_goTypes,
-		DependencyIndexes: file_plato_proto_depIdxs,
-		MessageInfos:      file_plato_proto_msgTypes,
+		GoTypes:           file_proto_plato_proto_goTypes,
+		DependencyIndexes: file_proto_plato_proto_depIdxs,
+		MessageInfos:      file_proto_plato_proto_msgTypes,
 	}.Build()
-	File_plato_proto = out.File
-	file_plato_proto_goTypes = nil
-	file_plato_proto_depIdxs = nil
+	File_proto_plato_proto = out.File
+	file_proto_plato_proto_goTypes = nil
+	file_proto_plato_proto_depIdxs = nil
 }

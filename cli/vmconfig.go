@@ -478,7 +478,7 @@ func (m VMConfigModel) buildConfig(cpu, memory, disk int) models.SimConfigDatase
 		Compute:   compute,
 		Metadata:  metadata,
 		Services:  map[string]*models.SimConfigService{},
-		Listeners: map[string]string{},
+		Listeners: map[string]*models.SimConfigListener{},
 	}
 }
 

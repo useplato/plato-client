@@ -102,42 +102,33 @@ func GetDBConfigFromPlatoConfig(dataset string) (DBConfig, bool) {
 	}
 
 	// Look for a DB listener in the dataset's listeners
-	// Listeners are now stored as map[string]string where values are JSON
-	for listenerName, listenerJSON := range datasetConfig.Listeners {
-		if listenerJSON == "" {
-			continue
-		}
-
-		// Parse the JSON string into a map
-		var listenerMap map[string]interface{}
-		if err := json.Unmarshal([]byte(listenerJSON), &listenerMap); err != nil {
-			LogDebug("Failed to parse listener '%s': %v", listenerName, err)
+	for _, listener := range datasetConfig.Listeners {
+		if listener == nil {
 			continue
 		}
 
 		// Check if this is a DB listener
-		listenerType, ok := listenerMap["type"].(string)
-		if !ok || listenerType != "db" {
+		if listener.Type != "db" {
 			continue
 		}
 
-		// Extract DB configuration
+		// Extract DB configuration from the structured listener
 		dbConfig := DBConfig{}
 
-		if dbType, ok := listenerMap["db_type"].(string); ok {
-			dbConfig.DBType = dbType
+		if listener.DbType != nil {
+			dbConfig.DBType = *listener.DbType
 		}
-		if dbUser, ok := listenerMap["db_user"].(string); ok {
-			dbConfig.User = dbUser
+		if listener.DbUser != nil {
+			dbConfig.User = *listener.DbUser
 		}
-		if dbPassword, ok := listenerMap["db_password"].(string); ok {
-			dbConfig.Password = dbPassword
+		if listener.DbPassword != nil {
+			dbConfig.Password = *listener.DbPassword
 		}
-		if dbPort, ok := listenerMap["db_port"].(float64); ok {
-			dbConfig.DestPort = int(dbPort)
+		if listener.DbPort != nil {
+			dbConfig.DestPort = int(*listener.DbPort)
 		}
-		if dbDatabase, ok := listenerMap["db_database"].(string); ok {
-			dbConfig.Databases = []string{dbDatabase}
+		if listener.DbDatabase != nil {
+			dbConfig.Databases = []string{*listener.DbDatabase}
 		}
 
 		LogDebug("Found DB config in plato-config.yml for dataset '%s': type=%s, port=%d", dataset, dbConfig.DBType, dbConfig.DestPort)

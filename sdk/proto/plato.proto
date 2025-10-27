@@ -39,28 +39,28 @@ message SimConfigService {
   optional int32 healthy_wait_timeout = 4;
 }
 
-// Database listener configuration
-message SimConfigDBListener {
+// Listener configuration - can be DB or File type
+message SimConfigListener {
   string type = 1;
-  string db_type = 2;
-  string db_host = 3;
-  int32 db_port = 4;
-  string db_user = 5;
-  string db_password = 6;
-  string db_database = 7;
-  repeated string seed_data_paths = 8;
-  repeated string volumes = 9;
-}
 
-// File listener configuration
-message SimConfigFileListener {
-  string type = 1;
-  string target_dir = 2;
-  bool watch_enabled = 3;
-  repeated string watch_patterns = 4;
-  repeated string ignore_patterns = 5;
-  optional string seed_data_path = 6;
-  repeated string volumes = 7;
+  // DB listener fields
+  optional string db_type = 2;
+  optional string db_host = 3;
+  optional int32 db_port = 4;
+  optional string db_user = 5;
+  optional string db_password = 6;
+  optional string db_database = 7;
+
+  // File listener fields
+  optional string target_dir = 10;
+  optional bool watch_enabled = 11;
+  repeated string watch_patterns = 12;
+  repeated string ignore_patterns = 13;
+  optional string seed_data_path = 14;
+
+  // Common fields
+  repeated string seed_data_paths = 20;
+  repeated string volumes = 21;
 }
 
 // Configuration for a simulator dataset
@@ -68,8 +68,7 @@ message SimConfigDataset {
   SimConfigCompute compute = 1;
   SimConfigMetadata metadata = 2;
   map<string, SimConfigService> services = 3;
-  // Listeners are stored as JSON strings for flexibility
-  map<string, string> listeners = 4;
+  map<string, SimConfigListener> listeners = 4;
 }
 
 // Complete plato-config.yml structure
