@@ -40,6 +40,10 @@ where = ["src"]
 [tool.setuptools.package-data]
 plato = ["*.so", "*.dylib", "*.dll"]
 
+# Mark wheel as platform-specific (not universal)
+[tool.wheel]
+platlib = true
+
 [tool.uv.workspace]
 members = ["example"]
 
