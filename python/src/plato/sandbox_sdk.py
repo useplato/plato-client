@@ -125,7 +125,7 @@ class PlatoSandboxClient:
         # Initialize client
         >>> client = PlatoSandboxClient('https://plato.so/api', 'your-api-key')
 
-        # Create sandbox from configuration
+        # Create sandbox from configuration (waits until ready by default)
         >>> from plato.models.sandbox import SimConfigDataset, SimConfigCompute, SimConfigMetadata
         >>> config = SimConfigDataset(
         ...     compute=SimConfigCompute(
@@ -135,11 +135,11 @@ class PlatoSandboxClient:
         ...     metadata=SimConfigMetadata(name='My Sandbox')
         ... )
         >>> sandbox = client.create_sandbox(config=config)
-        >>> print(f"Created: {sandbox.public_id}")
+        >>> print(f"Sandbox ready! Status: {sandbox.status}")  # status = "running"
 
-        # Create sandbox from artifact ID
+        # Create sandbox from artifact ID (also waits by default)
         >>> sandbox = client.create_sandbox(artifact_id="art_123456")
-        >>> print(f"URL: {sandbox.url}")
+        >>> print(f"URL: {sandbox.url}, Status: {sandbox.status}")
 
         # Close sandbox when done
         >>> client.close_sandbox(sandbox.public_id)
@@ -167,7 +167,7 @@ class PlatoSandboxClient:
         alias: str = "sandbox",
         artifact_id: Optional[str] = None,
         service: str = "",
-        wait: bool = False,
+        wait: bool = True,
         timeout: int = 600
     ) -> Sandbox:
         """
@@ -184,7 +184,7 @@ class PlatoSandboxClient:
             alias: Human-readable alias (default: 'sandbox')
             artifact_id: Optional artifact ID to launch from snapshot
             service: Service name
-            wait: If True, blocks until sandbox is ready (default: False)
+            wait: If True, blocks until sandbox is ready (default: True)
             timeout: Timeout in seconds when wait=True (default: 600)
 
         Returns:
@@ -203,9 +203,14 @@ class PlatoSandboxClient:
             ... )
             >>> sandbox = client.create_sandbox(config=config)
 
-            # Create from artifact ID and wait until ready
-            >>> sandbox = client.create_sandbox(artifact_id="art_123456", wait=True)
+            # Create from artifact ID and wait until ready (default behavior)
+            >>> sandbox = client.create_sandbox(artifact_id="art_123456")
             >>> print(f"Sandbox ready at {sandbox.url}")
+
+            # Create without waiting (for async workflows)
+            >>> sandbox = client.create_sandbox(artifact_id="art_123456", wait=False)
+            >>> # Do other work...
+            >>> client.wait_until_ready(sandbox.correlation_id)
         """
         # Validation: Must provide either config or artifact_id
         if config is None and artifact_id is None:
@@ -264,6 +269,8 @@ class PlatoSandboxClient:
         # Wait for sandbox to be ready if requested
         if wait and sandbox.correlation_id:
             self.wait_until_ready(sandbox.correlation_id, timeout=timeout)
+            # Update status to "running" once ready
+            sandbox.status = "running"
 
         return sandbox
 
