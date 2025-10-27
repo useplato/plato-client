@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'sdk/**'
+      - 'cli/**'
+      - 'scripts/**'
       - '.github/workflows/release.yml'
 
 permissions:
@@ -26,10 +28,18 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc-gen-go
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
       - name: Get current version
         id: get_version
         run: |
-          cd sdk/cmd/plato
+          cd cli
           if [ -f VERSION ]; then
             CURRENT_VERSION=$(cat VERSION | tr -d '\n')
             echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
@@ -91,7 +101,7 @@ jobs:
 
       - name: Update VERSION file
         run: |
-          cd sdk/cmd/plato
+          cd cli
           echo "${{ steps.new_version.outputs.version }}" > VERSION
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -99,15 +109,18 @@ jobs:
           git commit -m "chore: bump version to ${{ steps.new_version.outputs.version }}"
           git push
 
-      - name: Build binaries
-        run: |
-          cd sdk/cmd/plato
+      - name: Generate protobuf code
+        run: ./scripts/generate-proto.sh
 
+      - name: Build CLI for multiple platforms
+        run: |
           VERSION="${{ steps.new_version.outputs.version }}"
           GIT_COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 
-          LDFLAGS="-X 'plato-sdk/cmd/plato/internal/ui/components.Version=${VERSION}' -X 'plato-sdk/cmd/plato/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-sdk/cmd/plato/internal/ui/components.BuildTime=${BUILD_TIME}'"
+          LDFLAGS="-X 'plato-cli/internal/ui/components.Version=${VERSION}' -X 'plato-cli/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-cli/internal/ui/components.BuildTime=${BUILD_TIME}'"
+
+          cd cli
 
           # Build for multiple platforms
           GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o plato-darwin-amd64
@@ -120,6 +133,26 @@ jobs:
           tar -czf plato-darwin-arm64.tar.gz plato-darwin-arm64
           tar -czf plato-linux-amd64.tar.gz plato-linux-amd64
           tar -czf plato-linux-arm64.tar.gz plato-linux-arm64
+
+      - name: Build C bindings for multiple platforms
+        run: |
+          cd sdk/bindings/c
+
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 go build -buildmode=c-shared -o libplato-linux-amd64.so .
+          tar -czf libplato-linux-amd64.tar.gz libplato-linux-amd64.so libplato-linux-amd64.h
+
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 go build -buildmode=c-shared -o libplato-linux-arm64.so .
+          tar -czf libplato-linux-arm64.tar.gz libplato-linux-arm64.so libplato-linux-arm64.h
+
+          # macOS AMD64
+          GOOS=darwin GOARCH=amd64 go build -buildmode=c-shared -o libplato-darwin-amd64.dylib .
+          tar -czf libplato-darwin-amd64.tar.gz libplato-darwin-amd64.dylib libplato-darwin-amd64.h
+
+          # macOS ARM64
+          GOOS=darwin GOARCH=arm64 go build -buildmode=c-shared -o libplato-darwin-arm64.dylib .
+          tar -czf libplato-darwin-arm64.tar.gz libplato-darwin-arm64.dylib libplato-darwin-arm64.h
 
       - name: Generate release notes
         id: release_notes
@@ -141,7 +174,7 @@ jobs:
 
           cat >> release_notes.md << 'EOF'
 
-          ## Installation
+          ## CLI Installation
 
           ### macOS (Apple Silicon)
           ```bash
@@ -170,6 +203,16 @@ jobs:
           chmod +x plato-linux-arm64
           sudo mv plato-linux-arm64 /usr/local/bin/plato
           ```
+
+          ## C Bindings
+
+          C shared libraries are also available for all platforms. Download and extract:
+
+          - `libplato-darwin-arm64.tar.gz` - macOS Apple Silicon
+          - `libplato-darwin-amd64.tar.gz` - macOS Intel
+          - `libplato-linux-amd64.tar.gz` - Linux x86_64
+          - `libplato-linux-arm64.tar.gz` - Linux ARM64
+
           EOF
 
       - name: Create GitHub Release
@@ -181,9 +224,13 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            sdk/cmd/plato/plato-darwin-amd64.tar.gz
-            sdk/cmd/plato/plato-darwin-arm64.tar.gz
-            sdk/cmd/plato/plato-linux-amd64.tar.gz
-            sdk/cmd/plato/plato-linux-arm64.tar.gz
+            cli/plato-darwin-amd64.tar.gz
+            cli/plato-darwin-arm64.tar.gz
+            cli/plato-linux-amd64.tar.gz
+            cli/plato-linux-arm64.tar.gz
+            sdk/bindings/c/libplato-darwin-amd64.tar.gz
+            sdk/bindings/c/libplato-darwin-arm64.tar.gz
+            sdk/bindings/c/libplato-linux-amd64.tar.gz
+            sdk/bindings/c/libplato-linux-arm64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

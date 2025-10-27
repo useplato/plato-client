@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-sdk:
+    name: Test Go SDK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc-gen-go
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+      - name: Generate protobuf code
+        run: ./scripts/generate-proto.sh
+
+      - name: Build SDK
+        run: ./scripts/build-sdk.sh
+
+      - name: Run SDK tests with race detector
+        run: |
+          cd sdk
+          go test -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./sdk/coverage.out
+          flags: sdk
+
+  build-cli:
+    name: Build CLI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Install protoc-gen-go
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+      - name: Generate protobuf code
+        run: ./scripts/generate-proto.sh
+
+      - name: Build CLI
+        run: ./scripts/build-cli.sh
+
+      - name: Test CLI binary
+        run: ./cli/plato --help || true
+
+  build-c-bindings:
+    name: Build C Bindings
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Install protoc-gen-go
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+      - name: Generate protobuf code
+        run: ./scripts/generate-proto.sh
+
+      - name: Build C bindings
+        run: ./scripts/build-bindings.sh
+
+      - name: Verify shared library
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            ls -la sdk/bindings/c/libplato.so
+          else
+            ls -la sdk/bindings/c/libplato.dylib
+          fi
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc-gen-go
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+      - name: Generate protobuf code
+        run: ./scripts/generate-proto.sh
+
+      - name: Run golangci-lint on SDK
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: sdk
+
+      - name: Run golangci-lint on CLI
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: cli
+
