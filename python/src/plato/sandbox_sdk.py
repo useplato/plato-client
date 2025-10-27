@@ -202,7 +202,7 @@ class PlatoSandboxClient:
 
     def create_sandbox(
         self,
-        config: Optional[Union[SimConfigDataset, Dict[str, Any]]] = None,
+        config: Optional[SimConfigDataset] = None,
         dataset: str = "base",
         alias: str = "sandbox",
         artifact_id: Optional[str] = None,
@@ -280,10 +280,7 @@ class PlatoSandboxClient:
             config_json = json.dumps(config_dict)
         elif config is not None:
             # Convert config to dict if it's a Pydantic model
-            if isinstance(config, SimConfigDataset):
-                config_dict = config.model_dump(exclude_none=True)
-            else:
-                config_dict = config
+            config_dict = config.model_dump(exclude_none=True)
             config_json = json.dumps(config_dict)
         else:
             config_json = "{}"
