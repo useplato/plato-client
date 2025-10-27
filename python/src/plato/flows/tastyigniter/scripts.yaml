@@ -1,0 +1,185 @@
+name: tastyigniter
+reset_timeout: 60000
+environment_ready_timeout: 300000
+datasets:
+- name: base
+  description: Base dataset with admin credentials
+  variables:
+    username: admin@example.com
+    password: Password1!
+    wrong_password: wrongpassword
+  flows:
+  - login
+- name: consumer
+  description: Consumer dataset with consumer credentials
+  variables:
+    username: plato@gmail.com
+    password: Password1!
+    wrong_password: wrongpassword
+  flows:
+  - consumer
+flows:
+- name: login
+  description: Admin login flow for TastyIgniter admin panel
+  steps:
+  - type: navigate
+    description: Navigate to the admin login page
+    url: /admin/login
+  - type: wait
+    description: Wait for page to load
+    duration: 3000
+  - type: screenshot
+    description: Screenshot to see what page loaded
+    filename: 00_initial_page.png
+  - type: wait_for_selector
+    description: Wait for login form with password field to appear
+    selector: '#input-password, input[name="password"][type="password"]'
+    timeout: 30000
+  - type: wait
+    description: Wait for form to fully render
+    duration: 2000
+  - type: screenshot
+    description: Screenshot of admin login page before filling credentials
+    filename: 01_before_login.png
+  - type: fill
+    description: Fill email field in admin login form
+    selector: '#input-email, input[name="email"][type="email"]'
+    value: admin@example.com
+  - type: wait
+    description: Wait for form to sync email value
+    duration: 2000
+  - type: wait_for_selector
+    description: Wait for password field
+    selector: '#input-password, input[name="password"][type="password"]'
+    timeout: 30000
+  - type: verify
+    description: Verify password field is visible
+    selector: '#input-password, input[name="password"][type="password"]'
+    verify_type: element_visible
+  - type: fill
+    description: Fill password field
+    selector: '#input-password, input[name="password"][type="password"]'
+    value: Password1!
+  - type: wait
+    description: Wait for form to sync password value
+    duration: 2000
+  - type: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - type: wait
+    description: Brief wait before clicking submit
+    duration: 1000
+  - type: wait_for_selector
+    description: Wait for login submit button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary'
+    timeout: 5000
+  - type: click
+    description: Click login submit button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary'
+  - type: wait
+    description: Wait for login to process
+    duration: 5000
+  - type: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - type: wait
+    description: Wait for post-login page to load
+    duration: 2000
+  - type: verify_no_errors
+    description: Verify no login errors are displayed
+    error_selectors:
+    - .alert-danger
+    - .alert-error
+    - .error-message
+    - .invalid-feedback
+    - .text-danger
+    - '[role="alert"]'
+  - type: verify
+    description: Verify logged-in admin interface elements are present
+    selector: 'a:has-text("Logout"), .navbar-right, #admin-navbar, .main-header'
+    verify_type: element_exists
+  - type: screenshot
+    description: Screenshot showing logged-in admin state verified
+    filename: 04_logged_in_verified.png
+- name: consumer
+  description: Consumer login flow for TastyIgniter customer login
+  steps:
+  - type: navigate
+    description: Navigate to the home page
+    url: /
+  - type: wait
+    description: Wait for page to load
+    duration: 2000
+  - type: click
+    description: Click the Login link in navbar
+    selector: '#navbar-login, a[href*="/login"]:has-text("Login")'
+  - type: wait_for_selector
+    description: Wait for login form with password field to appear
+    selector: 'input[type="password"]'
+    timeout: 30000
+  - type: wait
+    description: Wait for form to fully render
+    duration: 2000
+  - type: screenshot
+    description: Screenshot of login page before filling credentials
+    filename: 01_before_login.png
+  - type: fill
+    description: Fill email field with username in login form
+    selector: 'input[type="email"][placeholder*="Email"]'
+    value: plato@gmail.com
+  - type: wait
+    description: Wait for Livewire to sync email value
+    duration: 2000
+  - type: wait_for_selector
+    description: Wait for password field
+    selector: 'input[type="password"]'
+    timeout: 30000
+  - type: verify
+    description: Verify password field is visible
+    selector: 'input[type="password"]'
+    verify_type: element_visible
+  - type: fill
+    description: Fill password field
+    selector: 'input[type="password"]'
+    value: Password1!
+  - type: wait
+    description: Wait for Livewire to sync password value
+    duration: 2000
+  - type: screenshot
+    description: Screenshot after credentials entered, before submission
+    filename: 02_credentials_entered.png
+  - type: wait
+    description: Brief wait before clicking submit
+    duration: 1000
+  - type: wait_for_selector
+    description: Wait for login submit button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary'
+    timeout: 5000
+  - type: click
+    description: Click login submit button
+    selector: 'button[type="submit"], input[type="submit"], .btn-primary'
+  - type: wait
+    description: Wait for login to process
+    duration: 5000
+  - type: screenshot
+    description: Screenshot after login attempt
+    filename: 03_after_login.png
+  - type: wait
+    description: Wait for post-login page to load
+    duration: 2000
+  - type: verify_no_errors
+    description: Verify no login errors are displayed
+    error_selectors:
+    - .alert-danger
+    - .alert-error
+    - .error-message
+    - .invalid-feedback
+    - .text-danger
+    - '[role="alert"]'
+  - type: verify
+    description: Verify logged-in user interface elements are present
+    selector: 'a:has-text("My Account"), a:has-text("Logout"), .account-nav, .user-menu'
+    verify_type: element_exists
+  - type: screenshot
+    description: Screenshot showing logged-in state verified
+    filename: 04_logged_in_verified.png
