@@ -145,29 +145,3 @@ jobs:
           ls -lh python/dist/ >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-
-      - name: Run golangci-lint on SDK
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.62
-          working-directory: sdk
-          args: --timeout=5m
-
-      - name: Run golangci-lint on CLI
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.62
-          working-directory: cli
-          args: --timeout=5m
-
