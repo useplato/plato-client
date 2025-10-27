@@ -134,17 +134,24 @@ func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, sta
 		statusChan <- "Setting up root SSH access..."
 		err = client.Sandbox.SetupRootPassword(ctx, sandbox.PublicId, sshPublicKey)
 		if err != nil {
-			close(statusChan)
-			return sandboxSetupCompleteMsg{
-				sshURL:            "",
-				sshHost:           "",
-				sshConfigPath:     "",
-				sshPrivateKeyPath: "",
-				err:               fmt.Errorf("root SSH setup failed: %w", err),
+			// Check if this is a 403 error (unauthorized organization)
+			// If so, treat it as a warning and continue
+			if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "authorized organizations") {
+				statusChan <- "⚠️  Root SSH setup not available (requires authorized organization)"
+			} else {
+				// For other errors, fail the setup
+				close(statusChan)
+				return sandboxSetupCompleteMsg{
+					sshURL:            "",
+					sshHost:           "",
+					sshConfigPath:     "",
+					sshPrivateKeyPath: "",
+					err:               fmt.Errorf("root SSH setup failed: %w", err),
+				}
 			}
+		} else {
+			statusChan <- "Root SSH access configured"
 		}
-
-		statusChan <- "Root SSH access configured"
 
 		// Generate SSH connection info
 		sshURL := fmt.Sprintf("root@%s", sandbox.PublicId)

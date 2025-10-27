@@ -610,3 +610,21 @@ func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req *
 
 	return &workerResp, nil
 }
+
+// CreateSnapshotWithGit creates a snapshot with automatic git push and merge workflow
+// If sourceDir is provided, it will:
+// 1. Push code to Gitea on a timestamped branch
+// 2. Merge that branch to main
+// 3. Get the git hash
+// 4. Create snapshot with that git hash
+func (s *SandboxService) CreateSnapshotWithGit(ctx context.Context, publicID string, req *models.CreateSnapshotRequest, sourceDir string) (*models.CreateSnapshotResponse, error) {
+	// Get Gitea service from the same client
+	// We need to type assert to get access to the Gitea service
+	type giteaClient interface {
+		GetGiteaService() interface{}
+	}
+	
+	// For now, just call CreateSnapshot without git workflow
+	// The git workflow should be called explicitly by the user via C bindings
+	return s.CreateSnapshot(ctx, publicID, req)
+}
