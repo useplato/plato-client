@@ -280,7 +280,8 @@ class PlatoSandboxClient:
             config_json = json.dumps(config_dict)
         elif config is not None:
             # Convert config to dict if it's a Pydantic model
-            config_dict = config.model_dump(exclude_none=True)
+            # Use mode='json' to properly serialize enums to their values
+            config_dict = config.model_dump(mode='json', exclude_none=True)
             config_json = json.dumps(config_dict)
         else:
             config_json = "{}"
@@ -367,7 +368,8 @@ class PlatoSandboxClient:
             >>> print(snapshot.artifact_id)
         """
         # Convert to dict if Pydantic model
-        request_dict = request.model_dump(exclude_none=True)
+        # Use mode='json' to properly serialize enums to their values
+        request_dict = request.model_dump(mode='json', exclude_none=True)
         request_json = json.dumps(request_dict)
 
         lib = _get_lib()
@@ -414,7 +416,8 @@ class PlatoSandboxClient:
         """
         # Convert to dict if Pydantic model
         if isinstance(request, StartWorkerRequest):
-            request_dict = request.model_dump(exclude_none=True)
+            # Use mode='json' to properly serialize enums to their values
+            request_dict = request.model_dump(mode='json', exclude_none=True)
         else:
             request_dict = request
         request_json = json.dumps(request_dict)
