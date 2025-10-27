@@ -27,24 +27,18 @@ dependencies = [
 plato = "plato.cli:cli"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/plato"]
-artifacts = [
-    "*.so",
-    "*.dylib",
-    "*.dll",
-]
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
 
-[tool.hatch.build.targets.sdist]
-include = [
-    "src/plato/**/*.py",
-    "src/plato/*.so",
-    "src/plato/*.dylib",
-    "src/plato/*.dll",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+plato = ["*.so", "*.dylib", "*.dll"]
 
 [tool.uv.workspace]
 members = ["example"]
