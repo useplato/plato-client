@@ -8,12 +8,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 
 	"plato-cli/internal/ui/components"
 	"plato-cli/internal/utils"
 	"plato-sdk/models"
+	"plato-sdk/services"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -412,12 +416,171 @@ func (m Model) View() string {
 	}
 }
 
+// showCredentials displays the user's Plato Hub credentials
+func showCredentials() error {
+	fmt.Println("🔑 Fetching your Plato Hub credentials...")
+
+	// Create a config to get the client
+	config := NewConfigModel()
+	ctx := context.Background()
+
+	// Get Gitea service
+	giteaService := services.NewGiteaService(config.client)
+
+	// Get credentials
+	creds, err := giteaService.GetCredentials(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	fmt.Println("\n✅ Plato Hub Credentials")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("📧 Username:     %s\n", creds.Username)
+	fmt.Printf("🔐 Password:     %s\n", creds.Password)
+	fmt.Printf("🏢 Organization: %s\n", creds.OrgName)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("\n💡 Use these credentials to:")
+	fmt.Println("   • Clone repositories manually")
+	fmt.Println("   • Access the Plato Hub web interface")
+	fmt.Println("   • Configure Git authentication")
+	fmt.Println("\n⚠️  Keep these credentials secure and do not share them")
+
+	return nil
+}
+
+// cloneService clones a service from the Plato Hub to the local machine
+func cloneService(serviceName string) error {
+	fmt.Printf("🔍 Looking up service '%s' in Plato Hub...\n", serviceName)
+
+	// Create a config to get the client
+	config := NewConfigModel()
+	ctx := context.Background()
+
+	// Get Gitea service
+	giteaService := services.NewGiteaService(config.client)
+
+	// Get credentials
+	fmt.Println("🔑 Fetching credentials...")
+	creds, err := giteaService.GetCredentials(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	// List simulators to find the service
+	fmt.Println("📋 Listing available simulators...")
+	simulators, err := giteaService.ListSimulators(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list simulators: %w", err)
+	}
+
+	// Find the simulator by service name
+	var simulator *models.GiteaSimulator
+	for i := range simulators {
+		if strings.EqualFold(simulators[i].Name, serviceName) {
+			simulator = &simulators[i]
+			break
+		}
+	}
+
+	if simulator == nil {
+		return fmt.Errorf("service '%s' not found in hub", serviceName)
+	}
+
+	fmt.Printf("✓ Found service: %s\n", simulator.Name)
+
+	// Check if repository exists
+	if !simulator.HasRepo {
+		return fmt.Errorf("service '%s' does not have a repository yet", serviceName)
+	}
+
+	// Get repository information
+	fmt.Println("📦 Fetching repository information...")
+	repo, err := giteaService.GetSimulatorRepository(ctx, simulator.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get repository: %w", err)
+	}
+
+	// Build authenticated clone URL
+	cloneURL := repo.CloneURL
+	if strings.HasPrefix(cloneURL, "https://") {
+		cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
+	}
+
+	// Determine target directory (use service name)
+	targetDir := simulator.Name
+	if _, err := os.Stat(targetDir); err == nil {
+		return fmt.Errorf("directory '%s' already exists", targetDir)
+	}
+
+	// Clone the repository
+	fmt.Printf("📥 Cloning repository to '%s'...\n", targetDir)
+	cmd := exec.Command("git", "clone", cloneURL, targetDir)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to clone repository: %w\nOutput: %s", err, string(output))
+	}
+
+	fmt.Printf("\n✅ Successfully cloned '%s' to '%s'\n", serviceName, targetDir)
+	fmt.Printf("📂 Repository: %s\n", repo.CloneURL)
+	if repo.Description != "" {
+		fmt.Printf("📝 Description: %s\n", repo.Description)
+	}
+	fmt.Printf("\n💡 Next steps:\n")
+	fmt.Printf("   cd %s\n", targetDir)
+	fmt.Printf("   # Start developing!\n")
+
+	return nil
+}
+
 func main() {
+	// Handle help flag
+	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h" || os.Args[1] == "help") {
+		fmt.Printf("Plato CLI - Manage Plato environments and simulators\n\n")
+		fmt.Printf("Usage:\n")
+		fmt.Printf("  plato [command] [options]\n\n")
+		fmt.Printf("Commands:\n")
+		fmt.Printf("  clone <service>    Clone a service from Plato Hub to local machine\n")
+		fmt.Printf("  credentials        Display your Plato Hub credentials\n")
+		fmt.Printf("  --version, -v      Show version information\n")
+		fmt.Printf("  --help, -h         Show this help message\n\n")
+		fmt.Printf("Interactive Mode:\n")
+		fmt.Printf("  Run 'plato' without any commands to start the interactive TUI\n\n")
+		fmt.Printf("Examples:\n")
+		fmt.Printf("  plato clone espocrm          # Clone the espocrm service\n")
+		fmt.Printf("  plato credentials            # Show your Hub credentials\n")
+		fmt.Printf("  plato                        # Start interactive mode\n")
+		os.Exit(0)
+	}
+
 	// Handle version flag
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
 		fmt.Printf("Plato CLI version %s\n", components.Version)
 		fmt.Printf("Git commit: %s\n", components.GitCommit)
 		fmt.Printf("Built: %s\n", components.BuildTime)
+		os.Exit(0)
+	}
+
+	// Handle clone command
+	if len(os.Args) > 1 && os.Args[1] == "clone" {
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: plato clone <service>")
+			fmt.Println("Example: plato clone espocrm")
+			os.Exit(1)
+		}
+		serviceName := os.Args[2]
+		if err := cloneService(serviceName); err != nil {
+			fmt.Printf("Error cloning service: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// Handle credentials command
+	if len(os.Args) > 1 && os.Args[1] == "credentials" {
+		if err := showCredentials(); err != nil {
+			fmt.Printf("Error fetching credentials: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
