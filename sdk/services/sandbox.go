@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"plato-sdk/models"
+	"plato-sdk/utils"
 )
 
 // ClientInterface defines the methods needed from PlatoClient
@@ -629,27 +630,24 @@ func (s *SandboxService) CreateSnapshotWithGit(ctx context.Context, publicID str
 	return s.CreateSnapshot(ctx, publicID, req)
 }
 
-// GetSSHInfo returns SSH connection information for a sandbox
-// This includes the SSH command, host, and config path
-func (s *SandboxService) GetSSHInfo(publicID string, user string) (*models.SSHInfo, error) {
-	// Default user is "root"
-	if user == "" {
-		user = "root"
+// SetupSSHAndGetInfo sets up SSH configuration for a sandbox and returns connection information
+// This generates SSH keys, creates config file with proxy tunnel, and returns connection details
+func (s *SandboxService) SetupSSHAndGetInfo(baseURL string, localPort int, jobPublicID string, username string) (*models.SSHInfo, error) {
+	// Use the utils.SetupSSHConfig function to do the heavy lifting
+	sshHost, configPath, publicKey, privateKeyPath, err := utils.SetupSSHConfig(baseURL, localPort, jobPublicID, username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup SSH: %w", err)
 	}
 
-	// SSH host format: user@publicID
-	sshHost := fmt.Sprintf("%s@%s", user, publicID)
-
-	// SSH config path (standard location)
-	sshConfigPath := "~/.ssh/config"
-
-	// SSH command format: ssh -F <config_path> <host>
-	sshCommand := fmt.Sprintf("ssh -F %s %s", sshConfigPath, sshHost)
+	// Build SSH command
+	sshCommand := fmt.Sprintf("ssh -F %s %s", configPath, sshHost)
 
 	return &models.SSHInfo{
-		SSHCommand:    sshCommand,
-		SSHHost:       sshHost,
-		SSHConfigPath: sshConfigPath,
-		PublicID:      publicID,
+		SSHCommand:     sshCommand,
+		SSHHost:        sshHost,
+		SSHConfigPath:  configPath,
+		PublicID:       jobPublicID,
+		PublicKey:      publicKey,
+		PrivateKeyPath: privateKeyPath,
 	}, nil
 }

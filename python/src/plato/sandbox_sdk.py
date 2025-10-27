@@ -132,8 +132,8 @@ def _get_lib():
         _lib.plato_gitea_merge_to_main.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_gitea_merge_to_main.restype = ctypes.c_void_p
 
-        _lib.plato_get_ssh_info.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
-        _lib.plato_get_ssh_info.restype = ctypes.c_void_p
+        _lib.plato_setup_ssh.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p]
+        _lib.plato_setup_ssh.restype = ctypes.c_void_p
 
         _lib.plato_free_string.argtypes = [ctypes.c_void_p]
         _lib.plato_free_string.restype = None
@@ -195,6 +195,7 @@ class PlatoSandboxClient:
             api_key: Your Plato API key
         """
         logger.debug(f"Initializing PlatoSandboxClient with base_url={base_url}")
+        self._base_url = base_url
         lib = _get_lib()
         result_ptr = lib.plato_new_client(
             base_url.encode('utf-8'),
@@ -801,41 +802,59 @@ class PlatoSandboxClient:
         logger.info(f"Merged to main: git_hash={git_hash}")
         return git_hash
 
-    def get_ssh_info(self, public_id: str, user: str = "root") -> Dict[str, str]:
+    def setup_ssh(
+        self,
+        sandbox: Sandbox,
+        local_port: int = 2200,
+        username: str = "plato"
+    ) -> Dict[str, str]:
         """
-        Get SSH connection information for a sandbox.
+        Setup SSH configuration for a sandbox and get connection information.
+
+        This method:
+        1. Generates a new ED25519 SSH key pair
+        2. Creates SSH config file with ProxyCommand for tunnel connection
+        3. Returns SSH connection details
 
         Args:
-            public_id: Public ID of the sandbox
-            user: SSH user (default: "root")
+            sandbox: Sandbox object with public_id and job_group_id
+            local_port: Local port for SSH connection (default: 2200)
+            username: SSH username (default: "plato")
 
         Returns:
-            Dict with 'ssh_command', 'ssh_host', 'ssh_config_path', 'public_id'
+            Dict with:
+                - 'ssh_command': Full SSH command to connect
+                - 'ssh_host': SSH host identifier (e.g., "sandbox-1")
+                - 'ssh_config_path': Path to SSH config file
+                - 'public_key': Generated SSH public key
+                - 'private_key_path': Path to private key file
+                - 'public_id': Sandbox public ID
 
         Raises:
-            RuntimeError: If getting SSH info fails
+            RuntimeError: If SSH setup fails
 
         Example:
-            >>> info = client.get_ssh_info(sandbox.public_id)
-            >>> print(f"Connect with: {info['ssh_command']}")
-            >>> # Or access individual parts:
-            >>> print(f"SSH host: {info['ssh_host']}")
-            >>> print(f"Config path: {info['ssh_config_path']}")
+            >>> sandbox = client.create_sandbox(config=config, wait=False)
+            >>> ssh_info = client.setup_ssh(sandbox)
+            >>> print(f"Connect with: {ssh_info['ssh_command']}")
+            >>> # Or directly: ssh -F {ssh_info['ssh_config_path']} {ssh_info['ssh_host']}
         """
-        logger.debug(f"Getting SSH info for sandbox: public_id={public_id}, user={user}")
+        logger.info(f"Setting up SSH for sandbox {sandbox.public_id}")
         lib = _get_lib()
-        result_ptr = lib.plato_get_ssh_info(
+        result_ptr = lib.plato_setup_ssh(
             self._client_id.encode('utf-8'),
-            public_id.encode('utf-8'),
-            user.encode('utf-8')
+            self._base_url.encode('utf-8'),
+            ctypes.c_int(local_port),
+            sandbox.public_id.encode('utf-8'),
+            username.encode('utf-8')
         )
 
         result_str = _call_and_free(lib, result_ptr)
         response = json.loads(result_str)
 
         if 'error' in response:
-            logger.error(f"Failed to get SSH info: {response['error']}")
-            raise RuntimeError(f"Failed to get SSH info: {response['error']}")
+            logger.error(f"Failed to setup SSH: {response['error']}")
+            raise RuntimeError(f"Failed to setup SSH: {response['error']}")
 
-        logger.info(f"Got SSH info for {public_id}: {response['ssh_command']}")
+        logger.info(f"SSH setup complete for {sandbox.public_id}: {response['ssh_command']}")
         return response

@@ -510,24 +510,27 @@ func plato_gitea_merge_to_main(clientID *C.char, serviceName *C.char, branchName
 	return C.CString(string(resultJSON))
 }
 
-//export plato_get_ssh_info
-func plato_get_ssh_info(clientID *C.char, publicID *C.char, user *C.char) *C.char {
+//export plato_setup_ssh
+func plato_setup_ssh(clientID *C.char, baseURL *C.char, localPort C.int, jobPublicID *C.char, username *C.char) *C.char {
 	client, ok := clients[C.GoString(clientID)]
 	if !ok {
 		return C.CString(`{"error": "invalid client ID"}`)
 	}
 
-	publicIDStr := C.GoString(publicID)
-	userStr := C.GoString(user)
-	logDebug("Getting SSH info for sandbox: publicID=%s, user=%s", publicIDStr, userStr)
+	baseURLStr := C.GoString(baseURL)
+	publicIDStr := C.GoString(jobPublicID)
+	usernameStr := C.GoString(username)
+	port := int(localPort)
 
-	sshInfo, err := client.Sandbox.GetSSHInfo(publicIDStr, userStr)
+	logDebug("Setting up SSH for sandbox: publicID=%s, username=%s, port=%d", publicIDStr, usernameStr, port)
+
+	sshInfo, err := client.Sandbox.SetupSSHAndGetInfo(baseURLStr, port, publicIDStr, usernameStr)
 	if err != nil {
-		logDebug("Failed to get SSH info: %v", err)
+		logDebug("Failed to setup SSH: %v", err)
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
 	}
 
-	logDebug("SSH info: command=%s", sshInfo.SSHCommand)
+	logDebug("SSH setup complete: command=%s", sshInfo.SSHCommand)
 
 	result, err := json.Marshal(sshInfo)
 	if err != nil {

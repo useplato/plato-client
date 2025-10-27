@@ -121,8 +121,10 @@ type StartWorkerResponse struct {
 
 // SSHInfo contains SSH connection information for a sandbox
 type SSHInfo struct {
-	SSHCommand    string `json:"ssh_command"`
-	SSHHost       string `json:"ssh_host"`
-	SSHConfigPath string `json:"ssh_config_path"`
-	PublicID      string `json:"public_id"`
+	SSHCommand     string `json:"ssh_command"`
+	SSHHost        string `json:"ssh_host"`
+	SSHConfigPath  string `json:"ssh_config_path"`
+	PublicID       string `json:"public_id"`
+	PublicKey      string `json:"public_key"`
+	PrivateKeyPath string `json:"private_key_path"`
 }
