@@ -204,11 +204,11 @@ jobs:
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
+          repository-url: https://test.pypi.org/simple/
           packages-dir: python/dist/
           skip-existing: true
           verbose: true
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
 
       - name: Summary
         run: |
