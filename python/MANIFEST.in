@@ -2,3 +2,4 @@ global-include *.so
 global-include *.dylib
 global-include *.dll
 recursive-include src/plato/bin *
+recursive-include src/plato/flows *.yaml *.yml
