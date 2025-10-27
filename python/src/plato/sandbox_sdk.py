@@ -8,7 +8,17 @@ import ctypes
 import json
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union
+
+from plato.models.sandbox import (
+    Sandbox,
+    SimConfigDataset,
+    CreateSnapshotRequest,
+    CreateSnapshotResponse,
+    StartWorkerRequest,
+    StartWorkerResponse,
+    SimulatorListItem,
+)
 
 
 # Find the shared library
@@ -106,19 +116,30 @@ class PlatoSandboxClient:
     """
     Plato Sandbox SDK Client
 
-    Simple Python wrapper for managing VM sandboxes.
+    Python wrapper for managing VM sandboxes via the Plato API.
 
-    Example:
-        >>> client = PlatoSandboxClient('https://api.plato.so', 'your-api-key')
-        >>> config = {
-        ...     'compute': {'cpus': 1, 'memory': 512, 'disk': 10240,
-        ...                 'app_port': 8080, 'plato_messaging_port': 7000},
-        ...     'metadata': {'name': 'Test'},
-        ...     'services': {},
-        ...     'listeners': {}
-        ... }
-        >>> sandbox = client.create_sandbox(config)
-        >>> print(sandbox['public_id'])
+    Examples:
+        # Initialize client
+        >>> client = PlatoSandboxClient('https://plato.so/api', 'your-api-key')
+
+        # Create sandbox from configuration
+        >>> from plato.models.sandbox import SimConfigDataset, SimConfigCompute, SimConfigMetadata
+        >>> config = SimConfigDataset(
+        ...     compute=SimConfigCompute(
+        ...         cpus=1, memory=512, disk=10240,
+        ...         app_port=8080, plato_messaging_port=7000
+        ...     ),
+        ...     metadata=SimConfigMetadata(name='My Sandbox')
+        ... )
+        >>> sandbox = client.create_sandbox(config=config)
+        >>> print(f"Created: {sandbox.public_id}")
+
+        # Create sandbox from artifact ID
+        >>> sandbox = client.create_sandbox(artifact_id="art_123456")
+        >>> print(f"URL: {sandbox.url}")
+
+        # Close sandbox when done
+        >>> client.close_sandbox(sandbox.public_id)
     """
 
     def __init__(self, base_url: str, api_key: str):
@@ -138,29 +159,62 @@ class PlatoSandboxClient:
 
     def create_sandbox(
         self,
-        config: Dict[str, Any],
+        config: Optional[Union[SimConfigDataset, Dict[str, Any]]] = None,
         dataset: str = "base",
         alias: str = "sandbox",
         artifact_id: Optional[str] = None,
         service: str = ""
-    ) -> Dict[str, Any]:
+    ) -> Sandbox:
         """
         Create a new VM sandbox
 
+        You can create a sandbox in two ways:
+        1. From a configuration: Provide `config` with full VM configuration
+        2. From an artifact: Provide `artifact_id` to launch from a snapshot (config optional)
+
         Args:
-            config: Sandbox configuration dict with compute, metadata, services, listeners
+            config: Sandbox configuration (SimConfigDataset or dict). Required if artifact_id not provided.
             dataset: Dataset name (default: 'base')
             alias: Human-readable alias (default: 'sandbox')
             artifact_id: Optional artifact ID to launch from snapshot
             service: Service name
 
         Returns:
-            Dict with sandbox details including 'public_id', 'url', 'status'
+            Sandbox object with public_id, url, status, etc.
 
         Raises:
+            ValueError: If neither config nor artifact_id is provided
             RuntimeError: If sandbox creation fails
+
+        Examples:
+            # Create from configuration
+            >>> config = SimConfigDataset(
+            ...     compute=SimConfigCompute(cpus=1, memory=512, disk=10240,
+            ...                             app_port=8080, plato_messaging_port=7000),
+            ...     metadata=SimConfigMetadata(name="Test")
+            ... )
+            >>> sandbox = client.create_sandbox(config=config)
+
+            # Create from artifact ID
+            >>> sandbox = client.create_sandbox(artifact_id="art_123456")
         """
-        config_json = json.dumps(config)
+        # Validation: Must provide either config or artifact_id
+        if config is None and artifact_id is None:
+            raise ValueError(
+                "Must provide either 'config' or 'artifact_id'. "
+                "Use 'config' to create a new sandbox from configuration, "
+                "or 'artifact_id' to create from an existing snapshot."
+            )
+
+        # Convert config to dict if it's a Pydantic model
+        if config is not None:
+            if isinstance(config, SimConfigDataset):
+                config_dict = config.model_dump(exclude_none=True)
+            else:
+                config_dict = config
+            config_json = json.dumps(config_dict)
+        else:
+            config_json = "{}"
 
         lib = _get_lib()
         result_ptr = lib.plato_create_sandbox(
@@ -178,7 +232,7 @@ class PlatoSandboxClient:
         if 'error' in response:
             raise RuntimeError(f"Failed to create sandbox: {response['error']}")
 
-        return response
+        return Sandbox(**response)
 
     def delete_sandbox(self, public_id: str) -> None:
         """
@@ -202,25 +256,47 @@ class PlatoSandboxClient:
         if 'error' in response:
             raise RuntimeError(f"Failed to delete sandbox: {response['error']}")
 
+    def close_sandbox(self, public_id: str) -> None:
+        """
+        Close a VM sandbox (alias for delete_sandbox)
+
+        Args:
+            public_id: Public ID of the sandbox to close
+
+        Raises:
+            RuntimeError: If closing fails
+        """
+        self.delete_sandbox(public_id)
+
     def create_snapshot(
         self,
         public_id: str,
-        request: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        request: Union[CreateSnapshotRequest, Dict[str, Any]]
+    ) -> CreateSnapshotResponse:
         """
         Create a snapshot of a sandbox
 
         Args:
             public_id: Public ID of the sandbox
-            request: Dict with 'service', 'dataset', optional 'git_hash'
+            request: Snapshot request (CreateSnapshotRequest or dict) with 'service', 'dataset', optional 'git_hash'
 
         Returns:
-            Dict with snapshot details including 'artifact_id', 's3_uri'
+            CreateSnapshotResponse with artifact_id, s3_uri, status, etc.
 
         Raises:
             RuntimeError: If snapshot creation fails
+
+        Example:
+            >>> request = CreateSnapshotRequest(service="web", dataset="base")
+            >>> snapshot = client.create_snapshot(sandbox.public_id, request)
+            >>> print(snapshot.artifact_id)
         """
-        request_json = json.dumps(request)
+        # Convert to dict if Pydantic model
+        if isinstance(request, CreateSnapshotRequest):
+            request_dict = request.model_dump(exclude_none=True)
+        else:
+            request_dict = request
+        request_json = json.dumps(request_dict)
 
         lib = _get_lib()
         result_ptr = lib.plato_create_snapshot(
@@ -235,27 +311,41 @@ class PlatoSandboxClient:
         if 'error' in response:
             raise RuntimeError(f"Failed to create snapshot: {response['error']}")
 
-        return response
+        return CreateSnapshotResponse(**response)
 
     def start_worker(
         self,
         public_id: str,
-        request: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        request: Union[StartWorkerRequest, Dict[str, Any]]
+    ) -> StartWorkerResponse:
         """
         Start a Plato worker in a sandbox
 
         Args:
             public_id: Public ID of the sandbox
-            request: Dict with 'service', 'dataset', 'plato_dataset_config', optional 'timeout'
+            request: Worker request (StartWorkerRequest or dict) with 'service', 'dataset',
+                    'plato_dataset_config', optional 'timeout'
 
         Returns:
-            Dict with worker start details including 'status', 'correlation_id'
+            StartWorkerResponse with status, correlation_id, timestamp
 
         Raises:
             RuntimeError: If worker start fails
+
+        Example:
+            >>> request = StartWorkerRequest(
+            ...     dataset="base",
+            ...     plato_dataset_config=config
+            ... )
+            >>> response = client.start_worker(sandbox.public_id, request)
+            >>> print(response.status)
         """
-        request_json = json.dumps(request)
+        # Convert to dict if Pydantic model
+        if isinstance(request, StartWorkerRequest):
+            request_dict = request.model_dump(exclude_none=True)
+        else:
+            request_dict = request
+        request_json = json.dumps(request_dict)
 
         lib = _get_lib()
         result_ptr = lib.plato_start_worker(
@@ -270,17 +360,22 @@ class PlatoSandboxClient:
         if 'error' in response:
             raise RuntimeError(f"Failed to start worker: {response['error']}")
 
-        return response
+        return StartWorkerResponse(**response)
 
-    def list_simulators(self) -> list:
+    def list_simulators(self) -> List[SimulatorListItem]:
         """
         List all available simulators
 
         Returns:
-            List of simulator objects with id, name, description, etc.
+            List of SimulatorListItem objects with name, description, artifact_id
 
         Raises:
             RuntimeError: If listing fails
+
+        Example:
+            >>> simulators = client.list_simulators()
+            >>> for sim in simulators:
+            ...     print(f"{sim.name}: {sim.description}")
         """
         lib = _get_lib()
         result_ptr = lib.plato_list_simulators(
@@ -294,9 +389,9 @@ class PlatoSandboxClient:
         if isinstance(response, dict) and 'error' in response:
             raise RuntimeError(f"Failed to list simulators: {response['error']}")
 
-        return response
+        return [SimulatorListItem(**item) for item in response]
 
-    def get_simulator_versions(self, simulator_name: str) -> list:
+    def get_simulator_versions(self, simulator_name: str) -> List[Dict[str, Any]]:
         """
         Get all versions for a specific simulator
 
@@ -304,10 +399,15 @@ class PlatoSandboxClient:
             simulator_name: Name of the simulator (e.g., 'espocrm')
 
         Returns:
-            List of version objects with artifact_id, version, dataset, created_at
+            List of version dicts with artifact_id, version, dataset, created_at
 
         Raises:
             RuntimeError: If getting versions fails
+
+        Example:
+            >>> versions = client.get_simulator_versions("espocrm")
+            >>> for v in versions:
+            ...     print(f"Version {v['version']}: {v['artifact_id']}")
         """
         lib = _get_lib()
         result_ptr = lib.plato_get_simulator_versions(
