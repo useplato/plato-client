@@ -12,6 +12,7 @@ import logging
 from plato.exceptions import PlatoClientError
 from playwright.async_api import Page
 import yaml
+import json
 from urllib.parse import urlparse
 from pathlib import Path
 
@@ -73,6 +74,7 @@ class PlatoEnvironment:
         throw_on_login_error: bool = False,
         screenshots_dir: Optional[Path] = None,
         dataset: str = "base",
+        from_api: bool = False,
     ) -> None:
         """Login to the environment using authentication config.
 
@@ -81,18 +83,48 @@ class PlatoEnvironment:
         """
         from plato.flow_executor import FlowExecutor
 
-        if not self.env_id:
-            raise PlatoClientError("No env_id set on environment; cannot load flows")
+        if from_api:
+            # Fetch flows from API for this environment/job
+            try:
+                headers = {"X-API-Key": self._client.api_key}
+                async with self._client.http_session.get(
+                    f"{self._client.base_url}/env/{self.id}/flows",
+                    headers=headers,
+                ) as resp:
+                    await self._client._handle_response_error(resp)  # type: ignore[attr-defined]
+                    body_text = await resp.text()
+                    # Endpoint may return JSON with { data: { flows: "...yaml..." } } or raw YAML
+                    try:
+                        parsed = json.loads(body_text)
+                        flows_yaml = (
+                            parsed.get("data", {}).get("flows")
+                            if isinstance(parsed, dict)
+                            else None
+                        )
+                        if not flows_yaml:
+                            raise ValueError("flows missing in JSON body")
+                    except Exception:
+                        flows_yaml = body_text
+                    scripts = yaml.safe_load(flows_yaml)
+            except Exception as e:
+                raise PlatoClientError(f"Failed to load flows from API: {e}")
+        else:
+            if not self.env_id:
+                raise PlatoClientError(
+                    "No env_id set on environment; cannot load flows"
+                )
 
-        # Load from repo path: python/src/plato/flows/{env_id}/scripts.yaml
-        flows_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "flows")
-        scripts_path = os.path.join(flows_dir, self.env_id, "scripts.yaml")
-        if not os.path.exists(scripts_path):
-            raise PlatoClientError(
-                f"Flow scripts not found for env_id '{self.env_id}' at {scripts_path}"
+            # Load from repo path: python/src/plato/flows/{env_id}/scripts.yaml
+            flows_dir = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)), "flows"
             )
-        with open(scripts_path, "r") as f:
-            scripts = yaml.safe_load(f)
+            scripts_path = os.path.join(flows_dir, self.env_id, "scripts.yaml")
+            if not os.path.exists(scripts_path):
+                raise PlatoClientError(
+                    f"Flow scripts not found for env_id '{self.env_id}' at {scripts_path}"
+                )
+            with open(scripts_path, "r") as f:
+                scripts = yaml.safe_load(f)
 
         # Parse flows from Watchdog-style format
         flows_data = scripts.get("flows", [])
@@ -104,9 +136,7 @@ class PlatoEnvironment:
         else:
             flow_name = dataset
 
-        login_flow = next(
-            (flow for flow in flows_list if flow.name == flow_name), None
-        )
+        login_flow = next((flow for flow in flows_list if flow.name == flow_name), None)
         if not login_flow:
             raise PlatoClientError(f"No flow named '{flow_name}' found")
 
