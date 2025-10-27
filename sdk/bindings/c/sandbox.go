@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"time"
 	"unsafe"
 
@@ -19,6 +21,21 @@ import (
 var clients = make(map[string]*plato.PlatoClient)
 var nextID = 0
 var heartbeatStoppers = make(map[string]chan struct{})
+var debugLogger *log.Logger
+
+func init() {
+	// Check if debug logging is enabled via environment variable
+	if os.Getenv("PLATO_DEBUG") != "" {
+		debugLogger = log.New(os.Stderr, "[PLATO-GO] ", log.LstdFlags)
+		debugLogger.Println("Debug logging enabled")
+	}
+}
+
+func logDebug(format string, v ...interface{}) {
+	if debugLogger != nil {
+		debugLogger.Printf(format, v...)
+	}
+}
 
 //export plato_new_client
 func plato_new_client(baseURL *C.char, apiKey *C.char) *C.char {
@@ -72,6 +89,7 @@ func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char,
 
 	// Start automatic heartbeat goroutine for this sandbox
 	if sandbox.JobGroupId != "" {
+		logDebug("Starting heartbeat for sandbox %s (job_group_id: %s)", sandbox.PublicId, sandbox.JobGroupId)
 		startHeartbeat(client, sandbox.JobGroupId)
 	}
 
@@ -82,6 +100,7 @@ func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char,
 func startHeartbeat(client *plato.PlatoClient, jobGroupID string) {
 	// Don't start if already running
 	if _, exists := heartbeatStoppers[jobGroupID]; exists {
+		logDebug("Heartbeat already running for job_group_id: %s", jobGroupID)
 		return
 	}
 
@@ -94,16 +113,29 @@ func startHeartbeat(client *plato.PlatoClient, jobGroupID string) {
 
 		// Send initial heartbeat
 		ctx := context.Background()
-		_ = client.Sandbox.SendHeartbeat(ctx, jobGroupID)
+		logDebug("Sending initial heartbeat for job_group_id: %s", jobGroupID)
+		err := client.Sandbox.SendHeartbeat(ctx, jobGroupID)
+		if err != nil {
+			logDebug("Initial heartbeat failed for %s: %v", jobGroupID, err)
+		} else {
+			logDebug("Initial heartbeat successful for %s", jobGroupID)
+		}
 
 		for {
 			select {
 			case <-ticker.C:
-				// Send heartbeat (ignore errors to avoid breaking the loop)
+				// Send heartbeat
 				ctx := context.Background()
-				_ = client.Sandbox.SendHeartbeat(ctx, jobGroupID)
+				logDebug("Sending heartbeat for job_group_id: %s", jobGroupID)
+				err := client.Sandbox.SendHeartbeat(ctx, jobGroupID)
+				if err != nil {
+					logDebug("Heartbeat failed for %s: %v", jobGroupID, err)
+				} else {
+					logDebug("Heartbeat successful for %s", jobGroupID)
+				}
 			case <-stopChan:
 				// Stop signal received
+				logDebug("Stopping heartbeat for job_group_id: %s", jobGroupID)
 				delete(heartbeatStoppers, jobGroupID)
 				return
 			}
@@ -122,10 +154,13 @@ func plato_delete_sandbox(clientID *C.char, publicID *C.char) *C.char {
 	defer cancel()
 
 	// First get the sandbox to find its job_group_id
-	sandbox, err := client.Sandbox.Get(ctx, C.GoString(publicID))
+	publicIDStr := C.GoString(publicID)
+	logDebug("Closing sandbox: %s", publicIDStr)
+	sandbox, err := client.Sandbox.Get(ctx, publicIDStr)
 	if err == nil && sandbox.JobGroupId != "" {
 		// Stop heartbeat if running
 		if stopChan, exists := heartbeatStoppers[sandbox.JobGroupId]; exists {
+			logDebug("Stopping heartbeat for sandbox %s (job_group_id: %s)", publicIDStr, sandbox.JobGroupId)
 			close(stopChan)
 		}
 	}
@@ -266,12 +301,15 @@ func plato_gitea_get_credentials(clientID *C.char) *C.char {
 		return C.CString(`{"error": "invalid client ID"}`)
 	}
 
+	logDebug("Getting Gitea credentials")
 	ctx := context.Background()
 	creds, err := client.Gitea.GetCredentials(ctx)
 	if err != nil {
+		logDebug("Failed to get Gitea credentials: %v", err)
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
 	}
 
+	logDebug("Got Gitea credentials for user: %s, org: %s", creds.Username, creds.OrgName)
 	result, err := json.Marshal(creds)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
@@ -287,12 +325,15 @@ func plato_gitea_list_simulators(clientID *C.char) *C.char {
 		return C.CString(`{"error": "invalid client ID"}`)
 	}
 
+	logDebug("Listing Gitea simulators")
 	ctx := context.Background()
 	simulators, err := client.Gitea.ListSimulators(ctx)
 	if err != nil {
+		logDebug("Failed to list simulators: %v", err)
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
 	}
 
+	logDebug("Found %d simulators", len(simulators))
 	result, err := json.Marshal(simulators)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
@@ -308,12 +349,15 @@ func plato_gitea_get_simulator_repo(clientID *C.char, simulatorID C.int) *C.char
 		return C.CString(`{"error": "invalid client ID"}`)
 	}
 
+	logDebug("Getting repository for simulator ID: %d", int(simulatorID))
 	ctx := context.Background()
 	repo, err := client.Gitea.GetSimulatorRepository(ctx, int(simulatorID))
 	if err != nil {
+		logDebug("Failed to get repository for simulator %d: %v", int(simulatorID), err)
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
 	}
 
+	logDebug("Got repository: %s (clone_url: %s)", repo.Name, repo.CloneURL)
 	result, err := json.Marshal(repo)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
@@ -329,12 +373,15 @@ func plato_gitea_create_simulator_repo(clientID *C.char, simulatorID C.int) *C.c
 		return C.CString(`{"error": "invalid client ID"}`)
 	}
 
+	logDebug("Creating repository for simulator ID: %d", int(simulatorID))
 	ctx := context.Background()
 	repo, err := client.Gitea.CreateSimulatorRepository(ctx, int(simulatorID))
 	if err != nil {
+		logDebug("Failed to create repository for simulator %d: %v", int(simulatorID), err)
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
 	}
 
+	logDebug("Created repository: %s (clone_url: %s)", repo.Name, repo.CloneURL)
 	result, err := json.Marshal(repo)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))

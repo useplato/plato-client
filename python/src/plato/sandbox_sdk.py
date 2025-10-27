@@ -6,6 +6,7 @@ Simple Python wrapper around the Go Sandbox SDK using C bindings.
 
 import ctypes
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
@@ -19,6 +20,16 @@ from plato.models.sandbox import (
     StartWorkerResponse,
     SimulatorListItem,
 )
+
+# Set up logging
+logger = logging.getLogger("plato.sandbox_sdk")
+logger.setLevel(logging.INFO)
+
+# Only add handler if none exists (avoid duplicate logs)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('[PLATO-PY] %(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
 
 
 # Find the shared library
@@ -165,12 +176,14 @@ class PlatoSandboxClient:
             base_url: Base URL of the Plato API (e.g., 'https://api.plato.so')
             api_key: Your Plato API key
         """
+        logger.debug(f"Initializing PlatoSandboxClient with base_url={base_url}")
         lib = _get_lib()
         result_ptr = lib.plato_new_client(
             base_url.encode('utf-8'),
             api_key.encode('utf-8')
         )
         self._client_id = _call_and_free(lib, result_ptr)
+        logger.info(f"Created PlatoSandboxClient with client_id={self._client_id}")
 
     def create_sandbox(
         self,
@@ -260,6 +273,7 @@ class PlatoSandboxClient:
         else:
             config_json = "{}"
 
+        logger.info(f"Creating sandbox: artifact_id={artifact_id}, service={service}, dataset={dataset}")
         lib = _get_lib()
         result_ptr = lib.plato_create_sandbox(
             self._client_id.encode('utf-8'),
@@ -274,15 +288,20 @@ class PlatoSandboxClient:
         response = json.loads(result_str)
 
         if 'error' in response:
+            logger.error(f"Failed to create sandbox: {response['error']}")
             raise RuntimeError(f"Failed to create sandbox: {response['error']}")
 
         sandbox = Sandbox(**response)
+        logger.info(f"Sandbox created: public_id={sandbox.public_id}, job_group_id={sandbox.job_group_id}")
+        logger.debug(f"Automatic heartbeat started for job_group_id={sandbox.job_group_id}")
 
         # Wait for sandbox to be ready if requested
         if wait and sandbox.correlation_id:
+            logger.info(f"Waiting for sandbox {sandbox.public_id} to be ready (timeout={timeout}s)")
             self.wait_until_ready(sandbox.correlation_id, timeout=timeout)
             # Update status to "running" once ready
             sandbox.status = "running"
+            logger.info(f"Sandbox {sandbox.public_id} is ready")
 
         return sandbox
 
@@ -296,6 +315,7 @@ class PlatoSandboxClient:
         Raises:
             RuntimeError: If closing fails
         """
+        logger.info(f"Closing sandbox: public_id={public_id}")
         lib = _get_lib()
         result_ptr = lib.plato_delete_sandbox(
             self._client_id.encode('utf-8'),
@@ -306,7 +326,10 @@ class PlatoSandboxClient:
         response = json.loads(result_str)
 
         if 'error' in response:
+            logger.error(f"Failed to close sandbox {public_id}: {response['error']}")
             raise RuntimeError(f"Failed to close sandbox: {response['error']}")
+
+        logger.info(f"Sandbox {public_id} closed successfully (heartbeat stopped automatically)")
 
     def create_snapshot(
         self,
@@ -507,6 +530,7 @@ class PlatoSandboxClient:
         Raises:
             RuntimeError: If getting credentials fails
         """
+        logger.debug("Getting Gitea credentials")
         lib = _get_lib()
         result_ptr = lib.plato_gitea_get_credentials(
             self._client_id.encode('utf-8')
@@ -516,8 +540,10 @@ class PlatoSandboxClient:
         response = json.loads(result_str)
 
         if 'error' in response:
+            logger.error(f"Failed to get Gitea credentials: {response['error']}")
             raise RuntimeError(f"Failed to get credentials: {response['error']}")
 
+        logger.info(f"Got Gitea credentials for user: {response.get('username')}, org: {response.get('org_name')}")
         return response
 
     def list_gitea_simulators(self) -> List[Dict[str, Any]]:
@@ -530,6 +556,7 @@ class PlatoSandboxClient:
         Raises:
             RuntimeError: If listing fails
         """
+        logger.debug("Listing Gitea simulators")
         lib = _get_lib()
         result_ptr = lib.plato_gitea_list_simulators(
             self._client_id.encode('utf-8')
@@ -539,8 +566,10 @@ class PlatoSandboxClient:
         response = json.loads(result_str)
 
         if isinstance(response, dict) and 'error' in response:
+            logger.error(f"Failed to list Gitea simulators: {response['error']}")
             raise RuntimeError(f"Failed to list simulators: {response['error']}")
 
+        logger.info(f"Listed {len(response)} Gitea simulators")
         return response
 
     def get_gitea_repository(self, simulator_id: int) -> Dict[str, Any]:
@@ -556,6 +585,7 @@ class PlatoSandboxClient:
         Raises:
             RuntimeError: If getting repository fails
         """
+        logger.debug(f"Getting Gitea repository for simulator_id={simulator_id}")
         lib = _get_lib()
         result_ptr = lib.plato_gitea_get_simulator_repo(
             self._client_id.encode('utf-8'),
@@ -566,8 +596,10 @@ class PlatoSandboxClient:
         response = json.loads(result_str)
 
         if 'error' in response:
+            logger.error(f"Failed to get repository for simulator {simulator_id}: {response['error']}")
             raise RuntimeError(f"Failed to get repository: {response['error']}")
 
+        logger.info(f"Got repository for simulator {simulator_id}: {response.get('name')} (clone_url: {response.get('clone_url')})")
         return response
 
     def create_gitea_repository(self, simulator_id: int) -> Dict[str, Any]:
@@ -583,6 +615,7 @@ class PlatoSandboxClient:
         Raises:
             RuntimeError: If creating repository fails
         """
+        logger.debug(f"Creating Gitea repository for simulator_id={simulator_id}")
         lib = _get_lib()
         result_ptr = lib.plato_gitea_create_simulator_repo(
             self._client_id.encode('utf-8'),
@@ -593,6 +626,8 @@ class PlatoSandboxClient:
         response = json.loads(result_str)
 
         if 'error' in response:
+            logger.error(f"Failed to create repository for simulator {simulator_id}: {response['error']}")
             raise RuntimeError(f"Failed to create repository: {response['error']}")
 
+        logger.info(f"Created repository for simulator {simulator_id}: {response.get('name')} (clone_url: {response.get('clone_url')})")
         return response
