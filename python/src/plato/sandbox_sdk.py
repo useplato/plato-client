@@ -94,6 +94,18 @@ def _get_lib():
         _lib.plato_monitor_operation.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
         _lib.plato_monitor_operation.restype = ctypes.c_void_p
 
+        _lib.plato_gitea_get_credentials.argtypes = [ctypes.c_char_p]
+        _lib.plato_gitea_get_credentials.restype = ctypes.c_void_p
+
+        _lib.plato_gitea_list_simulators.argtypes = [ctypes.c_char_p]
+        _lib.plato_gitea_list_simulators.restype = ctypes.c_void_p
+
+        _lib.plato_gitea_get_simulator_repo.argtypes = [ctypes.c_char_p, ctypes.c_int]
+        _lib.plato_gitea_get_simulator_repo.restype = ctypes.c_void_p
+
+        _lib.plato_gitea_create_simulator_repo.argtypes = [ctypes.c_char_p, ctypes.c_int]
+        _lib.plato_gitea_create_simulator_repo.restype = ctypes.c_void_p
+
         _lib.plato_free_string.argtypes = [ctypes.c_void_p]
         _lib.plato_free_string.restype = None
 
@@ -484,3 +496,103 @@ class PlatoSandboxClient:
 
         if 'error' in response:
             raise RuntimeError(f"Operation failed: {response['error']}")
+
+    def get_gitea_credentials(self) -> Dict[str, str]:
+        """
+        Get Gitea credentials for the organization.
+
+        Returns:
+            Dict with 'username', 'password', 'org_name'
+
+        Raises:
+            RuntimeError: If getting credentials fails
+        """
+        lib = _get_lib()
+        result_ptr = lib.plato_gitea_get_credentials(
+            self._client_id.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            raise RuntimeError(f"Failed to get credentials: {response['error']}")
+
+        return response
+
+    def list_gitea_simulators(self) -> List[Dict[str, Any]]:
+        """
+        List all simulators with Gitea repository information.
+
+        Returns:
+            List of simulator dicts with 'id', 'name', 'has_repo', etc.
+
+        Raises:
+            RuntimeError: If listing fails
+        """
+        lib = _get_lib()
+        result_ptr = lib.plato_gitea_list_simulators(
+            self._client_id.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if isinstance(response, dict) and 'error' in response:
+            raise RuntimeError(f"Failed to list simulators: {response['error']}")
+
+        return response
+
+    def get_gitea_repository(self, simulator_id: int) -> Dict[str, Any]:
+        """
+        Get repository information for a simulator.
+
+        Args:
+            simulator_id: Simulator ID
+
+        Returns:
+            Dict with 'name', 'clone_url', 'ssh_url', etc.
+
+        Raises:
+            RuntimeError: If getting repository fails
+        """
+        lib = _get_lib()
+        result_ptr = lib.plato_gitea_get_simulator_repo(
+            self._client_id.encode('utf-8'),
+            ctypes.c_int(simulator_id)
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            raise RuntimeError(f"Failed to get repository: {response['error']}")
+
+        return response
+
+    def create_gitea_repository(self, simulator_id: int) -> Dict[str, Any]:
+        """
+        Create a repository for a simulator.
+
+        Args:
+            simulator_id: Simulator ID
+
+        Returns:
+            Dict with 'name', 'clone_url', 'ssh_url', etc.
+
+        Raises:
+            RuntimeError: If creating repository fails
+        """
+        lib = _get_lib()
+        result_ptr = lib.plato_gitea_create_simulator_repo(
+            self._client_id.encode('utf-8'),
+            ctypes.c_int(simulator_id)
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            raise RuntimeError(f"Failed to create repository: {response['error']}")
+
+        return response
