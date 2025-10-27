@@ -11,6 +11,7 @@ import logging
 from plato.exceptions import PlatoClientError
 from playwright.sync_api import Page
 import yaml
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -65,27 +66,50 @@ class SyncPlatoEnvironment:
 
     # No embedded defaults; expect scripts.yaml to exist in repo at plato/flows/{env_id}/scripts.yaml
 
-    def login(self, page: Page, throw_on_login_error: bool = False, dataset: str = "base") -> None:
+    def login(
+        self,
+        page: Page,
+        throw_on_login_error: bool = False,
+        screenshots_dir: Optional[Path] = None,
+        dataset: str = "base",
+        from_api: bool = False,
+    ) -> None:
         """Login to the environment using authentication config.
 
         Args:
             page (Page): The Playwright page to authenticate
             throw_on_login_error (bool): Whether to raise an error on login failure
+            screenshots_dir (Optional[Path]): Directory to store screenshots during the flow
             dataset (str): The dataset to use for login (default: "base")
+            from_api (bool): If True, fetch flows from API; otherwise load from local repo
         """
         from plato.sync_flow_executor import SyncFlowExecutor
 
-        if not self.env_id:
-            raise PlatoClientError("No env_id set on environment; cannot load flows")
+        if from_api:
+            try:
+                headers = {"X-API-Key": self._client.api_key}
+                resp = self._client.http_session.get(
+                    f"{self._client.base_url}/env/{self.id}/flows", headers=headers
+                )
+                self._client._handle_response_error(resp)  # type: ignore[attr-defined]
+                flows_yaml = resp.text
+                scripts = yaml.safe_load(flows_yaml)
+            except Exception as e:
+                raise PlatoClientError(f"Failed to load flows from API: {e}")
+        else:
+            if not self.env_id:
+                raise PlatoClientError(
+                    "No env_id set on environment; cannot load flows"
+                )
 
-        flows_dir = os.path.join(os.path.dirname(__file__), "flows")
-        scripts_path = os.path.join(flows_dir, self.env_id, "scripts.yaml")
-        if not os.path.exists(scripts_path):
-            raise PlatoClientError(
-                f"Flow scripts not found for env_id '{self.env_id}' at {scripts_path}"
-            )
-        with open(scripts_path, "r") as f:
-            scripts = yaml.safe_load(f)
+            flows_dir = os.path.join(os.path.dirname(__file__), "flows")
+            scripts_path = os.path.join(flows_dir, self.env_id, "scripts.yaml")
+            if not os.path.exists(scripts_path):
+                raise PlatoClientError(
+                    f"Flow scripts not found for env_id '{self.env_id}' at {scripts_path}"
+                )
+            with open(scripts_path, "r") as f:
+                scripts = yaml.safe_load(f)
 
         # Parse flows from Watchdog-style format
         flows_data = scripts.get("flows", [])
@@ -97,13 +121,13 @@ class SyncPlatoEnvironment:
         else:
             flow_name = dataset
 
-        login_flow = next(
-            (flow for flow in flows_list if flow.name == flow_name), None
-        )
+        login_flow = next((flow for flow in flows_list if flow.name == flow_name), None)
         if not login_flow:
             raise PlatoClientError(f"No login flow '{flow_name}' found")
 
-        flow_executor = SyncFlowExecutor(page, login_flow, logger=logger)
+        flow_executor = SyncFlowExecutor(
+            page, login_flow, logger=logger, screenshots_dir=screenshots_dir
+        )
         if not flow_executor.execute_flow():
             if throw_on_login_error:
                 raise PlatoClientError("Failed to login")
@@ -400,7 +424,9 @@ class SyncPlatoEnvironment:
                 success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
-    def evaluate(self, value: Optional[Any] = None, agent_version: Optional[str] = None) -> EvaluationResult:
+    def evaluate(
+        self, value: Optional[Any] = None, agent_version: Optional[str] = None
+    ) -> EvaluationResult:
         """Evaluate the current task.
 
         Args:
@@ -500,10 +526,10 @@ class SyncPlatoEnvironment:
                 elif "plato.so" in self._client.base_url:
                     # Extract domain from base_url to construct proxy server URL
                     parsed_url = urlparse(self._client.base_url)
-                    domain_parts = parsed_url.netloc.split('.')
+                    domain_parts = parsed_url.netloc.split(".")
 
                     # Check if there's a subdomain before "plato.so"
-                    if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                    if len(domain_parts) >= 3 and domain_parts[-2:] == ["plato", "so"]:
                         subdomain = domain_parts[0]
                         proxy_server = f"https://{subdomain}.proxy.plato.so"
                     else:
@@ -543,10 +569,10 @@ class SyncPlatoEnvironment:
                 # Extract domain from base_url (e.g., "dev", "staging", "amazon")
                 # If no subdomain, use just "sims.plato.so"
                 parsed_url = urlparse(self._client.base_url)
-                domain_parts = parsed_url.netloc.split('.')
+                domain_parts = parsed_url.netloc.split(".")
 
                 # Check if there's a subdomain before "plato.so"
-                if len(domain_parts) >= 3 and domain_parts[-2:] == ['plato', 'so']:
+                if len(domain_parts) >= 3 and domain_parts[-2:] == ["plato", "so"]:
                     subdomain = domain_parts[0]
                     return f"https://{identifier}.{subdomain}.sims.plato.so"
                 else:
