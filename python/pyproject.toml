@@ -33,9 +33,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/plato"]
 artifacts = [
-    "src/plato/*.so",
-    "src/plato/*.dylib",
-    "src/plato/*.dll",
+    "*.so",
+    "*.dylib",
+    "*.dll",
 ]
 
 [tool.hatch.build.targets.sdist]
