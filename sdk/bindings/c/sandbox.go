@@ -144,6 +144,50 @@ func plato_start_worker(clientID *C.char, publicID *C.char, requestJSON *C.char)
 	return C.CString(string(result))
 }
 
+//export plato_list_simulators
+func plato_list_simulators(clientID *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	ctx := context.Background()
+
+	simulators, err := client.Simulator.List(ctx)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	result, err := json.Marshal(simulators)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
+	}
+
+	return C.CString(string(result))
+}
+
+//export plato_get_simulator_versions
+func plato_get_simulator_versions(clientID *C.char, simulatorName *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	ctx := context.Background()
+
+	versions, err := client.Simulator.GetVersions(ctx, C.GoString(simulatorName))
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	result, err := json.Marshal(versions)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
+	}
+
+	return C.CString(string(result))
+}
+
 //export plato_free_string
 func plato_free_string(s *C.char) {
 	C.free(unsafe.Pointer(s))
