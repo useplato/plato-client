@@ -201,6 +201,13 @@ jobs:
         working-directory: python
         run: python -m build
 
+      - name: Debug token
+        run: |
+          echo "Token length: ${#TWINE_PASSWORD}"
+          echo "Token starts with: ${TWINE_PASSWORD:0:5}"
+        env:
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
       - name: Publish to TestPyPI
         working-directory: python
         env:
