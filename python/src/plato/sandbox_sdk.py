@@ -163,8 +163,11 @@ class PlatoSandboxClient:
     Python wrapper for managing VM sandboxes via the Plato API.
 
     Examples:
-        # Initialize client
-        >>> client = PlatoSandboxClient('https://plato.so/api', 'your-api-key')
+        # Initialize client with API key (uses default base URL)
+        >>> client = PlatoSandboxClient('your-api-key')
+
+        # Or with custom base URL
+        >>> client = PlatoSandboxClient('your-api-key', base_url='https://custom.plato.so/api')
 
         # Create sandbox from configuration (waits until ready by default)
         >>> from plato.models.sandbox import SimConfigDataset, SimConfigCompute, SimConfigMetadata
@@ -186,16 +189,26 @@ class PlatoSandboxClient:
         >>> client.close_sandbox(sandbox.public_id)
     """
 
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, api_key: str, base_url: str = "https://plato.so/api"):
         """
         Initialize the Plato Sandbox client
 
         Args:
-            base_url: Base URL of the Plato API (e.g., 'https://api.plato.so')
             api_key: Your Plato API key
+            base_url: Base URL of the Plato API (default: 'https://plato.so/api')
         """
         logger.debug(f"Initializing PlatoSandboxClient with base_url={base_url}")
+
+        # Helpful check: detect if user accidentally passed URL as api_key (old signature)
+        if api_key.startswith('http://') or api_key.startswith('https://'):
+            raise ValueError(
+                "It looks like you passed a URL as the api_key. "
+                "The signature has changed to: PlatoSandboxClient(api_key, base_url='https://plato.so/api'). "
+                f"Did you mean: PlatoSandboxClient('{base_url}', base_url='{api_key}')?"
+            )
+
         self._base_url = base_url
+        self._sandbox_configs = {}  # Cache configs by sandbox public_id
         lib = _get_lib()
         result_ptr = lib.plato_new_client(
             base_url.encode('utf-8'),
@@ -312,6 +325,13 @@ class PlatoSandboxClient:
         logger.info(f"Sandbox created: public_id={sandbox.public_id}, job_group_id={sandbox.job_group_id}")
         logger.debug(f"Automatic heartbeat started for job_group_id={sandbox.job_group_id}")
 
+        # Cache the config and dataset for later use (e.g., in setup_ssh)
+        if config is not None:
+            self._sandbox_configs[sandbox.public_id] = {
+                'config': config,
+                'dataset': dataset
+            }
+
         # Wait for sandbox to be ready if requested
         if wait and sandbox.correlation_id:
             logger.info(f"Waiting for sandbox {sandbox.public_id} to be ready (timeout={timeout}s)")
@@ -345,6 +365,9 @@ class PlatoSandboxClient:
         if 'error' in response:
             logger.error(f"Failed to close sandbox {public_id}: {response['error']}")
             raise RuntimeError(f"Failed to close sandbox: {response['error']}")
+
+        # Clean up cached config
+        self._sandbox_configs.pop(public_id, None)
 
         logger.info(f"Sandbox {public_id} closed successfully (heartbeat stopped automatically)")
 
@@ -805,8 +828,8 @@ class PlatoSandboxClient:
     def setup_ssh(
         self,
         sandbox: Sandbox,
-        config: SimConfigDataset,
-        dataset: str = "base",
+        config: Optional[SimConfigDataset] = None,
+        dataset: Optional[str] = None,
         local_port: int = 2200,
         username: str = "plato"
     ) -> Dict[str, str]:
@@ -821,8 +844,8 @@ class PlatoSandboxClient:
 
         Args:
             sandbox: Sandbox object with public_id and job_group_id
-            config: Sandbox configuration (same as used in create_sandbox)
-            dataset: Dataset name (default: "base")
+            config: Sandbox configuration (optional if sandbox was created with this client)
+            dataset: Dataset name (optional, will use cached value or default to "base")
             local_port: Local port for SSH connection (default: 2200)
             username: SSH username (default: "plato")
 
@@ -837,15 +860,34 @@ class PlatoSandboxClient:
                 - 'correlation_id': Correlation ID for monitoring setup
 
         Raises:
-            RuntimeError: If SSH setup fails
+            RuntimeError: If SSH setup fails or config not found
 
         Example:
-            >>> sandbox = client.create_sandbox(config=config, wait=False)
-            >>> ssh_info = client.setup_ssh(sandbox, config, dataset="base")
+            >>> # If sandbox was created with this client, config is cached
+            >>> sandbox = client.create_sandbox(config=config)
+            >>> ssh_info = client.setup_ssh(sandbox)
+            >>>
+            >>> # Or explicitly provide config
+            >>> ssh_info = client.setup_ssh(sandbox, config=config, dataset="base")
             >>> print(f"Connect with: {ssh_info['ssh_command']}")
-            >>> # Or directly: ssh -F {ssh_info['ssh_config_path']} {ssh_info['ssh_host']}
         """
         logger.info(f"Setting up SSH for sandbox {sandbox.public_id}")
+
+        # Try to get cached config if not provided
+        if config is None:
+            cached = self._sandbox_configs.get(sandbox.public_id)
+            if cached is None:
+                raise RuntimeError(
+                    f"No cached config found for sandbox {sandbox.public_id}. "
+                    "Please provide config and dataset explicitly."
+                )
+            config = cached['config']
+            if dataset is None:
+                dataset = cached['dataset']
+
+        # Default dataset if still not set
+        if dataset is None:
+            dataset = "base"
 
         # Convert config to JSON
         config_dict = config.model_dump(mode='json', exclude_none=True)
