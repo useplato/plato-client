@@ -48,6 +48,7 @@ type PlatoClient struct {
 	Simulator    *services.SimulatorService
 	Environment  *services.EnvironmentService
 	Gitea        *services.GiteaService
+	ProxyTunnel  *services.ProxyTunnelService
 }
 
 // RetryConfig configures retry behavior for failed requests
@@ -90,6 +91,7 @@ func NewClient(apiKey string, opts ...ClientOption) *PlatoClient {
 	client.Simulator = services.NewSimulatorService(client)
 	client.Environment = services.NewEnvironmentService(client)
 	client.Gitea = services.NewGiteaService(client)
+	client.ProxyTunnel = services.NewProxyTunnelService(client)
 
 	return client
 }

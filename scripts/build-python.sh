@@ -12,8 +12,16 @@ echo "🔨 Building Plato Python SDK"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
+# Step 0: Build proxytunnel binary
+echo "Step 0/5: Building proxytunnel binary"
+echo "────────────────────────────────────────"
+"$SCRIPT_DIR/build-proxytunnel.sh" || {
+    echo "⚠️  Warning: Failed to build proxytunnel, continuing anyway"
+}
+echo ""
+
 # Step 1: Build C shared library
-echo "Step 1/4: Building C shared library"
+echo "Step 1/5: Building C shared library"
 echo "────────────────────────────────────────"
 cd "$BINDINGS_DIR"
 
@@ -46,7 +54,7 @@ fi
 echo ""
 
 # Step 2: Copy library to Python package
-echo "Step 2/4: Copying library to Python package"
+echo "Step 2/5: Copying library to Python package"
 echo "────────────────────────────────────────"
 PYTHON_PKG_DIR="$PYTHON_DIR/src/plato"
 cp "$LIB_NAME" "$PYTHON_PKG_DIR/"
@@ -54,7 +62,7 @@ echo "✅ Copied to $PYTHON_PKG_DIR/$LIB_NAME"
 echo ""
 
 # Step 3: Build CLI binary
-echo "Step 3/4: Building CLI binary"
+echo "Step 3/5: Building CLI binary"
 echo "────────────────────────────────────────"
 cd "$CLI_DIR"
 
@@ -89,7 +97,7 @@ fi
 echo ""
 
 # Step 4: Build Python package
-echo "Step 4/4: Building Python package"
+echo "Step 4/5: Building Python package"
 echo "────────────────────────────────────────"
 cd "$PYTHON_DIR"
 

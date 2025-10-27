@@ -27,6 +27,7 @@ type ClientInterface interface {
 	NewRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error)
 	NewHubRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error)
 	Do(req *http.Request) (*http.Response, error)
+	GetBaseURL() string
 }
 
 type SandboxService struct {

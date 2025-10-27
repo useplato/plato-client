@@ -390,4 +390,124 @@ func plato_gitea_create_simulator_repo(clientID *C.char, simulatorID C.int) *C.c
 	return C.CString(string(result))
 }
 
+//export plato_proxytunnel_start
+func plato_proxytunnel_start(clientID *C.char, publicID *C.char, remotePort C.int, localPort C.int) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	logDebug("Starting proxytunnel: publicID=%s, remotePort=%d, localPort=%d", C.GoString(publicID), int(remotePort), int(localPort))
+
+	tunnelID, actualLocalPort, err := client.ProxyTunnel.Start(
+		C.GoString(publicID),
+		int(remotePort),
+		int(localPort),
+	)
+	if err != nil {
+		logDebug("Failed to start proxytunnel: %v", err)
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	logDebug("Proxytunnel started: tunnelID=%s, localPort=%d", tunnelID, actualLocalPort)
+
+	result := map[string]interface{}{
+		"tunnel_id":  tunnelID,
+		"local_port": actualLocalPort,
+	}
+	resultJSON, _ := json.Marshal(result)
+	return C.CString(string(resultJSON))
+}
+
+//export plato_proxytunnel_stop
+func plato_proxytunnel_stop(clientID *C.char, tunnelID *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	tidStr := C.GoString(tunnelID)
+	logDebug("Stopping proxytunnel: tunnelID=%s", tidStr)
+
+	err := client.ProxyTunnel.Stop(tidStr)
+	if err != nil {
+		logDebug("Failed to stop proxytunnel: %v", err)
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	logDebug("Proxytunnel stopped: tunnelID=%s", tidStr)
+	return C.CString(`{"success": true}`)
+}
+
+//export plato_proxytunnel_list
+func plato_proxytunnel_list(clientID *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	tunnels := client.ProxyTunnel.List()
+	result, err := json.Marshal(tunnels)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
+	}
+
+	return C.CString(string(result))
+}
+
+//export plato_gitea_push_to_hub
+func plato_gitea_push_to_hub(clientID *C.char, serviceName *C.char, sourceDir *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	serviceNameStr := C.GoString(serviceName)
+	sourceDirStr := C.GoString(sourceDir)
+	logDebug("Pushing to hub: service=%s, sourceDir=%s", serviceNameStr, sourceDirStr)
+
+	ctx := context.Background()
+	result, err := client.Gitea.PushToHub(ctx, serviceNameStr, sourceDirStr)
+	if err != nil {
+		logDebug("Failed to push to hub: %v", err)
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	logDebug("Pushed to hub: branch=%s", result.BranchName)
+
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
+	}
+
+	return C.CString(string(resultJSON))
+}
+
+//export plato_gitea_merge_to_main
+func plato_gitea_merge_to_main(clientID *C.char, serviceName *C.char, branchName *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	serviceNameStr := C.GoString(serviceName)
+	branchNameStr := C.GoString(branchName)
+	logDebug("Merging to main: service=%s, branch=%s", serviceNameStr, branchNameStr)
+
+	ctx := context.Background()
+	gitHash, err := client.Gitea.MergeToMain(ctx, serviceNameStr, branchNameStr)
+	if err != nil {
+		logDebug("Failed to merge to main: %v", err)
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	logDebug("Merged to main: gitHash=%s", gitHash)
+
+	result := map[string]string{
+		"git_hash": gitHash,
+	}
+	resultJSON, _ := json.Marshal(result)
+	return C.CString(string(resultJSON))
+}
+
 func main() {}

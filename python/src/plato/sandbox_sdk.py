@@ -117,6 +117,21 @@ def _get_lib():
         _lib.plato_gitea_create_simulator_repo.argtypes = [ctypes.c_char_p, ctypes.c_int]
         _lib.plato_gitea_create_simulator_repo.restype = ctypes.c_void_p
 
+        _lib.plato_proxytunnel_start.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+        _lib.plato_proxytunnel_start.restype = ctypes.c_void_p
+
+        _lib.plato_proxytunnel_stop.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        _lib.plato_proxytunnel_stop.restype = ctypes.c_void_p
+
+        _lib.plato_proxytunnel_list.argtypes = [ctypes.c_char_p]
+        _lib.plato_proxytunnel_list.restype = ctypes.c_void_p
+
+        _lib.plato_gitea_push_to_hub.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+        _lib.plato_gitea_push_to_hub.restype = ctypes.c_void_p
+
+        _lib.plato_gitea_merge_to_main.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+        _lib.plato_gitea_merge_to_main.restype = ctypes.c_void_p
+
         _lib.plato_free_string.argtypes = [ctypes.c_void_p]
         _lib.plato_free_string.restype = None
 
@@ -631,3 +646,154 @@ class PlatoSandboxClient:
 
         logger.info(f"Created repository for simulator {simulator_id}: {response.get('name')} (clone_url: {response.get('clone_url')})")
         return response
+
+    def start_proxy_tunnel(self, public_id: str, remote_port: int, local_port: int = 0) -> Dict[str, Any]:
+        """
+        Start a proxy tunnel to connect to a port on the sandbox.
+
+        Args:
+            public_id: Public ID of the sandbox
+            remote_port: Port on the remote sandbox to connect to
+            local_port: Local port to bind to (0 = auto-select)
+
+        Returns:
+            Dict with 'tunnel_id' and 'local_port'
+
+        Raises:
+            RuntimeError: If starting the tunnel fails
+        """
+        logger.info(f"Starting proxy tunnel: public_id={public_id}, remote_port={remote_port}, local_port={local_port}")
+        lib = _get_lib()
+        result_ptr = lib.plato_proxytunnel_start(
+            self._client_id.encode('utf-8'),
+            public_id.encode('utf-8'),
+            ctypes.c_int(remote_port),
+            ctypes.c_int(local_port)
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            logger.error(f"Failed to start proxy tunnel: {response['error']}")
+            raise RuntimeError(f"Failed to start proxy tunnel: {response['error']}")
+
+        logger.info(f"Proxy tunnel started: tunnel_id={response['tunnel_id']}, local_port={response['local_port']}")
+        return response
+
+    def stop_proxy_tunnel(self, tunnel_id: str) -> None:
+        """
+        Stop a running proxy tunnel.
+
+        Args:
+            tunnel_id: ID of the tunnel to stop
+
+        Raises:
+            RuntimeError: If stopping the tunnel fails
+        """
+        logger.info(f"Stopping proxy tunnel: tunnel_id={tunnel_id}")
+        lib = _get_lib()
+        result_ptr = lib.plato_proxytunnel_stop(
+            self._client_id.encode('utf-8'),
+            tunnel_id.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            logger.error(f"Failed to stop proxy tunnel: {response['error']}")
+            raise RuntimeError(f"Failed to stop proxy tunnel: {response['error']}")
+
+        logger.info(f"Proxy tunnel stopped: tunnel_id={tunnel_id}")
+
+    def list_proxy_tunnels(self) -> List[Dict[str, Any]]:
+        """
+        List all active proxy tunnels.
+
+        Returns:
+            List of tunnel dicts with 'ID', 'LocalPort', 'RemotePort', 'PublicID'
+
+        Raises:
+            RuntimeError: If listing fails
+        """
+        logger.debug("Listing proxy tunnels")
+        lib = _get_lib()
+        result_ptr = lib.plato_proxytunnel_list(
+            self._client_id.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if isinstance(response, dict) and 'error' in response:
+            logger.error(f"Failed to list proxy tunnels: {response['error']}")
+            raise RuntimeError(f"Failed to list proxy tunnels: {response['error']}")
+
+        logger.info(f"Listed {len(response)} proxy tunnels")
+        return response
+
+    def push_to_gitea(self, service_name: str, source_dir: str = "") -> Dict[str, Any]:
+        """
+        Push local code to Gitea repository on a timestamped branch.
+
+        Args:
+            service_name: Name of the service/simulator
+            source_dir: Source directory to push (empty string = current directory)
+
+        Returns:
+            Dict with 'RepoURL', 'CloneCmd', 'BranchName'
+
+        Raises:
+            RuntimeError: If push fails
+        """
+        logger.info(f"Pushing to Gitea: service={service_name}, source_dir={source_dir}")
+        lib = _get_lib()
+        result_ptr = lib.plato_gitea_push_to_hub(
+            self._client_id.encode('utf-8'),
+            service_name.encode('utf-8'),
+            source_dir.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            logger.error(f"Failed to push to Gitea: {response['error']}")
+            raise RuntimeError(f"Failed to push to Gitea: {response['error']}")
+
+        logger.info(f"Pushed to Gitea: branch={response.get('BranchName')}")
+        return response
+
+    def merge_to_main(self, service_name: str, branch_name: str) -> str:
+        """
+        Merge a workspace branch to main and return the git hash.
+
+        Args:
+            service_name: Name of the service/simulator
+            branch_name: Branch name to merge
+
+        Returns:
+            Git commit hash
+
+        Raises:
+            RuntimeError: If merge fails
+        """
+        logger.info(f"Merging to main: service={service_name}, branch={branch_name}")
+        lib = _get_lib()
+        result_ptr = lib.plato_gitea_merge_to_main(
+            self._client_id.encode('utf-8'),
+            service_name.encode('utf-8'),
+            branch_name.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            logger.error(f"Failed to merge to main: {response['error']}")
+            raise RuntimeError(f"Failed to merge to main: {response['error']}")
+
+        git_hash = response.get('git_hash', '')
+        logger.info(f"Merged to main: git_hash={git_hash}")
+        return git_hash
