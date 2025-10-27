@@ -243,7 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Setting up root SSH password...")
 			m.vmInfo.runningCommand = true
-			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicId, m.vmInfo.sshHost))
+			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicId, m.vmInfo.sshPrivateKeyPath, m.vmInfo.sshHost))
 		}
 		return m, nil
 	}

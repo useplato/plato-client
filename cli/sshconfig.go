@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"plato-sdk/cmd/plato/internal/utils"
+	"plato-cli/internal/utils"
 	"strings"
 )
 

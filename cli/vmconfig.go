@@ -7,16 +7,13 @@
 package main
 
 import (
-
-"plato-cli/internal/utils"
-"plato-cli/internal/ui/components"
 	"context"
 	"fmt"
 	"math/rand"
 	"os"
 	plato "plato-sdk"
-	"plato-sdk/cmd/plato/internal/ui/components"
-	"plato-sdk/cmd/plato/internal/utils"
+	"plato-cli/internal/ui/components"
+	"plato-cli/internal/utils"
 	"plato-sdk/models"
 	"strconv"
 	"strings"
@@ -112,13 +109,14 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 
 func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, statusChan chan<- string) tea.Cmd {
 	return func() tea.Msg {
+		ctx := context.Background()
 		statusChan <- "Configuring SSH access..."
 
 		// Choose a random port between 2200 and 2299
 		localPort := rand.Intn(100) + 2200
 
-		// Setup SSH config using PublicID
-		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicId, "root")
+		// Setup SSH config using PublicId - returns (hostname, configPath, publicKey, privateKeyPath, error)
+		sshHost, configPath, sshPublicKey, privateKeyPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicId, "root")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -134,25 +132,15 @@ func setupSSHForArtifact(client *plato.PlatoClient, sandbox *models.Sandbox, sta
 
 		// Setup root SSH access with public key
 		statusChan <- "Setting up root SSH access..."
-		sshPublicKey, err := utils.ReadSSHPublicKey()
-		if err != nil {
-			close(statusChan)
-			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("failed to read SSH public key: %w", err),
-			}
-		}
-
 		err = client.Sandbox.SetupRootPassword(ctx, sandbox.PublicId, sshPublicKey)
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("root SSH setup failed: %w", err),
+				sshURL:            "",
+				sshHost:           "",
+				sshConfigPath:     "",
+				sshPrivateKeyPath: "",
+				err:               fmt.Errorf("root SSH setup failed: %w", err),
 			}
 		}
 
@@ -187,7 +175,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		localPort := rand.Intn(100) + 2200
 
 		// Setup SSH config and generate new key pair
-		sshHost, configPath, sshPublicKey, privateKeyPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicID, "plato")
+		sshHost, configPath, sshPublicKey, privateKeyPath, err := utils.SetupSSHConfig(client.GetBaseURL(), localPort, sandbox.PublicId, "plato")
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -222,27 +210,11 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("setup monitoring failed: %w", err),
-			}
-		}
-
-		statusChan <- "Configuring SSH access..."
-
-		// Choose a random port between 2200 and 2299
-		localPort := rand.Intn(100) + 2200
-
-		// Setup SSH config and get the hostname (use 'plato' user for blank VMs)
-		sshHost, configPath, err := utils.SetupSSHConfig(localPort, sandbox.PublicId, "plato")
-		if err != nil {
-			close(statusChan)
-			return sandboxSetupCompleteMsg{
-				sshURL:        "",
-				sshHost:       "",
-				sshConfigPath: "",
-				err:           fmt.Errorf("SSH config setup failed: %w", err),
+				sshURL:            "",
+				sshHost:           "",
+				sshConfigPath:     "",
+				sshPrivateKeyPath: "",
+				err:               fmt.Errorf("setup monitoring failed: %w", err),
 			}
 		}
 

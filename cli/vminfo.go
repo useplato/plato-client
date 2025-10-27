@@ -1540,7 +1540,7 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 
 		m.statusMessages = append(m.statusMessages, "Setting up root SSH password...")
 		m.runningCommand = true
-		return m, tea.Batch(m.spinner.Tick, setupRootPassword(m.client, m.sandbox.PublicId, m.sshHost))
+		return m, tea.Batch(m.spinner.Tick, setupRootPassword(m.client, m.sandbox.PublicId, m.sshPrivateKeyPath, m.sshHost))
 	case "Connect to Cursor/VSCode":
 		if m.sshHost == "" {
 			m.statusMessages = append(m.statusMessages, "❌ SSH host not set up yet")
@@ -1825,9 +1825,9 @@ func fetchHubRepoURL(client *plato.PlatoClient, serviceName string) tea.Cmd {
 // getSandboxPublicURL computes the public URL for a sandbox based on the base URL
 func getSandboxPublicURL(client *plato.PlatoClient, sandbox *models.Sandbox) string {
 	baseURL := client.GetBaseURL()
-	identifier := sandbox.JobGroupID
+	identifier := sandbox.JobGroupId
 	if identifier == "" {
-		identifier = sandbox.PublicID
+		identifier = sandbox.PublicId
 	}
 
 	// Determine environment based on base_url

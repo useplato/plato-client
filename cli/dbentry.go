@@ -1,12 +1,9 @@
 package main
 
 import (
-
-"plato-cli/internal/utils"
-"plato-cli/internal/ui/components"
 	"fmt"
-	"plato-sdk/cmd/plato/internal/ui/components"
-	"plato-sdk/cmd/plato/internal/utils"
+	"plato-cli/internal/ui/components"
+	"plato-cli/internal/utils"
 	"strconv"
 	"strings"
 
