@@ -204,3 +204,65 @@ components:
           type: string
         artifact_id:
           type: string
+
+    CreateSnapshotRequest:
+      type: object
+      properties:
+        service:
+          type: string
+        git_hash:
+          type: string
+        dataset:
+          type: string
+
+    CreateSnapshotResponse:
+      type: object
+      required:
+        - artifact_id
+        - status
+        - timestamp
+        - correlation_id
+        - s3_uri
+      properties:
+        artifact_id:
+          type: string
+        status:
+          type: string
+        timestamp:
+          type: string
+        correlation_id:
+          type: string
+        s3_uri:
+          type: string
+        git_hash:
+          type: string
+
+    StartWorkerRequest:
+      type: object
+      required:
+        - dataset
+        - plato_dataset_config
+      properties:
+        service:
+          type: string
+        dataset:
+          type: string
+        plato_dataset_config:
+          $ref: '#/components/schemas/SimConfigDataset'
+        timeout:
+          type: integer
+          format: int32
+
+    StartWorkerResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - correlation_id
+      properties:
+        status:
+          type: string
+        timestamp:
+          type: string
+        correlation_id:
+          type: string
