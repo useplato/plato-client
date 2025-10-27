@@ -19,8 +19,15 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Download dependencies
+        run: |
+          cd sdk
+          go mod download
+
       - name: Build SDK
-        run: ./scripts/build-sdk.sh
+        run: |
+          cd sdk
+          go build ./...
 
       - name: Run SDK tests with race detector
         run: |
@@ -128,10 +135,10 @@ jobs:
           ls -lh python/dist/
           echo "✅ Python SDK built successfully"
 
-      - name: Test Python SDK
+      - name: Test Python SDK imports and library loading
         run: |
           cd python
-          uv run python3 test_cli_dry_run.py
+          uv run python3 tests/test_import.py
 
   lint:
     name: Lint
@@ -146,14 +153,16 @@ jobs:
           go-version: '1.23'
 
       - name: Run golangci-lint on SDK
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.62
           working-directory: sdk
+          args: --timeout=5m
 
       - name: Run golangci-lint on CLI
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.62
           working-directory: cli
+          args: --timeout=5m
 
