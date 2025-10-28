@@ -76,10 +76,31 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux
+            python-version: "3.10"
+          - os: ubuntu-latest
+            platform: linux
+            python-version: "3.11"
+          - os: ubuntu-latest
+            platform: linux
+            python-version: "3.12"
           - os: macos-13  # Intel Mac
             platform: macos-x86_64
+            python-version: "3.10"
+          - os: macos-13
+            platform: macos-x86_64
+            python-version: "3.11"
+          - os: macos-13
+            platform: macos-x86_64
+            python-version: "3.12"
           - os: macos-latest  # ARM Mac
             platform: macos-arm64
+            python-version: "3.10"
+          - os: macos-latest
+            platform: macos-arm64
+            python-version: "3.11"
+          - os: macos-latest
+            platform: macos-arm64
+            python-version: "3.12"
 
     runs-on: ${{ matrix.os }}
 
@@ -99,7 +120,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install build tooling
         run: |
