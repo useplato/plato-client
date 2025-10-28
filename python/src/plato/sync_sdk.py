@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoTaskMetadata
 from plato.models.task import ScoringType
@@ -11,18 +11,9 @@ import os
 import logging
 import time
 import requests
-import json
-from pathlib import Path
 
-from opentelemetry import trace as _trace
-from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
-from opentelemetry.sdk.trace.export import (
-    BatchSpanProcessor as _BatchSpanProcessor,
-)
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-    OTLPSpanExporter as _OTLPSpanExporter,
-)
-from opentelemetry.sdk.resources import Resource as _Resource
+import logfire
+from importlib.metadata import version, PackageNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -42,6 +33,7 @@ class SyncPlato:
         http_session (Optional[requests.Session]): The requests session for making HTTP requests.
     """
 
+    @logfire.instrument("SyncPlato.__init__", extract_args=True)
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -64,11 +56,14 @@ class SyncPlato:
         self._http_session: Optional[requests.Session] = None
         self._telemetry: bool = telemetry
         self._telemetry_headers: Dict[str, str] | None = None
-        self._telemetry_token_cache_path = (
-            Path.home() / ".plato" / "telemetry_token.json"
-        )
+        self._telemetry_configured: bool = False
+
+        # Configure Logfire in noop mode if telemetry is disabled
+        if not telemetry:
+            self._configure_logfire_noop()
 
     @property
+    @logfire.instrument("SyncPlato.http_session", extract_args=True)
     def http_session(self) -> requests.Session:
         """Get or create a requests client session.
 
@@ -89,6 +84,7 @@ class SyncPlato:
                     logger.debug(f"Failed to initialize telemetry: {_e}")
         return self._http_session
 
+    @logfire.instrument("SyncPlato.close", extract_args=True)
     def close(self):
         """Close the requests client session if it exists."""
         if self._http_session is not None:
@@ -98,41 +94,15 @@ class SyncPlato:
     def _init_telemetry(self) -> None:
         if not self._telemetry:
             return
-        token_data: Dict[str, Any] | None = None
-        try:
-            if self._telemetry_token_cache_path.exists():
-                token_data = json.loads(self._telemetry_token_cache_path.read_text())
-        except Exception:
-            token_data = None
 
-        needs_refresh = True
-        if token_data and token_data.get("expires_at"):
-            try:
-                from datetime import datetime as _dt, timedelta as _td
+        headers = {"X-API-Key": self.api_key}
+        resp = self.http_session.post(
+            f"{self.base_url}/telemetry/init", headers=headers
+        )
+        self._handle_response_error(resp)
+        token_data: Dict[str, Any] = resp.json()
 
-                exp = _dt.fromisoformat(token_data["expires_at"])  # type: ignore[arg-type]
-                if exp - _dt.utcnow() > _td(hours=24):
-                    needs_refresh = False
-            except Exception:
-                needs_refresh = True
-
-        if needs_refresh:
-            headers = {"X-API-Key": self.api_key}
-            body = {"service_name": "plato-sdk", "environment": "client"}
-            resp = self.http_session.post(
-                f"{self.base_url}/telemetry/init", json=body, headers=headers
-            )
-            self._handle_response_error(resp)
-            token_data = resp.json()
-            try:
-                self._telemetry_token_cache_path.parent.mkdir(
-                    parents=True, exist_ok=True
-                )
-                self._telemetry_token_cache_path.write_text(json.dumps(token_data))
-            except Exception:
-                pass
-
-        if token_data and token_data.get("access_token"):
+        if token_data.get("access_token"):
             token = token_data["access_token"]
             self._telemetry_headers = {"Authorization": f"Bearer {token}"}
             try:
@@ -141,15 +111,54 @@ class SyncPlato:
                 logger.debug(f"Failed to initialize OTEL exporter: {_e}")
 
     def _configure_otel_from_token(self, token_data: Dict[str, Any]) -> None:
-        resource_attrs = token_data.get("resource_attributes", {})
-        endpoint = token_data.get("otlp_base_url", "").rstrip("/") + "/v1/traces"
-        provider = _TracerProvider(resource=_Resource.create(resource_attrs))
-        exporter = _OTLPSpanExporter(
-            endpoint=endpoint, headers=self._telemetry_headers or {}
-        )
-        processor = _BatchSpanProcessor(exporter)
-        provider.add_span_processor(processor)
-        _trace.set_tracer_provider(provider)
+        """Configure Logfire with OTLP exporter using token data from server.
+
+        Uses Logfire for instrumentation but sends to our own OTLP endpoint.
+        """
+        try:
+            resource_attrs = token_data.get("resource_attributes", {})
+
+            # Get package version dynamically
+            try:
+                pkg_version = version("plato-sdk")
+            except PackageNotFoundError:
+                pkg_version = "unknown"
+
+            # Add standard service attributes
+            resource_attrs.update(
+                {
+                    "service.name": "plato-sdk",
+                    "service.version": pkg_version,
+                    "telemetry.source": "sdk",
+                }
+            )
+
+            base_url = token_data.get("otlp_base_url", "").rstrip("/")
+            if not base_url:
+                raise PlatoClientError(
+                    "Telemetry enabled but server did not provide OTLP base URL"
+                )
+
+            # Configure logfire to not send to logfire.dev, but to our endpoint
+            self._configure_logfire(
+                send_to_logfire=False,
+                console=False,  # Disable console output
+                service_name="plato-sdk",
+                service_version=pkg_version,
+                trace_sample_rate=1.0,
+                # Configure OTLP export
+                additional_span_processors=[
+                    logfire.integrations.create_otlp_span_processor(
+                        endpoint=f"{base_url}/v1/traces",
+                        headers=self._telemetry_headers or {},
+                        timeout=30,
+                    )
+                ],
+                # Set resource attributes
+                resource_attributes=resource_attrs,
+            )
+        except Exception as e:
+            raise PlatoClientError(f"Failed to configure telemetry: {e}")
 
     def _handle_response_error(self, response: requests.Response) -> None:
         """Handle HTTP error responses by extracting the actual error message.
@@ -175,6 +184,7 @@ class SyncPlato:
 
             raise PlatoClientError(f"HTTP {response.status_code}: {error_message}")
 
+    @logfire.instrument("SyncPlato.make_environment", extract_args=True)
     def make_environment(
         self,
         env_id: str,
@@ -246,6 +256,7 @@ class SyncPlato:
             fast=fast,
         )
 
+    @logfire.instrument("SyncPlato.get_job_status", extract_args=True)
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
 
@@ -264,6 +275,7 @@ class SyncPlato:
         logger.debug(f"Job status for job {job_id}: {data}")
         return data
 
+    @logfire.instrument("SyncPlato.get_cdp_url", extract_args=True)
     def get_cdp_url(self, job_id: str) -> str:
         """Get the Chrome DevTools Protocol URL for a job.
 
@@ -283,6 +295,7 @@ class SyncPlato:
             raise PlatoClientError(data["error"])
         return data["data"]["cdp_url"]
 
+    @logfire.instrument("SyncPlato.get_proxy_url", extract_args=True)
     def get_proxy_url(self, job_id: str) -> str:
         """Get the proxy URL for a job.
 
@@ -302,6 +315,7 @@ class SyncPlato:
             raise PlatoClientError(data["error"])
         return data["data"]["proxy_url"]
 
+    @logfire.instrument("SyncPlato.close_environment", extract_args=True)
     def close_environment(self, job_id: str) -> Dict[str, Any]:
         """Close an environment.
 
@@ -318,6 +332,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.backup_environment", extract_args=True)
     def backup_environment(self, job_id: str) -> Dict[str, Any]:
         """Create a backup of an environment.
 
@@ -334,6 +349,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.reset_environment", extract_args=True)
     def reset_environment(
         self,
         job_id: str,
@@ -372,6 +388,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.get_environment_state", extract_args=True)
     def get_environment_state(
         self, job_id: str, merge_mutations: bool = False
     ) -> Dict[str, Any]:
@@ -395,6 +412,7 @@ class SyncPlato:
         data = response.json()
         return data["data"]["state"]
 
+    @logfire.instrument("SyncPlato.get_worker_ready", extract_args=True)
     def get_worker_ready(self, job_id: str) -> Dict[str, Any]:
         """Check if the worker for this job is ready and healthy.
 
@@ -411,6 +429,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.get_live_view_url", extract_args=True)
     def get_live_view_url(self, job_id: str) -> str:
         """Get the URL for accessing the live view of the environment.
 
@@ -433,6 +452,7 @@ class SyncPlato:
         except requests.RequestException as e:
             raise PlatoClientError(str(e))
 
+    @logfire.instrument("SyncPlato.send_heartbeat", extract_args=True)
     def send_heartbeat(self, job_id: str) -> Dict[str, Any]:
         """Send a heartbeat to keep the environment active.
 
@@ -449,6 +469,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.process_snapshot", extract_args=True)
     def process_snapshot(self, session_id: str) -> Dict[str, Any]:
         """Process a snapshot of the environment.
 
@@ -467,6 +488,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.evaluate", extract_args=True)
     def evaluate(
         self,
         session_id: str,
@@ -498,6 +520,7 @@ class SyncPlato:
         res_data = response.json()
         return res_data["score"]
 
+    @logfire.instrument("SyncPlato.post_evaluation_result", extract_args=True)
     def post_evaluation_result(
         self,
         session_id: str,
@@ -532,6 +555,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.log", extract_args=True)
     def log(self, session_id: str, log: dict, type: str = "info") -> Dict[str, Any]:
         """Log a message to the server.
 
@@ -558,6 +582,7 @@ class SyncPlato:
         self._handle_response_error(response)
         return response.json()
 
+    @logfire.instrument("SyncPlato.list_simulators", extract_args=True)
     def list_simulators(self) -> List[Dict[str, Any]]:
         """List all environments.
 
@@ -572,6 +597,7 @@ class SyncPlato:
         simulators = response.json()
         return [s for s in simulators if s["enabled"]]
 
+    @logfire.instrument("SyncPlato.load_tasks", extract_args=True)
     def load_tasks(self, simulator_name: str) -> List[PlatoTask]:
         """Load tasks from a simulator.
 
@@ -622,6 +648,7 @@ class SyncPlato:
             for t in test_cases
         ]
 
+    @logfire.instrument("SyncPlato.get_active_session", extract_args=True)
     def get_active_session(self, job_id: str) -> Dict[str, Any]:
         """Get the active session for a job group.
 
@@ -642,6 +669,7 @@ class SyncPlato:
             raise PlatoClientError(data["error"])
         return data
 
+    @logfire.instrument("SyncPlato.get_running_sessions_count", extract_args=True)
     def get_running_sessions_count(self) -> Dict[str, Any]:
         """Get the current number of running sessions for the user's organization.
 
@@ -656,3 +684,23 @@ class SyncPlato:
         )
         self._handle_response_error(response)
         return response.json()
+
+    def _configure_logfire_noop(self) -> None:
+        """Configure Logfire in no-op mode to avoid any logging overhead."""
+        if not self._telemetry_configured:
+            try:
+                logfire.configure(send_to_logfire=False, console=False)
+                self._telemetry_configured = True
+            except Exception as e:
+                logger.debug(f"Failed to configure Logfire in noop mode: {e}")
+
+    def _configure_logfire(self, **kwargs) -> None:
+        """Configure Logfire with the given parameters, ensuring it's only done once."""
+        if not self._telemetry_configured:
+            try:
+                logfire.configure(**kwargs)
+                self._telemetry_configured = True
+            except Exception as e:
+                logger.debug(f"Failed to configure Logfire: {e}")
+                # Fall back to noop mode
+                self._configure_logfire_noop()

@@ -13,6 +13,7 @@ from playwright.sync_api import Page
 import yaml
 from pathlib import Path
 import json
+import logfire
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +39,16 @@ class SyncPlatoEnvironment:
     """
 
     _current_task: Optional[PlatoTask] = None
-    _client: "SyncPlato" = None
-    id: str = None
-    env_id: str = None
+    _client: Optional["SyncPlato"] = None
+    id: Optional[str] = None
+    env_id: Optional[str] = None
     alias: Optional[str] = None
     _run_session_id: Optional[str] = None
     _heartbeat_thread: Optional[threading.Thread] = None
     _heartbeat_interval: int = 30  # seconds
     _stop_heartbeat: bool = False
 
+    @logfire.instrument("SyncPlatoEnvironment.__init__", extract_args=True)
     def __init__(
         self,
         client: "SyncPlato",
@@ -67,6 +69,7 @@ class SyncPlatoEnvironment:
 
     # No embedded defaults; expect scripts.yaml to exist in repo at plato/flows/{env_id}/scripts.yaml
 
+    @logfire.instrument("SyncPlatoEnvironment.login", extract_args=True)
     def login(
         self,
         page: Page,
@@ -147,6 +150,7 @@ class SyncPlatoEnvironment:
             else:
                 logger.warning("Failed to login")
 
+    @logfire.instrument("SyncPlatoEnvironment.wait_for_ready", extract_args=True)
     def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
 
@@ -212,6 +216,7 @@ class SyncPlatoEnvironment:
         # Start the heartbeat thread if not already running
         self._start_heartbeat()
 
+    @logfire.instrument("SyncPlatoEnvironment.__enter__", extract_args=True)
     def __enter__(self):
         """Enter the context manager.
 
@@ -223,6 +228,7 @@ class SyncPlatoEnvironment:
         self.wait_for_ready()
         return self
 
+    @logfire.instrument("SyncPlatoEnvironment.__exit__", extract_args=True)
     def __exit__(
         self,
         exc_type: Optional[Type[BaseException]],
@@ -240,6 +246,7 @@ class SyncPlatoEnvironment:
         """
         self.close()
 
+    @logfire.instrument("SyncPlatoEnvironment.get_cdp_url", extract_args=True)
     def get_cdp_url(self) -> str:
         """Get the Chrome DevTools Protocol URL for this environment's session.
 
@@ -253,6 +260,7 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return self._client.get_cdp_url(self.id)
 
+    @logfire.instrument("SyncPlatoEnvironment.reset", extract_args=True)
     def reset(
         self,
         task: Optional[PlatoTask] = None,
@@ -285,6 +293,7 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("Failed to reset environment. Please try again.")
         return self._run_session_id
 
+    @logfire.instrument("SyncPlatoEnvironment.get_session_url", extract_args=True)
     def get_session_url(self) -> str:
         """Get the URL for accessing the session of the environment."""
         if not self._run_session_id:
@@ -292,6 +301,7 @@ class SyncPlatoEnvironment:
         root_url = self._client.base_url.split("/api")[0]
         return os.path.join(root_url, "sessions", f"{self._run_session_id}/")
 
+    @logfire.instrument("SyncPlatoEnvironment._heartbeat_loop", extract_args=True)
     def _heartbeat_loop(self) -> None:
         """Background thread that periodically sends heartbeats to keep the environment active."""
         try:
@@ -307,6 +317,7 @@ class SyncPlatoEnvironment:
             # Unexpected error
             logger.error(f"Heartbeat thread failed with error: {e} for job {self.id}")
 
+    @logfire.instrument("SyncPlatoEnvironment._start_heartbeat", extract_args=True)
     def _start_heartbeat(self) -> None:
         """Start the heartbeat background thread if not already running."""
         # Stop any existing eartbeat thread
@@ -319,6 +330,9 @@ class SyncPlatoEnvironment:
         )
         self._heartbeat_thread.start()
 
+    @logfire.instrument(
+        "SyncPlatoEnvironment._stop_heartbeat_thread", extract_args=True
+    )
     def _stop_heartbeat_thread(self) -> None:
         """Stop the heartbeat background thread if it's running."""
         if self._heartbeat_thread and self._heartbeat_thread.is_alive():
@@ -328,6 +342,7 @@ class SyncPlatoEnvironment:
             )  # Wait up to 5 seconds for thread to stop
             self._heartbeat_thread = None
 
+    @logfire.instrument("SyncPlatoEnvironment.get_state", extract_args=True)
     def get_state(self, merge_mutations: bool = False) -> Dict[str, Any]:
         """Get the current state of the environment.
 
@@ -341,6 +356,7 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return self._client.get_environment_state(self.id, merge_mutations)
 
+    @logfire.instrument("SyncPlatoEnvironment.get_state_mutations", extract_args=True)
     def get_state_mutations(
         self, merge_mutations: bool = False
     ) -> List[Dict[str, Any]]:
@@ -355,6 +371,7 @@ class SyncPlatoEnvironment:
         state = self.get_state(merge_mutations)
         return state.get("mutations", [])
 
+    @logfire.instrument("SyncPlatoEnvironment._get_nested_value", extract_args=True)
     def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:
         """Get a value from a nested dictionary using dotted notation.
 
@@ -380,6 +397,7 @@ class SyncPlatoEnvironment:
                 current = current[part]
         return current
 
+    @logfire.instrument("SyncPlatoEnvironment.get_evaluation_result", extract_args=True)
     def get_evaluation_result(self) -> EvaluationResult:
         """Evaluate whether the current task has been completed successfully.
 
@@ -437,6 +455,7 @@ class SyncPlatoEnvironment:
                 success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
+    @logfire.instrument("SyncPlatoEnvironment.evaluate", extract_args=True)
     def evaluate(
         self, value: Optional[Any] = None, agent_version: Optional[str] = None
     ) -> EvaluationResult:
@@ -481,6 +500,7 @@ class SyncPlatoEnvironment:
                 actual_mutations=result.get("mutations", None),
             )
 
+    @logfire.instrument("SyncPlatoEnvironment.log", extract_args=True)
     def log(self, log: dict, type: str = "info") -> None:
         """Log a message to the environment.
 
@@ -492,6 +512,7 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         self._client.log(self._run_session_id, log, type)
 
+    @logfire.instrument("SyncPlatoEnvironment.get_live_view_url", extract_args=True)
     def get_live_view_url(self) -> str:
         """Get the URL for accessing the live view of the environment.
 
@@ -508,6 +529,7 @@ class SyncPlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return self._client.get_live_view_url(self.id)
 
+    @logfire.instrument("SyncPlatoEnvironment.get_proxy_config", extract_args=True)
     def get_proxy_config(self) -> Dict[str, str]:
         """Get the proxy configuration for this environment.
 
@@ -557,6 +579,7 @@ class SyncPlatoEnvironment:
         except Exception as e:
             raise PlatoClientError(str(e))
 
+    @logfire.instrument("SyncPlatoEnvironment.get_public_url", extract_args=True)
     def get_public_url(self) -> str:
         """Get the public URL for accessing this environment.
 
@@ -596,6 +619,7 @@ class SyncPlatoEnvironment:
         except Exception as e:
             raise PlatoClientError(str(e))
 
+    @logfire.instrument("SyncPlatoEnvironment.close", extract_args=True)
     def close(self) -> None:
         """Clean up and close the environment.
 
@@ -608,6 +632,7 @@ class SyncPlatoEnvironment:
         # Close the environment through the API
         self._client.close_environment(self.id)
 
+    @logfire.instrument("SyncPlatoEnvironment.backup", extract_args=True)
     def backup(self) -> Dict[str, Any]:
         """Create a backup of the environment.
 
@@ -620,6 +645,7 @@ class SyncPlatoEnvironment:
         return self._client.backup_environment(self.id)
 
     @staticmethod
+    @logfire.instrument("SyncPlatoEnvironment.from_id", extract_args=True)
     def from_id(
         client: "SyncPlato", id: str, fast: bool = False
     ) -> "SyncPlatoEnvironment":

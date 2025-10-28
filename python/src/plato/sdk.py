@@ -7,11 +7,12 @@ from plato.exceptions import PlatoClientError
 from plato.models.task import EvaluationResult
 
 import aiohttp
-import json
-from pathlib import Path
 import os
 import logging
 import time
+
+import logfire
+from importlib.metadata import version, PackageNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class Plato:
         http_session (Optional[aiohttp.ClientSession]): The aiohttp session for making HTTP requests.
     """
 
+    @logfire.instrument("Plato.__init__", extract_args=True)
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -51,13 +53,16 @@ class Plato:
         self.base_url = base_url or config.base_url
         self.feature_flags = feature_flags or {}
         self._http_session: Optional[aiohttp.ClientSession] = None
-        self._telemetry_token_cache_path = (
-            Path.home() / ".plato" / "telemetry_token.json"
-        )
         self._telemetry: bool = telemetry
         self._telemetry_headers: Dict[str, str] | None = None
+        self._telemetry_configured: bool = False
+
+        # Configure Logfire in noop mode if telemetry is disabled
+        if not telemetry:
+            self._configure_logfire_noop()
 
     @property
+    @logfire.instrument("Plato.http_session", extract_args=True)
     def http_session(self) -> aiohttp.ClientSession:
         """Get or create an aiohttp client session.
 
@@ -99,6 +104,7 @@ class Plato:
                     pass
         return self._http_session
 
+    @logfire.instrument("Plato.close", extract_args=True)
     async def close(self):
         """Close the aiohttp client session if it exists."""
         if self._http_session is not None and not self._http_session.closed:
@@ -108,41 +114,13 @@ class Plato:
     async def _init_telemetry(self) -> None:
         if not self._telemetry:
             return
-        token_data = None
-        try:
-            if self._telemetry_token_cache_path.exists():
-                token_data = json.loads(self._telemetry_token_cache_path.read_text())
-        except Exception:
-            token_data = None
 
-        needs_refresh = True
-        if token_data and token_data.get("expires_at"):
-            try:
-                # simple ttl check: refresh if < 24h to expiry
-                import datetime as _dt
-
-                exp = _dt.datetime.fromisoformat(token_data["expires_at"])
-                if exp - _dt.datetime.utcnow() > _dt.timedelta(hours=24):
-                    needs_refresh = False
-            except Exception:
-                needs_refresh = True
-
-        if needs_refresh:
-            headers = {"X-API-Key": self.api_key}
-            body = {"service_name": "plato-sdk", "environment": "client"}
-            async with self.http_session.post(
-                f"{self.base_url}/telemetry/init", json=body, headers=headers
-            ) as resp:
-                await self._handle_response_error(resp)
-                token_data = await resp.json()
-            # persist
-            try:
-                self._telemetry_token_cache_path.parent.mkdir(
-                    parents=True, exist_ok=True
-                )
-                self._telemetry_token_cache_path.write_text(json.dumps(token_data))
-            except Exception:
-                pass
+        headers = {"X-API-Key": self.api_key}
+        async with self.http_session.post(
+            f"{self.base_url}/telemetry/init", headers=headers
+        ) as resp:
+            await self._handle_response_error(resp)
+            token_data = await resp.json()
 
         if token_data:
             token = token_data.get("access_token")
@@ -154,30 +132,54 @@ class Plato:
                     logger.debug(f"Failed to initialize OTEL exporter: {_e}")
 
     def _configure_otel_from_token(self, token_data: Dict[str, Any]) -> None:
-        """Configure OpenTelemetry tracing exporter using token data from server.
+        """Configure Logfire with OTLP exporter using token data from server.
 
-        Sets a TracerProvider with an OTLP HTTP exporter that sends Authorization header.
+        Uses Logfire for instrumentation but sends to our own OTLP endpoint.
         """
-        from opentelemetry import trace as _trace
-        from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
-        from opentelemetry.sdk.trace.export import (
-            BatchSpanProcessor as _BatchSpanProcessor,
-        )
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter as _OTLPSpanExporter,
-        )
-        from opentelemetry.sdk.resources import Resource as _Resource
+        try:
+            resource_attrs = token_data.get("resource_attributes", {})
 
-        resource_attrs = token_data.get("resource_attributes", {})
-        endpoint = token_data.get("otlp_base_url", "").rstrip("/") + "/v1/traces"
+            # Get package version dynamically
+            try:
+                pkg_version = version("plato-sdk")
+            except PackageNotFoundError:
+                pkg_version = "unknown"
 
-        provider = _TracerProvider(resource=_Resource.create(resource_attrs))
-        exporter = _OTLPSpanExporter(
-            endpoint=endpoint, headers=self._telemetry_headers or {}
-        )
-        processor = _BatchSpanProcessor(exporter)
-        provider.add_span_processor(processor)
-        _trace.set_tracer_provider(provider)
+            # Add standard service attributes
+            resource_attrs.update(
+                {
+                    "service.name": "plato-sdk",
+                    "service.version": pkg_version,
+                    "telemetry.source": "sdk",
+                }
+            )
+
+            base_url = token_data.get("otlp_base_url", "").rstrip("/")
+            if not base_url:
+                raise PlatoClientError(
+                    "Telemetry enabled but server did not provide OTLP base URL"
+                )
+
+            # Configure logfire to not send to logfire.dev, but to our endpoint
+            self._configure_logfire(
+                send_to_logfire=False,
+                console=False,  # Disable console output
+                service_name="plato-sdk",
+                service_version=pkg_version,
+                trace_sample_rate=1.0,
+                # Configure OTLP export
+                additional_span_processors=[
+                    logfire.integrations.create_otlp_span_processor(
+                        endpoint=f"{base_url}/v1/traces",
+                        headers=self._telemetry_headers or {},
+                        timeout=30,
+                    )
+                ],
+                # Set resource attributes
+                resource_attributes=resource_attrs,
+            )
+        except Exception as e:
+            raise PlatoClientError(f"Failed to configure telemetry: {e}")
 
     async def _handle_response_error(self, response: aiohttp.ClientResponse) -> None:
         """Handle HTTP error responses by extracting the actual error message.
@@ -203,6 +205,7 @@ class Plato:
 
             raise PlatoClientError(f"HTTP {response.status}: {error_message}")
 
+    @logfire.instrument("Plato.make_environment", extract_args=True)
     async def make_environment(
         self,
         env_id: str,
@@ -271,14 +274,15 @@ class Plato:
         ) as response:
             await self._handle_response_error(response)
             data = await response.json()
-            return PlatoEnvironment(
-                client=self,
-                env_id=env_id,
-                id=data["job_id"],
-                alias=data.get("alias"),
-                fast=fast,
-            )
+        return PlatoEnvironment(
+            client=self,
+            env_id=env_id,
+            id=data["job_id"],
+            alias=data.get("alias"),
+            fast=fast,
+        )
 
+    @logfire.instrument("Plato.get_job_status", extract_args=True)
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get the status of a job.
 
@@ -300,6 +304,7 @@ class Plato:
             logger.debug(f"Job status for job {job_id}: {response}")
             return response
 
+    @logfire.instrument("Plato.get_cdp_url", extract_args=True)
     async def get_cdp_url(self, job_id: str) -> str:
         """Get the Chrome DevTools Protocol URL for a job.
 
@@ -321,6 +326,7 @@ class Plato:
                 raise PlatoClientError(data["error"])
             return data["data"]["cdp_url"]
 
+    @logfire.instrument("Plato.get_proxy_url", extract_args=True)
     async def get_proxy_url(self, job_id: str) -> str:
         """Get the proxy URL for a job.
 
@@ -336,6 +342,7 @@ class Plato:
                 raise PlatoClientError(data["error"])
             return data["data"]["proxy_url"]
 
+    @logfire.instrument("Plato.close_environment", extract_args=True)
     async def close_environment(self, job_id: str) -> Dict[str, Any]:
         """Close an environment.
 
@@ -355,6 +362,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.backup_environment", extract_args=True)
     async def backup_environment(self, job_id: str) -> Dict[str, Any]:
         """Create a backup of an environment.
 
@@ -374,6 +382,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.reset_environment", extract_args=True)
     async def reset_environment(
         self,
         job_id: str,
@@ -412,6 +421,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.get_environment_state", extract_args=True)
     async def get_environment_state(
         self, job_id: str, merge_mutations: bool = False
     ) -> Dict[str, Any]:
@@ -436,6 +446,7 @@ class Plato:
             data = await response.json()
             return data["data"]["state"]
 
+    @logfire.instrument("Plato.get_worker_ready", extract_args=True)
     async def get_worker_ready(self, job_id: str) -> Dict[str, Any]:
         """Check if the worker for this job is ready and healthy.
 
@@ -460,6 +471,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.get_live_view_url", extract_args=True)
     async def get_live_view_url(self, job_id: str) -> str:
         """Get the URL for accessing the live view of the environment.
 
@@ -482,6 +494,7 @@ class Plato:
         except aiohttp.ClientError as e:
             raise PlatoClientError(str(e))
 
+    @logfire.instrument("Plato.send_heartbeat", extract_args=True)
     async def send_heartbeat(self, job_id: str) -> Dict[str, Any]:
         """Send a heartbeat to keep the environment active.
 
@@ -504,6 +517,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.process_snapshot", extract_args=True)
     async def process_snapshot(self, session_id: str) -> Dict[str, Any]:
         """Process a snapshot of the environment.
 
@@ -524,6 +538,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.evaluate", extract_args=True)
     async def evaluate(
         self,
         session_id: str,
@@ -551,6 +566,7 @@ class Plato:
             res_data = await response.json()
             return res_data["score"]
 
+    @logfire.instrument("Plato.post_evaluation_result", extract_args=True)
     async def post_evaluation_result(
         self,
         session_id: str,
@@ -579,6 +595,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.log", extract_args=True)
     async def log(
         self, session_id: str, log: dict, type: str = "info"
     ) -> Dict[str, Any]:
@@ -603,6 +620,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.list_simulators", extract_args=True)
     async def list_simulators(self) -> List[Dict[str, Any]]:
         """List all environments.
 
@@ -617,6 +635,7 @@ class Plato:
             simulators = await response.json()
             return [s for s in simulators if s["enabled"]]
 
+    @logfire.instrument("Plato.load_tasks", extract_args=True)
     async def load_tasks(self, simulator_name: str) -> List[PlatoTask]:
         """Load tasks from a simulator.
 
@@ -667,6 +686,7 @@ class Plato:
                 for t in test_cases
             ]
 
+    @logfire.instrument("Plato.list_simulator_tasks_by_id", extract_args=True)
     async def list_simulator_tasks_by_id(
         self, simulator_id: str
     ) -> List[Dict[str, Any]]:
@@ -690,6 +710,7 @@ class Plato:
             res = await response.json()
             return res["testcases"]
 
+    @logfire.instrument("Plato.get_active_session", extract_args=True)
     async def get_active_session(self, job_id: str) -> Dict[str, Any]:
         """Get the active session for a job group.
 
@@ -713,6 +734,7 @@ class Plato:
                 raise PlatoClientError(data["error"])
             return data
 
+    @logfire.instrument("Plato.get_running_sessions_count", extract_args=True)
     async def get_running_sessions_count(self) -> Dict[str, Any]:
         """Get the current number of running sessions for the user's organization.
 
@@ -731,6 +753,7 @@ class Plato:
 
     # Gitea-related methods for hub commands
 
+    @logfire.instrument("Plato.get_gitea_info", extract_args=True)
     async def get_gitea_info(self) -> Dict[str, Any]:
         """Get the current user's Gitea info (auto-provisions if needed).
 
@@ -748,6 +771,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.list_gitea_simulators", extract_args=True)
     async def list_gitea_simulators(self) -> List[Dict[str, Any]]:
         """Get simulators that user has access to view repos for.
 
@@ -764,6 +788,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.get_simulator_repository", extract_args=True)
     async def get_simulator_repository(self, simulator_id: int) -> Dict[str, Any]:
         """Get repository details for a specific simulator.
 
@@ -784,6 +809,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.get_gitea_credentials", extract_args=True)
     async def get_gitea_credentials(self) -> Dict[str, Any]:
         """Get Gitea admin credentials for the organization.
 
@@ -801,6 +827,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.create_simulator", extract_args=True)
     async def create_simulator(
         self, name: str, description: str = None, sim_type: str = "docker_app"
     ) -> Dict[str, Any]:
@@ -839,6 +866,7 @@ class Plato:
             await self._handle_response_error(response)
             return await response.json()
 
+    @logfire.instrument("Plato.create_simulator_repository", extract_args=True)
     async def create_simulator_repository(self, simulator_id: int) -> Dict[str, Any]:
         """Create a repository for a simulator.
 
@@ -858,3 +886,23 @@ class Plato:
         ) as response:
             await self._handle_response_error(response)
             return await response.json()
+
+    def _configure_logfire_noop(self) -> None:
+        """Configure Logfire in no-op mode to avoid any logging overhead."""
+        if not self._telemetry_configured:
+            try:
+                logfire.configure(send_to_logfire=False, console=False)
+                self._telemetry_configured = True
+            except Exception as e:
+                logger.debug(f"Failed to configure Logfire in noop mode: {e}")
+
+    def _configure_logfire(self, **kwargs) -> None:
+        """Configure Logfire with the given parameters, ensuring it's only done once."""
+        if not self._telemetry_configured:
+            try:
+                logfire.configure(**kwargs)
+                self._telemetry_configured = True
+            except Exception as e:
+                logger.debug(f"Failed to configure Logfire: {e}")
+                # Fall back to noop mode
+                self._configure_logfire_noop()

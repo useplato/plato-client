@@ -15,6 +15,7 @@ import yaml
 import json
 from urllib.parse import urlparse
 from pathlib import Path
+import logfire
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +41,15 @@ class PlatoEnvironment:
     """
 
     _current_task: Optional[PlatoTask] = None
-    _client: "Plato" = None
-    id: str = None
-    env_id: str = None
+    _client: Optional["Plato"] = None
+    id: Optional[str] = None
+    env_id: Optional[str] = None
     alias: Optional[str] = None
     _run_session_id: Optional[str] = None
     _heartbeat_task: Optional[asyncio.Task] = None
     _heartbeat_interval: int = 30  # seconds
 
+    @logfire.instrument("PlatoEnvironment.__init__", extract_args=True)
     def __init__(
         self,
         client: "Plato",
@@ -68,6 +70,7 @@ class PlatoEnvironment:
         self._db_tunnel_process = None
         self._db_tunnel_info: Optional[Dict[str, Any]] = None
 
+    @logfire.instrument("PlatoEnvironment.login", extract_args=True)
     async def login(
         self,
         page: Page,
@@ -153,6 +156,7 @@ class PlatoEnvironment:
             else:
                 logger.warning("Failed to login")
 
+    @logfire.instrument("PlatoEnvironment.wait_for_ready", extract_args=True)
     async def wait_for_ready(self, timeout: Optional[float] = None) -> None:
         """Wait for the environment to be ready.
 
@@ -172,25 +176,26 @@ class PlatoEnvironment:
 
         # wait for the job to be running
         current_delay = base_delay
-        while True:
-            status = await self._client.get_job_status(self.id)
-            if status["status"].lower() == "running":
-                break
+        with logfire.span("wait_for_job_running"):
+            while True:
+                status = await self._client.get_job_status(self.id)
+                if status["status"].lower() == "running":
+                    break
 
-            # Add jitter (±25% of current delay)
-            jitter = random.uniform(-0.25 * current_delay, 0.25 * current_delay)
-            await asyncio.sleep(current_delay + jitter)
+                # Add jitter (±25% of current delay)
+                jitter = random.uniform(-0.25 * current_delay, 0.25 * current_delay)
+                await asyncio.sleep(current_delay + jitter)
 
-            if timeout and time.time() - start_time > timeout:
-                raise RuntimeError(
-                    "Environment failed to start - job never entered running state"
+                if timeout and time.time() - start_time > timeout:
+                    raise RuntimeError(
+                        "Environment failed to start - job never entered running state"
+                    )
+
+                # Exponential backoff
+                current_delay = min(current_delay * 2, max_delay)
+                logger.debug(
+                    f"Waiting for job {self.id} to be running: {current_delay} seconds"
                 )
-
-            # Exponential backoff
-            current_delay = min(current_delay * 2, max_delay)
-            logger.debug(
-                f"Waiting for job {self.id} to be running: {current_delay} seconds"
-            )
 
         # wait for the worker to be ready and healthy
         current_delay = base_delay  # Reset delay for worker health check
@@ -218,6 +223,7 @@ class PlatoEnvironment:
         # Start the heartbeat task if not already running
         await self._start_heartbeat()
 
+    @logfire.instrument("PlatoEnvironment.__aenter__", extract_args=True)
     async def __aenter__(self):
         """Enter the async context manager.
 
@@ -229,6 +235,7 @@ class PlatoEnvironment:
         await self.wait_for_ready()
         return self
 
+    @logfire.instrument("PlatoEnvironment.__aexit__", extract_args=True)
     async def __aexit__(
         self,
         exc_type: Optional[Type[BaseException]],
@@ -246,6 +253,7 @@ class PlatoEnvironment:
         """
         await self.close()
 
+    @logfire.instrument("PlatoEnvironment.get_cdp_url", extract_args=True)
     async def get_cdp_url(self) -> str:
         """Get the Chrome DevTools Protocol URL for this environment's session.
 
@@ -259,6 +267,7 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_cdp_url(self.id)
 
+    @logfire.instrument("PlatoEnvironment.reset", extract_args=True)
     async def reset(
         self,
         task: Optional[PlatoTask] = None,
@@ -292,6 +301,7 @@ class PlatoEnvironment:
 
         return self._run_session_id
 
+    @logfire.instrument("PlatoEnvironment._heartbeat_loop", extract_args=True)
     async def _heartbeat_loop(self) -> None:
         """Background task that periodically sends heartbeats to keep the environment active."""
         try:
@@ -310,6 +320,7 @@ class PlatoEnvironment:
             # Unexpected error
             logger.error(f"Heartbeat task failed with error: {e} for job {self.id}")
 
+    @logfire.instrument("PlatoEnvironment._start_heartbeat", extract_args=True)
     async def _start_heartbeat(self) -> None:
         """Start the heartbeat background task if not already running."""
         # Cancel any existing heartbeat task
@@ -318,6 +329,7 @@ class PlatoEnvironment:
         # Start a new heartbeat task
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
+    @logfire.instrument("PlatoEnvironment._stop_heartbeat", extract_args=True)
     async def _stop_heartbeat(self) -> None:
         """Stop the heartbeat background task if it's running."""
         if self._heartbeat_task and not self._heartbeat_task.done():
@@ -334,6 +346,7 @@ class PlatoEnvironment:
             finally:
                 self._heartbeat_task = None
 
+    @logfire.instrument("PlatoEnvironment.get_state", extract_args=True)
     async def get_state(self, merge_mutations: bool = False) -> Dict[str, Any]:
         """Get the current state of the environment.
 
@@ -347,6 +360,7 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_environment_state(self.id, merge_mutations)
 
+    @logfire.instrument("PlatoEnvironment.get_state_mutations", extract_args=True)
     async def get_state_mutations(
         self, merge_mutations: bool = False
     ) -> List[Dict[str, Any]]:
@@ -361,6 +375,7 @@ class PlatoEnvironment:
         state = await self.get_state(merge_mutations)
         return state.get("mutations", [])
 
+    @logfire.instrument("PlatoEnvironment._get_nested_value", extract_args=True)
     def _get_nested_value(self, data: Dict[str, Any], key_path: str) -> Any:
         """Get a value from a nested dictionary using dotted notation.
 
@@ -386,6 +401,7 @@ class PlatoEnvironment:
                 current = current[part]
         return current
 
+    @logfire.instrument("PlatoEnvironment.get_evaluation_result", extract_args=True)
     async def get_evaluation_result(self) -> EvaluationResult:
         """Evaluate whether the current task has been completed successfully.
 
@@ -445,6 +461,7 @@ class PlatoEnvironment:
                 success=False, reason=f"Unknown evaluation type: {eval_config.type}"
             )
 
+    @logfire.instrument("PlatoEnvironment.evaluate", extract_args=True)
     async def evaluate(
         self, value: Optional[Any] = None, agent_version: Optional[str] = None
     ) -> EvaluationResult:
@@ -479,6 +496,7 @@ class PlatoEnvironment:
                 actual_mutations=result.get("mutations", None),
             )
 
+    @logfire.instrument("PlatoEnvironment.log", extract_args=True)
     async def log(self, log: dict, type: str = "info") -> None:
         """Log a message to the environment.
 
@@ -489,6 +507,7 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         await self._client.log(self._run_session_id, log, type)
 
+    @logfire.instrument("PlatoEnvironment.get_live_view_url", extract_args=True)
     async def get_live_view_url(self) -> str:
         """Get the URL for accessing the live view of the environment.
 
@@ -505,6 +524,7 @@ class PlatoEnvironment:
             raise PlatoClientError("No active run session. Call reset() first.")
         return await self._client.get_live_view_url(self.id)
 
+    @logfire.instrument("PlatoEnvironment.get_proxy_config", extract_args=True)
     async def get_proxy_config(self) -> Dict[str, str]:
         """Get the proxy configuration for this environment.
 
@@ -554,6 +574,7 @@ class PlatoEnvironment:
         except Exception as e:
             raise PlatoClientError(str(e))
 
+    @logfire.instrument("PlatoEnvironment.get_public_url", extract_args=True)
     async def get_public_url(self) -> str:
         """Get the public URL for accessing this environment.
 
@@ -593,6 +614,7 @@ class PlatoEnvironment:
         except Exception as e:
             raise PlatoClientError(str(e))
 
+    @logfire.instrument("PlatoEnvironment.get_session_url", extract_args=True)
     async def get_session_url(self) -> str:
         """Get the URL for accessing the session of the environment."""
         if not self._run_session_id:
@@ -600,6 +622,7 @@ class PlatoEnvironment:
         root_url = self._client.base_url.split("/api")[0]
         return os.path.join(root_url, "sessions", f"{self._run_session_id}/")
 
+    @logfire.instrument("PlatoEnvironment.get_db_login_info", extract_args=True)
     def get_db_login_info(self, database: Optional[str] = None) -> Dict[str, Any]:
         """Return database login information for this simulator.
 
@@ -638,6 +661,7 @@ class PlatoEnvironment:
             "databases": cfg.get("databases", []),
         }
 
+    @logfire.instrument("PlatoEnvironment.start_db_tunnel", extract_args=True)
     async def start_db_tunnel(
         self,
         dest_port: Optional[int] = None,
@@ -755,6 +779,7 @@ class PlatoEnvironment:
         }
         return chosen_local
 
+    @logfire.instrument("PlatoEnvironment.stop_db_tunnel", extract_args=True)
     def stop_db_tunnel(self) -> None:
         """Stop the running database tunnel if present."""
         proc = getattr(self, "_db_tunnel_process", None)
@@ -770,6 +795,7 @@ class PlatoEnvironment:
         self._db_tunnel_process = None
         self._db_tunnel_info = None
 
+    @logfire.instrument("PlatoEnvironment.close", extract_args=True)
     async def close(self) -> None:
         """Clean up and close the environment.
 
@@ -782,6 +808,7 @@ class PlatoEnvironment:
         # Close the environment through the API
         await self._client.close_environment(self.id)
 
+    @logfire.instrument("PlatoEnvironment.backup", extract_args=True)
     async def backup(self) -> Dict[str, Any]:
         """Create a backup of the environment.
 
@@ -794,6 +821,7 @@ class PlatoEnvironment:
         return await self._client.backup_environment(self.id)
 
     @staticmethod
+    @logfire.instrument("PlatoEnvironment.from_id", extract_args=True)
     async def from_id(
         client: "Plato", id: str, fast: bool = False
     ) -> "PlatoEnvironment":
