@@ -119,6 +119,8 @@ cd "$PYTHON_DIR"
 if ! command -v uv &> /dev/null; then
     echo "⚠️  uv not found, installing..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Add uv to PATH for current shell
+    export PATH="$HOME/.local/bin:$PATH"
 fi
 
 echo "📦 Building Python wheel..."
