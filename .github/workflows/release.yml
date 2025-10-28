@@ -45,28 +45,47 @@ jobs:
       - name: Determine version bump
         id: bump_version
         run: |
-          # Get commit messages since last tag
+          # Get commit messages and changed files since last tag
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --pretty=format:"%s" HEAD)
+            CHANGED_FILES=$(git log --name-only --pretty=format:"" HEAD)
           else
             COMMITS=$(git log --pretty=format:"%s" ${LAST_TAG}..HEAD)
+            CHANGED_FILES=$(git diff --name-only ${LAST_TAG}..HEAD)
+          fi
+
+          # Check if CLI files changed
+          CLI_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -q "^cli/"; then
+            CLI_CHANGED=true
+            echo "🔧 CLI changes detected"
           fi
 
           # Determine bump type based on conventional commits
           BUMP_TYPE="patch"
 
-          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?:"; then
+          # If CLI changed, at minimum bump minor version
+          if [ "$CLI_CHANGED" = true ]; then
             BUMP_TYPE="minor"
+            echo "📦 CLI changed, bumping to minor version"
           fi
 
+          # Check for explicit feature commits (overrides CLI change to minor)
+          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?:"; then
+            BUMP_TYPE="minor"
+            echo "✨ Feature detected, bumping to minor version"
+          fi
+
+          # Breaking changes always take precedence
           if echo "$COMMITS" | grep -qiE "^.+!:|^BREAKING CHANGE:"; then
             BUMP_TYPE="major"
+            echo "💥 Breaking change detected, bumping to major version"
           fi
 
           echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "Detected bump type: $BUMP_TYPE"
+          echo "Final bump type: $BUMP_TYPE"
 
       - name: Calculate new version
         id: new_version
@@ -104,7 +123,12 @@ jobs:
           git commit -m "chore: bump version to ${{ steps.new_version.outputs.version }}"
           git push
 
-      - name: Build CLI for multiple platforms
+      - name: Build proxytunnel
+        run: |
+          sudo apt-get update && sudo apt-get install -y proxytunnel
+          ./scripts/build-proxytunnel.sh || echo "⚠️  Failed to build proxytunnel, continuing"
+
+      - name: Build CLI for multiple platforms (cross-compile)
         run: |
           VERSION="${{ steps.new_version.outputs.version }}"
           GIT_COMMIT=$(git rev-parse --short HEAD)
@@ -114,37 +138,41 @@ jobs:
 
           cd cli
 
-          # Build for multiple platforms
+          # Build for multiple platforms (pure Go, no CGO)
           GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o plato-darwin-amd64
           GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o plato-darwin-arm64
           GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o plato-linux-amd64
           GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o plato-linux-arm64
 
-          # Create archives
-          tar -czf plato-darwin-amd64.tar.gz plato-darwin-amd64
-          tar -czf plato-darwin-arm64.tar.gz plato-darwin-arm64
-          tar -czf plato-linux-amd64.tar.gz plato-linux-amd64
-          tar -czf plato-linux-arm64.tar.gz plato-linux-arm64
+          # Bundle proxytunnel with each CLI binary
+          echo "📦 Bundling proxytunnel binaries..."
+          PROXYTUNNEL_SRC="../python/src/plato/bin"
 
-      - name: Build C bindings for multiple platforms
-        run: |
-          cd sdk/bindings/c
+          # Create temp directories for each platform
+          for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64; do
+            mkdir -p "plato-${platform}-bundle"
+            mv "plato-${platform}" "plato-${platform}-bundle/plato"
 
-          # Linux AMD64
-          GOOS=linux GOARCH=amd64 go build -buildmode=c-shared -o libplato-linux-amd64.so .
-          tar -czf libplato-linux-amd64.tar.gz libplato-linux-amd64.so libplato-linux-amd64.h
+            # Copy appropriate proxytunnel binary
+            if [[ "$platform" == *"darwin"* ]]; then
+              if [[ "$platform" == *"arm64"* ]]; then
+                cp "$PROXYTUNNEL_SRC/proxytunnel-darwin-arm64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-darwin-arm64 not found"
+              else
+                cp "$PROXYTUNNEL_SRC/proxytunnel-darwin-amd64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-darwin-amd64 not found"
+              fi
+            else
+              if [[ "$platform" == *"arm64"* ]]; then
+                cp "$PROXYTUNNEL_SRC/proxytunnel-linux-arm64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-linux-arm64 not found"
+              else
+                cp "$PROXYTUNNEL_SRC/proxytunnel-linux-amd64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-linux-amd64 not found"
+              fi
+            fi
 
-          # Linux ARM64
-          GOOS=linux GOARCH=arm64 go build -buildmode=c-shared -o libplato-linux-arm64.so .
-          tar -czf libplato-linux-arm64.tar.gz libplato-linux-arm64.so libplato-linux-arm64.h
-
-          # macOS AMD64
-          GOOS=darwin GOARCH=amd64 go build -buildmode=c-shared -o libplato-darwin-amd64.dylib .
-          tar -czf libplato-darwin-amd64.tar.gz libplato-darwin-amd64.dylib libplato-darwin-amd64.h
-
-          # macOS ARM64
-          GOOS=darwin GOARCH=arm64 go build -buildmode=c-shared -o libplato-darwin-arm64.dylib .
-          tar -czf libplato-darwin-arm64.tar.gz libplato-darwin-arm64.dylib libplato-darwin-arm64.h
+            # Create archive with both binaries
+            tar -czf "plato-${platform}.tar.gz" -C "plato-${platform}-bundle" .
+            rm -rf "plato-${platform}-bundle"
+            echo "✅ Created plato-${platform}.tar.gz"
+          done
 
       - name: Generate release notes
         id: release_notes
@@ -158,7 +186,7 @@ jobs:
           fi
 
           cat > release_notes.md << 'EOF'
-          ## Changes in v${{ steps.new_version.outputs.version }}
+          ## Changes
 
           EOF
 
@@ -166,56 +194,15 @@ jobs:
 
           cat >> release_notes.md << 'EOF'
 
-          ## CLI Installation
+          ## Installation
 
-          ### macOS (Apple Silicon)
-          ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-arm64.tar.gz | tar xz
-          chmod +x plato-darwin-arm64
-          mv plato-darwin-arm64 ~/.local/bin/plato
-          ```
-
-          ### macOS (Intel)
-          ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-darwin-amd64.tar.gz | tar xz
-          chmod +x plato-darwin-amd64
-          mv plato-darwin-amd64 ~/.local/bin/plato
-          ```
-
-          ### Linux (x86_64)
-          ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-amd64.tar.gz | tar xz
-          chmod +x plato-linux-amd64
-          sudo mv plato-linux-amd64 /usr/local/bin/plato
-          ```
-
-          ### Linux (ARM64)
-          ```bash
-          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.new_version.outputs.version }}/plato-linux-arm64.tar.gz | tar xz
-          chmod +x plato-linux-arm64
-          sudo mv plato-linux-arm64 /usr/local/bin/plato
-          ```
-
-          ## C Bindings
-
-          C shared libraries are also available for all platforms. Download and extract:
-
-          - `libplato-darwin-arm64.tar.gz` - macOS Apple Silicon
-          - `libplato-darwin-amd64.tar.gz` - macOS Intel
-          - `libplato-linux-amd64.tar.gz` - Linux x86_64
-          - `libplato-linux-arm64.tar.gz` - Linux ARM64
-
-          ## Python SDK
-
-          Install the Python SDK with:
+          ### Python SDK
           ```bash
           pip install plato-sdk==${{ steps.new_version.outputs.version }}
           ```
 
-          Platform-specific wheels are available for:
-          - macOS ARM64 (Apple Silicon)
-          - macOS x86_64 (Intel)
-          - Linux x86_64
+          ### CLI
+          Download the appropriate CLI binary for your platform from the assets below.
 
           EOF
 
@@ -232,10 +219,6 @@ jobs:
             cli/plato-darwin-arm64.tar.gz
             cli/plato-linux-amd64.tar.gz
             cli/plato-linux-arm64.tar.gz
-            sdk/bindings/c/libplato-darwin-amd64.tar.gz
-            sdk/bindings/c/libplato-darwin-arm64.tar.gz
-            sdk/bindings/c/libplato-linux-amd64.tar.gz
-            sdk/bindings/c/libplato-linux-arm64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -171,9 +171,9 @@ func OpenTemporaryProxytunnel(baseURL, publicID string, remotePort int) (*exec.C
 		return nil, 0, fmt.Errorf("failed to find free port: %w", err)
 	}
 
-	proxytunnelPath, err := exec.LookPath("proxytunnel")
+	proxytunnelPath, err := FindProxytunnelPath()
 	if err != nil {
-		return nil, 0, fmt.Errorf("proxytunnel not found in PATH: %w", err)
+		return nil, 0, fmt.Errorf("proxytunnel not found: %w", err)
 	}
 
 	// Get proxy configuration based on base URL

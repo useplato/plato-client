@@ -7,7 +7,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"plato-cli/internal/utils"
 	"strings"
@@ -88,10 +87,10 @@ func appendSSHHostEntry(baseURL, hostname string, port int, jobGroupID string, u
 		return err
 	}
 
-	// Find proxytunnel path
-	proxytunnelPath, err := exec.LookPath("proxytunnel")
+	// Find proxytunnel path (checks bundled binary first)
+	proxytunnelPath, err := utils.FindProxytunnelPath()
 	if err != nil {
-		return fmt.Errorf("proxytunnel not found in PATH: %w", err)
+		return fmt.Errorf("proxytunnel not found: %w", err)
 	}
 
 	// Get proxy configuration based on base URL

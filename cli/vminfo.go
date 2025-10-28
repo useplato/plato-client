@@ -1350,11 +1350,11 @@ func openProxytunnelWithPort(client *plato.PlatoClient, publicID string, remoteP
 		}
 		utils.LogDebug("Found free local port: %d (requested: %d)", localPort, remotePort)
 
-		// Find proxytunnel path
-		proxytunnelPath, err := exec.LookPath("proxytunnel")
+		// Find proxytunnel path (checks bundled binary first)
+		proxytunnelPath, err := utils.FindProxytunnelPath()
 		if err != nil {
 			utils.LogDebug("proxytunnel not found: %v", err)
-			return proxytunnelOpenedMsg{err: fmt.Errorf("proxytunnel not found in PATH: %w", err)}
+			return proxytunnelOpenedMsg{err: fmt.Errorf("proxytunnel not found: %w", err)}
 		}
 		utils.LogDebug("Found proxytunnel at: %s", proxytunnelPath)
 
