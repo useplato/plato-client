@@ -1,6 +1,6 @@
 [project]
 name = "plato-sdk"
-dynamic = ["version"]
+version = "1.1.1"
 description = "Plato SDK"
 readme = "README.md"
 authors = [
@@ -33,9 +33,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 include-package-data = true
-
-[tool.setuptools.dynamic]
-version = {file = "../VERSION"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
