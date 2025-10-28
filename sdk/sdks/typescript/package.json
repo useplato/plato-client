@@ -1,0 +1,54 @@
+{
+  "name": "plato-sandbox-sdk",
+  "version": "1.1.1",
+  "description": "TypeScript client SDK for interacting with the Plato platform - manage sandbox VMs, simulators, and environments",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./api": "./api/index.ts",
+    "./helpers": "./helpers/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {},
+  "keywords": [
+    "plato",
+    "ai",
+    "automation",
+    "testing",
+    "sandbox",
+    "vm",
+    "simulator",
+    "environment",
+    "api-client",
+    "sdk"
+  ],
+  "author": "Plato AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plato-ai/plato-client.git",
+    "directory": "sdk/sdks/typescript"
+  },
+  "homepage": "https://github.com/plato-ai/plato-client#readme",
+  "bugs": {
+    "url": "https://github.com/plato-ai/plato-client/issues"
+  },
+  "files": [
+    "**/*.ts",
+    "!**/*.test.ts",
+    "!**/*.spec.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "typescript": "^5.9.3"
+  }
+}
