@@ -905,7 +905,11 @@ class PlatoSandboxClient:
         )
 
         result_str = _call_and_free(lib, result_ptr)
-        response = json.loads(result_str)
+        try:
+            response = json.loads(result_str)
+        except:
+            logger.error(f"Couldn't parse response: {result_str}")
+
 
         if 'error' in response:
             logger.error(f"Failed to setup SSH: {response['error']}")
