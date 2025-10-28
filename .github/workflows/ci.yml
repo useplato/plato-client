@@ -23,15 +23,13 @@ jobs:
         shell: python
         run: |
           import os, re, datetime, pathlib, sys
-          p = pathlib.Path("python/pyproject.toml")
-          text = p.read_text(encoding="utf-8")
 
-          # Grab current version from pyproject (PEP 621)
-          m = re.search(r'(?m)^\s*version\s*=\s*"([^"]+)"\s*$', text)
-          if not m:
-            print("ERROR: Could not find version = \"...\" in pyproject.toml", file=sys.stderr)
+          # Read version from root VERSION file
+          version_file = pathlib.Path("VERSION")
+          if not version_file.exists():
+            print("ERROR: VERSION file not found", file=sys.stderr)
             sys.exit(1)
-          current = m.group(1)
+          current = version_file.read_text(encoding="utf-8").strip()
 
           # Parse semantic version
           base = current.split("+")[0]
@@ -146,18 +144,15 @@ jobs:
           cd python
           uv run python3 tests/test_import.py
 
-      - name: Patch version in pyproject.toml
+      - name: Patch version in VERSION file
         working-directory: .
         shell: python
         run: |
-          import pathlib, re
+          import pathlib
           dev_version = "${{ needs.compute-version.outputs.dev_version }}"
-          p = pathlib.Path("python/pyproject.toml")
-          text = p.read_text(encoding="utf-8")
-          patched = re.sub(r'(?m)^(\s*version\s*=\s*")([^"]+)(")',
-                           r'\g<1>' + dev_version + r'\3', text)
-          p.write_text(patched, encoding="utf-8")
-          print(f"Patched version to: {dev_version}")
+          p = pathlib.Path("VERSION")
+          p.write_text(dev_version + "\n", encoding="utf-8")
+          print(f"Patched VERSION to: {dev_version}")
 
       - name: Install build tooling
         run: |
