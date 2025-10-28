@@ -80,8 +80,22 @@ if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
     BINARY_NAME="plato-cli.exe"
 fi
 
+# Read version from VERSION file
+VERSION="dev"
+if [ -f "VERSION" ]; then
+    VERSION=$(cat VERSION | tr -d '[:space:]')
+    echo "📌 Version: $VERSION"
+fi
+
+# Get git commit and build time
+GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
+
+# Build with version information
+LDFLAGS="-X 'plato-cli/internal/ui/components.Version=${VERSION}' -X 'plato-cli/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-cli/internal/ui/components.BuildTime=${BUILD_TIME}'"
+
 echo "📦 Building CLI binary: $BINARY_NAME..."
-if go build -o "$BINARY_NAME" .; then
+if go build -ldflags="${LDFLAGS}" -o "$BINARY_NAME" .; then
     CLI_SIZE=$(du -h "$BINARY_NAME" | cut -f1)
     echo "✅ Built $BINARY_NAME ($CLI_SIZE)"
 

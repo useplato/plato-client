@@ -25,12 +25,26 @@ else
     BINARY_NAME="plato"
 fi
 
+# Read version from VERSION file
+VERSION="dev"
+if [ -f "VERSION" ]; then
+    VERSION=$(cat VERSION | tr -d '[:space:]')
+    echo "📌 Version: $VERSION"
+fi
+
+# Get git commit and build time
+GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
+
+# Build with version information
+LDFLAGS="-X 'plato-cli/internal/ui/components.Version=${VERSION}' -X 'plato-cli/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-cli/internal/ui/components.BuildTime=${BUILD_TIME}'"
+
 # Build the CLI
 echo "📦 Building CLI binary..."
 OUTPUT_DIR="$CLI_DIR/bin"
 mkdir -p "$OUTPUT_DIR"
 
-if go build -o "$OUTPUT_DIR/$BINARY_NAME" .; then
+if go build -ldflags="${LDFLAGS}" -o "$OUTPUT_DIR/$BINARY_NAME" .; then
     BINARY_SIZE=$(du -h "$OUTPUT_DIR/$BINARY_NAME" | cut -f1)
     echo "✅ Built $BINARY_NAME ($BINARY_SIZE)"
 else
