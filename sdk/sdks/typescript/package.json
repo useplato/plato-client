@@ -1,5 +1,5 @@
 {
-  "name": "plato-sandbox-sdk",
+  "name": "@plato-ai/plato-sandbox-sdk",
   "version": "1.1.1",
   "description": "TypeScript client SDK for interacting with the Plato platform - manage sandbox VMs, simulators, and environments",
   "main": "./index.ts",
