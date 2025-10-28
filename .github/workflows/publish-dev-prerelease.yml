@@ -168,16 +168,17 @@ jobs:
             print("ERROR: No wheel file found")
             exit(1)
 
-          wheel = wheels[0]
-          print(f"Original wheel: {os.path.basename(wheel)}")
+          # Fix all wheels in the dist directory
+          for wheel in wheels:
+            print(f"Checking wheel: {os.path.basename(wheel)}")
 
-          # If it has linux_x86_64, rename to manylinux
-          if 'linux_x86_64' in wheel:
-            new_wheel = wheel.replace('linux_x86_64', 'manylinux_2_17_x86_64.manylinux2014_x86_64')
-            shutil.move(wheel, new_wheel)
-            print(f"✅ Fixed wheel tag: {os.path.basename(new_wheel)}")
-          else:
-            print(f"✅ Wheel already has correct tag")
+            # If it has linux_x86_64, rename to manylinux
+            if 'linux_x86_64' in wheel:
+              new_wheel = wheel.replace('linux_x86_64', 'manylinux_2_17_x86_64.manylinux2014_x86_64')
+              shutil.move(wheel, new_wheel)
+              print(f"✅ Fixed wheel tag: {os.path.basename(new_wheel)}")
+            else:
+              print(f"✅ Wheel already has correct tag: {os.path.basename(wheel)}")
 
       - name: Verify wheel platform tag
         working-directory: python
