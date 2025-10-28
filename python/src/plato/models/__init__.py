@@ -1,5 +1,19 @@
 from .task import PlatoTask, EvaluationResult, PlatoTaskMetadata
 from .env import PlatoEnvironment
+from .sandbox import (
+    SimConfigCompute,
+    SimConfigMetadata,
+    SimConfigService,
+    SimConfigListener,
+    SimConfigDataset,
+    Sandbox,
+    CreateSnapshotRequest,
+    CreateSnapshotResponse,
+    StartWorkerRequest,
+    StartWorkerResponse,
+    SimulatorListItem,
+    SSHInfo,
+)
 
 
 __all__ = [
@@ -7,4 +21,16 @@ __all__ = [
     "PlatoEnvironment",
     "EvaluationResult",
     "PlatoTaskMetadata",
+    "SimConfigCompute",
+    "SimConfigMetadata",
+    "SimConfigService",
+    "SimConfigListener",
+    "SimConfigDataset",
+    "Sandbox",
+    "CreateSnapshotRequest",
+    "CreateSnapshotResponse",
+    "StartWorkerRequest",
+    "StartWorkerResponse",
+    "SimulatorListItem",
+    "SSHInfo",
 ]

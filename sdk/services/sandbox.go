@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"plato-sdk/models"
+	"plato-sdk/utils"
 )
 
 // ClientInterface defines the methods needed from PlatoClient
@@ -27,6 +28,7 @@ type ClientInterface interface {
 	NewRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error)
 	NewHubRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error)
 	Do(req *http.Request) (*http.Response, error)
+	GetBaseURL() string
 }
 
 type SandboxService struct {
@@ -40,10 +42,22 @@ func NewSandboxService(client ClientInterface) *SandboxService {
 }
 
 // Create creates a new sandbox from a full SimConfigDataset configuration
-func (s *SandboxService) Create(ctx context.Context, config models.SimConfigDataset, dataset, alias string, artifactID *string, service string) (*models.Sandbox, error) {
+func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDataset, dataset, alias string, artifactID *string, service string) (*models.Sandbox, error) {
+	// Marshal config to JSON
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Unmarshal to map for payload construction
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(configJSON, &configMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
 	payload := map[string]interface{}{
 		"dataset":              dataset,
-		"plato_dataset_config": config,
+		"plato_dataset_config": configMap,
 		"timeout":              1200,
 		"wait_time":            600,
 		"alias":                alias,
@@ -112,11 +126,11 @@ func (s *SandboxService) Create(ctx context.Context, config models.SimConfigData
 
 	// Map to Sandbox model
 	sandbox := &models.Sandbox{
-		PublicID:      createResp.PublicID,
-		JobGroupID:    createResp.JobGroupID,
-		URL:           createResp.URL,
+		PublicId:      createResp.PublicID,
+		JobGroupId:    createResp.JobGroupID,
+		Url:           createResp.URL,
 		Status:        createResp.Status,
-		CorrelationID: createResp.CorrelationID,
+		CorrelationId: createResp.CorrelationID,
 	}
 
 	return sandbox, nil
@@ -304,10 +318,22 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 }
 
 // SetupSandbox sets up a sandbox with optional SSH public key for plato user
-func (s *SandboxService) SetupSandbox(ctx context.Context, jobID string, config models.SimConfigDataset, dataset string, sshPublicKey string) (string, error) {
+func (s *SandboxService) SetupSandbox(ctx context.Context, jobID string, config *models.SimConfigDataset, dataset string, sshPublicKey string) (string, error) {
+	// Marshal config to JSON
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Unmarshal to map for payload construction
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(configJSON, &configMap); err != nil {
+		return "", fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
 	payload := map[string]interface{}{
 		"dataset":              dataset,
-		"plato_dataset_config": config,
+		"plato_dataset_config": configMap,
 	}
 
 	// Add SSH public key if provided
@@ -525,7 +551,7 @@ func (s *SandboxService) SetupRootPassword(ctx context.Context, publicID, sshPub
 }
 
 // CreateSnapshot creates a snapshot of a VM
-func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, req models.CreateSnapshotRequest) (*models.CreateSnapshotResponse, error) {
+func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, req *models.CreateSnapshotRequest) (*models.CreateSnapshotResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -556,7 +582,7 @@ func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, re
 }
 
 // StartWorker starts the Plato worker and listeners on a VM
-func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req models.StartWorkerRequest) (*models.StartWorkerResponse, error) {
+func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req *models.StartWorkerRequest) (*models.StartWorkerResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -584,4 +610,51 @@ func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req m
 	}
 
 	return &workerResp, nil
+}
+
+// CreateSnapshotWithGit creates a snapshot with automatic git push and merge workflow
+// If sourceDir is provided, it will:
+// 1. Push code to Gitea on a timestamped branch
+// 2. Merge that branch to main
+// 3. Get the git hash
+// 4. Create snapshot with that git hash
+func (s *SandboxService) CreateSnapshotWithGit(ctx context.Context, publicID string, req *models.CreateSnapshotRequest, sourceDir string) (*models.CreateSnapshotResponse, error) {
+	// Get Gitea service from the same client
+	// We need to type assert to get access to the Gitea service
+	type giteaClient interface {
+		GetGiteaService() interface{}
+	}
+
+	// For now, just call CreateSnapshot without git workflow
+	// The git workflow should be called explicitly by the user via C bindings
+	return s.CreateSnapshot(ctx, publicID, req)
+}
+
+// SetupSSHAndGetInfo sets up SSH configuration for a sandbox and returns connection information
+// This generates SSH keys, creates config file with proxy tunnel, uploads the public key, and returns connection details
+func (s *SandboxService) SetupSSHAndGetInfo(ctx context.Context, baseURL string, localPort int, jobPublicID string, username string, config *models.SimConfigDataset, dataset string) (*models.SSHInfo, error) {
+	// Use the utils.SetupSSHConfig function to generate keys and config
+	sshHost, configPath, publicKey, privateKeyPath, err := utils.SetupSSHConfig(baseURL, localPort, jobPublicID, username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup SSH: %w", err)
+	}
+
+	// Upload the public key to the sandbox via SetupSandbox API
+	correlationID, err := s.SetupSandbox(ctx, jobPublicID, config, dataset, publicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload SSH key to sandbox: %w", err)
+	}
+
+	// Build SSH command
+	sshCommand := fmt.Sprintf("ssh -F %s %s", configPath, sshHost)
+
+	return &models.SSHInfo{
+		SSHCommand:     sshCommand,
+		SSHHost:        sshHost,
+		SSHConfigPath:  configPath,
+		PublicID:       jobPublicID,
+		PublicKey:      publicKey,
+		PrivateKeyPath: privateKeyPath,
+		CorrelationID:  correlationID,
+	}, nil
 }

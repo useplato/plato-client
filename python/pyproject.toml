@@ -27,11 +27,22 @@ dependencies = [
 plato = "plato.cli:cli"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/plato"]
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+plato = ["*.so", "*.dylib", "*.dll", "bin/*", "*.yml", "*.yaml"]
+
+# Mark wheel as platform-specific (not universal)
+[tool.wheel]
+platlib = true
 
 [tool.uv.workspace]
 members = ["example"]
@@ -40,4 +51,5 @@ members = ["example"]
 dev = [
     "playwright>=1.50.0",
     "ipdb>=0.13.13",
+    "datamodel-code-generator>=0.35.0",
 ]

@@ -13,6 +13,8 @@ while delegating business logic to the appropriate services.
 
 import asyncio
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -22,9 +24,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from plato.sdk import Plato
-from plato.hub import Hub
-from plato.sandbox import Sandbox
-from plato.sandbox_sdk import PlatoSandboxSDK
+# from plato.hub import Hub  # Not used
+# from plato.sandbox import Sandbox  # Not used
+# from plato.sandbox_sdk import PlatoSandboxSDK  # Deprecated, use PlatoSandboxClient
 from dotenv import load_dotenv
 import platform
 import shutil
@@ -38,6 +40,28 @@ console = Console()
 app = typer.Typer(
     help="[bold blue]Plato CLI[/bold blue] - Manage Plato environments and simulators."
 )
+
+
+def _find_bundled_cli() -> Optional[str]:
+    """
+    Find the bundled Plato CLI binary.
+
+    Returns:
+        Path to the bundled CLI binary if found, None otherwise.
+    """
+    # Determine the expected binary name
+    binary_name = "plato-cli.exe" if platform.system().lower() == "windows" else "plato-cli"
+
+    # Look for the binary in the package's bin directory
+    # This file (__file__) is at src/plato/cli.py, so bin is at src/plato/bin/
+    package_dir = Path(__file__).resolve().parent
+    bin_dir = package_dir / "bin"
+    binary_path = bin_dir / binary_name
+
+    if binary_path.exists() and os.access(binary_path, os.X_OK):
+        return str(binary_path)
+
+    return None
 
 # Load environment variables
 load_dotenv()
@@ -140,533 +164,9 @@ def make(
     handle_async(_make())
 
 
-# =============================================================================
-# HUB COMMANDS - Repository and Project Management
-# =============================================================================
 
-hub_app = typer.Typer(
-    help="[bold purple]Hub Commands[/bold purple] - Manage simulator repositories."
-)
-app.add_typer(hub_app, name="hub")
 
-
-@hub_app.command()
-def init(
-    sim_name: str = typer.Argument(..., help="New simulator name"),
-    description: Optional[str] = typer.Option(None, help="Simulator description"),
-    sim_type: str = typer.Option("docker_app", "--sim-type", help="Simulator type"),
-    directory: Optional[str] = typer.Option(None, help="Target directory"),
-):
-    """Initialize a new simulator with repository."""
-
-    async def _init():
-        sdk = Plato()
-        hub_service = Hub(sdk, console)
-
-        try:
-            console.print(f"[cyan]Initializing simulator '{sim_name}'...[/cyan]")
-
-            result = await hub_service.init_simulator(
-                sim_name=sim_name,
-                description=description,
-                sim_type=sim_type,
-                directory=directory,
-            )
-
-            if result.success:
-                success_panel = Panel.fit(
-                    f"[green]Simulator '{sim_name}' created successfully![/green]\n"
-                    f"[cyan]Directory:[/cyan] [bold]{result.directory}[/bold]\n"
-                    f"[cyan]Repository:[/cyan] {result.repo_full_name}\n"
-                    f"[cyan]Next step:[/cyan] cd {result.directory} && start developing",
-                    title="[bold green]🎉 Initialization Complete[/bold green]",
-                    border_style="green",
-                )
-                console.print(success_panel)
-            else:
-                console.print(f"[red]❌ {result.error}[/red]")
-                raise typer.Exit(1)
-
-        finally:
-            await sdk.close()
-
-    handle_async(_init())
-
-
-@hub_app.command()
-def clone(
-    sim_name: str = typer.Argument(..., help="Simulator name to clone"),
-    directory: Optional[str] = typer.Option(
-        None, "--directory", help="Target directory"
-    ),
-):
-    """Clone a simulator repository."""
-
-    async def _clone():
-        sdk = Plato()
-        hub_service = Hub(sdk, console)
-
-        try:
-            console.print(f"[cyan]Looking up simulator '{sim_name}'...[/cyan]")
-
-            result = await hub_service.clone_simulator(sim_name, directory)
-
-            if result.success:
-                console.print(
-                    f"[green]✅ Successfully cloned {result.repo_full_name}[/green]"
-                )
-                console.print(f"[cyan]Repository cloned to:[/cyan] {result.directory}")
-                console.print(
-                    "[cyan]💡 You can now use 'plato hub sandbox' in this directory[/cyan]"
-                )
-            else:
-                console.print(f"[red]❌ {result.error}[/red]")
-                if result.error and "Authentication failed" in result.error:
-                    console.print("[yellow]🔧 Try running: plato hub login[/yellow]")
-                raise typer.Exit(1)
-
-        finally:
-            await sdk.close()
-
-    handle_async(_clone())
-
-
-@hub_app.command()
-def link(
-    sim_name: str = typer.Argument(..., help="Simulator name to link"),
-    directory: Optional[str] = typer.Option(
-        None, help="Directory to link (default: current)"
-    ),
-):
-    """Link a local directory to a simulator repository."""
-
-    async def _link():
-        sdk = Plato()
-        hub_service = Hub(sdk, console)
-
-        try:
-            target_dir = directory or os.getcwd()
-            console.print(
-                f"[cyan]Linking '{target_dir}' to simulator '{sim_name}'...[/cyan]"
-            )
-
-            result = await hub_service.link_directory(sim_name, target_dir)
-
-            if result.success:
-                console.print(
-                    f"[green]✅ Directory linked to {result.repo_full_name}[/green]"
-                )
-                console.print("[cyan]💡 Run 'plato hub login' to authenticate[/cyan]")
-                console.print("[cyan]💡 Use 'plato hub git push/pull' to sync[/cyan]")
-            else:
-                console.print(f"[red]❌ {result.error}[/red]")
-                raise typer.Exit(1)
-
-        finally:
-            await sdk.close()
-
-    handle_async(_link())
-
-
-@hub_app.command()
-def login():
-    """Authenticate with Plato hub for git operations."""
-
-    async def _login():
-        sdk = Plato()
-        hub_service = Hub(sdk, console)
-
-        try:
-            console.print("[cyan]🔐 Authenticating with Plato hub...[/cyan]")
-
-            result = await hub_service.authenticate()
-
-            if result.success:
-                console.print(
-                    "[green]✅ Successfully authenticated with Plato hub[/green]"
-                )
-                console.print(f"[cyan]👤 Username:[/cyan] {result.username}")
-                console.print(f"[cyan]🏢 Organization:[/cyan] {result.org_name}")
-                console.print(
-                    "[cyan]💡 Credentials cached securely for git operations[/cyan]"
-                )
-            else:
-                console.print(f"[red]❌ Authentication failed: {result.error}[/red]")
-                raise typer.Exit(1)
-
-        finally:
-            await sdk.close()
-
-    handle_async(_login())
-
-
-@hub_app.command(
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
-)
-def git(ctx: typer.Context):
-    """Execute git commands with authenticated Plato hub remote."""
-
-    async def _git():
-        sdk = Plato()
-        hub_service = Hub(sdk)
-
-        try:
-            args = list(ctx.args)
-            if not args:
-                console.print("[red]❌ Please provide a git command[/red]")
-                console.print("[yellow]💡 Example: plato hub git status[/yellow]")
-                return
-
-            result = await hub_service.execute_git_command(args)
-
-            if not result.success:
-                console.print(f"[red]❌ Git command failed: {result.error}[/red]")
-                raise typer.Exit(result.exit_code or 1)
-
-        finally:
-            await sdk.close()
-
-    handle_async(_git())
-
-
-@hub_app.command()
-def guide():
-    """Complete guide to Plato sandboxing and development workflow."""
-
-    guide_content = """
-[bold blue]🚀 Plato Sandbox Development Guide[/bold blue]
-
-[bold cyan]═══ What is Plato Sandboxing? ═══[/bold cyan]
-
-Plato sandboxes let you create [bold]simulations[/bold] of your applications. The goal is to:
-1. Get your app running in a cloud environment
-2. Start Plato listeners to track mutations (database changes, file changes)
-3. Create snapshots that capture your app's behavior
-4. [bold green]Voilà! You have a simulation[/bold green] that can replay interactions
-
-[bold cyan]═══ The Simulation Creation Process ═══[/bold cyan]
-
-[bold yellow]Step 1: Get Your App Running[/bold yellow]
-   Option A: [dim]ssh plato-sandbox-<vm-id>[/dim] → Connect directly and start manually
-   Option B: Use menu [bold]1[/bold] → Start Services (launches docker-compose.yml)
-
-[bold yellow]Step 2: Start Mutation Tracking[/bold yellow]
-   Use menu [bold]2[/bold] → Start Listeners (Plato worker monitors your app)
-
-[bold yellow]Step 3: Create Your Simulation[/bold yellow]
-   Use menu [bold]4[/bold] → Create VM snapshot
-   [bold green]🎉 Your simulation is ready![/bold green]
-
-[bold cyan]═══ Quick Start Workflow ═══[/bold cyan]
-
-[bold yellow]1. Setup[/bold yellow]
-   plato hub link <simulator-name>
-   plato hub login
-   plato hub sandbox
-
-[bold yellow]2. Interactive Menu[/bold yellow]
-   ┌────────────────────────────────────────┐
-   │ 1 → Start Services     (your app)     │
-   │ 2 → Start Listeners    (track changes)│
-   │ 3 → Check Services Health             │
-   │ 5 → Check Listeners Health            │
-   │ 4 → Create Snapshot    (make sim!)    │
-   │ 7 → Backup state      8 → Reset state │
-   └────────────────────────────────────────┘
-
-[bold cyan]═══ Understanding the Components ═══[/bold cyan]
-
-[bold green]🔧 Your Application Environment[/bold green]
-  • Cloud VM with your code at /opt/plato
-  • Services can be Docker Compose, standalone apps, or anything else
-  • Start via Services menu OR direct SSH access
-
-[bold green]🎧 Plato Listeners (The Magic)[/bold green]
-  • Monitors database mutations (INSERT, UPDATE, DELETE)
-  • Tracks file system changes
-  • [bold]This mutation data becomes your simulation![/bold]
-
-[bold green]📸 Snapshots = Simulations[/bold green]
-  • Captures current state + recorded mutations
-  • Can be deployed and replayed elsewhere
-  • Your app's behavior becomes reusable
-
-[bold cyan]═══ Two Ways to Start Your App ═══[/bold cyan]
-
-[bold yellow]Method 1: Services Menu (Easy)[/bold yellow]
-   Choose [bold]1[/bold] → Runs your configured services (Docker Compose, etc.)
-
-[bold yellow]Method 2: Direct SSH (Manual)[/bold yellow]
-   [dim]ssh plato-sandbox-<vm-id>[/dim] → Connect directly
-   [dim]cd /opt/plato && docker compose up[/dim] → Start manually
-   [dim]npm start, python app.py, etc.[/dim] → Start any way you want
-
-[bold cyan]═══ Health Checks ═══[/bold cyan]
-
-Verify everything is working before snapshotting:
-• [bold]3[/bold] → Check Services Health (is your app running?)
-• [bold]5[/bold] → Check Listeners Health (is Plato tracking mutations?)
-
-Status meanings:
-• [bold green]healthy[/bold green] - Ready to create simulation!
-• [bold yellow]starting[/bold yellow] - Still booting up
-• [bold red]unhealthy/failed[/bold red] - Fix issues before snapshotting
-
-[bold cyan]═══ The End Result ═══[/bold cyan]
-
-After snapshotting, you have:
-✅ A [bold]simulation[/bold] that captures your app's behavior
-✅ Can be deployed to reproduce interactions
-✅ Database changes and file mutations are recorded
-✅ Ready for testing, demos, or production use
-
-[bold cyan]═══ Pro Tips ═══[/bold cyan]
-
-• Test your app thoroughly [bold]before[/bold] snapshotting
-• Use health checks to ensure listeners are recording
-• Snapshots capture the [bold]current moment[/bold] - make it count!
-• You can create multiple snapshots of different states
-
-[bold green]🎯 Goal: App Running → Listeners Recording → Snapshot → Simulation Ready![/bold green]
-"""
-
-    console.print(guide_content)
-
-
-# =============================================================================
-# PROXYTUNNEL INSTALLER
-# =============================================================================
-
-
-def _is_command_available(cmd: str) -> bool:
-    return shutil.which(cmd) is not None
-
-
-def _install_proxytunnel_noninteractive() -> bool:
-    """Attempt to install proxytunnel using the platform's package manager.
-
-    Returns True on success, False otherwise. Avoids interactive prompts.
-    """
-    try:
-        if _is_command_available("proxytunnel"):
-            console.print("[green]✅ proxytunnel is already installed[/green]")
-            return True
-
-        system = platform.system().lower()
-
-        if system == "darwin":
-            # macOS: prefer Homebrew
-            if _is_command_available("brew"):
-                console.print("[cyan]🔧 Installing proxytunnel via Homebrew...[/cyan]")
-                env = os.environ.copy()
-                env["NONINTERACTIVE"] = "1"
-                # Try list first to skip reinstall
-                list_res = subprocess.run(
-                    ["brew", "list", "proxytunnel"], capture_output=True, text=True
-                )
-                if list_res.returncode != 0:
-                    res = subprocess.run(
-                        ["brew", "install", "proxytunnel"],
-                        capture_output=True,
-                        text=True,
-                        env=env,
-                    )
-                    if res.returncode != 0:
-                        console.print(
-                            f"[red]❌ Homebrew install failed:[/red] {res.stderr.strip()}"
-                        )
-                        return False
-            else:
-                console.print(
-                    "[yellow]⚠️  Homebrew not found. Install Homebrew or install proxytunnel manually.[/yellow]"
-                )
-                console.print(
-                    "[cyan]💡 See: https://brew.sh then run: brew install proxytunnel[/cyan]"
-                )
-                return False
-
-        elif system == "linux":
-            console.print(
-                "[cyan]🔧 Installing proxytunnel via system package manager...[/cyan]"
-            )
-            # Try common package managers, preferring non-interactive with sudo -n
-            if _is_command_available("apt-get"):
-                cmd = [
-                    "sudo",
-                    "-n",
-                    "bash",
-                    "-lc",
-                    "apt-get update && apt-get install -y proxytunnel",
-                ]
-            elif _is_command_available("dnf"):
-                cmd = ["sudo", "-n", "dnf", "install", "-y", "proxytunnel"]
-            elif _is_command_available("yum"):
-                cmd = ["sudo", "-n", "yum", "install", "-y", "proxytunnel"]
-            elif _is_command_available("pacman"):
-                cmd = ["sudo", "-n", "pacman", "-Sy", "--noconfirm", "proxytunnel"]
-            elif _is_command_available("apk"):
-                cmd = ["sudo", "-n", "apk", "add", "--no-cache", "proxytunnel"]
-            else:
-                console.print(
-                    "[yellow]⚠️  Unsupported Linux distro: please install 'proxytunnel' via your package manager.[/yellow]"
-                )
-                return False
-
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            if res.returncode != 0:
-                # If sudo -n failed, advise user to re-run with privileges
-                hint = " (tip: re-run with sudo)" if "sudo" in cmd[0:1] else ""
-                console.print(
-                    f"[red]❌ Installation failed:{hint}[/red] {res.stderr.strip() or res.stdout.strip()}"
-                )
-                return False
-
-        else:
-            console.print(
-                f"[yellow]⚠️  Unsupported platform '{system}'. Install proxytunnel manually.[/yellow]"
-            )
-            return False
-
-        # Verify installation
-        if not _is_command_available("proxytunnel"):
-            console.print(
-                "[red]❌ proxytunnel not found in PATH after installation[/red]"
-            )
-            return False
-
-        # Quick sanity check
-        check = subprocess.run(["proxytunnel", "-h"], capture_output=True, text=True)
-        if check.returncode not in (0, 1):  # -h may exit 1 depending on build
-            console.print(
-                f"[yellow]⚠️  proxytunnel installed but health check returned {check.returncode}[/yellow]"
-            )
-        console.print("[green]✅ proxytunnel installed successfully[/green]")
-        return True
-    except Exception as e:
-        console.print(f"[red]❌ Failed to install proxytunnel: {e}[/red]")
-        return False
-
-
-@hub_app.command()
-def sandbox(
-    config: str = typer.Option(
-        "plato-config.yml", "--config", help="VM configuration file"
-    ),
-    dataset: str = typer.Option("base", "--dataset", help="Dataset to use"),
-    resume: Optional[str] = typer.Option(
-        None, "--resume", help="Artifact ID to resume from"
-    ),
-):
-    """Start a development sandbox environment."""
-
-    async def _sandbox():
-        sdk = Plato()
-        sandbox_sdk = PlatoSandboxSDK()
-        try:
-            # Best-effort: ensure proxytunnel is available locally
-            try:
-                console.print("[dim]🔧 Ensuring proxytunnel is installed...[/dim]")
-                _install_proxytunnel_noninteractive()
-            except Exception as _e:
-                console.print(
-                    "[red]❌ Could not install proxytunnel automatically; continuing.[/red]"
-                )
-
-            # Initialize sandbox service (async init) with a live progress spinner
-            sandbox_service = Sandbox()
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-            ) as progress:
-                task = progress.add_task(
-                    "[cyan]Provisioning sandbox (VM, SSH, tunnel)...", total=None
-                )
-                await sandbox_service.init(console, dataset, sdk, sandbox_sdk, resume)
-                progress.update(task, description="[green]Sandbox ready[/green]")
-
-            # Run interactive sandbox menu
-            try:
-                await run_interactive_sandbox_menu(sandbox_service)
-            except (KeyboardInterrupt, typer.Abort, EOFError, asyncio.CancelledError):
-                # Graceful exit: don't propagate, cleanup in finally
-                return
-
-        except Exception as e:
-            # Only report real errors; ignore cancellation
-            if not isinstance(
-                e, (KeyboardInterrupt, typer.Abort, EOFError, asyncio.CancelledError)
-            ):
-                # Try to parse JSON from the exception string and pretty-print details
-                error_str = str(e)
-                printed_pretty = False
-                try:
-                    if "{" in error_str and "}" in error_str:
-                        start_idx = error_str.find("{")
-                        end_idx = error_str.rfind("}")
-                        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                            json_substr = error_str[start_idx : end_idx + 1]
-                            payload = json.loads(json_substr)
-                            console.print("[red]❌ Sandbox failed[/red]")
-                            if isinstance(payload, dict) and payload.get("detail"):
-                                # Show the detail field formatted in a panel
-                                detail_panel = Panel.fit(
-                                    payload.get("detail"),
-                                    title="[red]Detail[/red]",
-                                    border_style="red",
-                                )
-                                console.print(detail_panel)
-                            else:
-                                # Fallback to pretty-printed JSON
-                                pretty_json = json.dumps(payload, indent=2)
-                                json_panel = Panel.fit(
-                                    pretty_json,
-                                    title="[red]Error (JSON)[/red]",
-                                    border_style="red",
-                                )
-                                console.print(json_panel)
-                            printed_pretty = True
-                except Exception:
-                    # If parsing fails, fall back to raw message below
-                    printed_pretty = False
-
-                if not printed_pretty:
-                    console.print(f"[red]❌ Sandbox failed: {e}[/red]")
-                raise typer.Exit(1)
-        finally:
-            try:
-                import signal as _signal
-
-                _prev_sig = _signal.getsignal(_signal.SIGINT)
-                try:
-                    _signal.signal(_signal.SIGINT, _signal.SIG_IGN)
-                    await asyncio.shield(sandbox_service.close())
-                finally:
-                    try:
-                        _signal.signal(_signal.SIGINT, _prev_sig)
-                    except Exception:
-                        pass
-            except (Exception, KeyboardInterrupt, asyncio.CancelledError):
-                pass
-            try:
-                import signal as _signal
-
-                _prev_sig2 = _signal.getsignal(_signal.SIGINT)
-                try:
-                    _signal.signal(_signal.SIGINT, _signal.SIG_IGN)
-                    await asyncio.shield(sdk.close())
-                finally:
-                    try:
-                        _signal.signal(_signal.SIGINT, _prev_sig2)
-                    except Exception:
-                        pass
-            except (Exception, KeyboardInterrupt, asyncio.CancelledError):
-                pass
-
-    handle_async(_sandbox())
-
-
-async def run_interactive_sandbox_menu(sandbox: Sandbox):
+async def run_interactive_sandbox_menu(sandbox):
     """Interactive sandbox menu - handles all user interaction."""
 
     if not sandbox.sandbox_info:
@@ -730,14 +230,14 @@ async def run_interactive_sandbox_menu(sandbox: Sandbox):
             console.print("[red]❌ Invalid choice. Please enter 0-5.[/red]")
 
 
-async def handle_run_all(sandbox: Sandbox):
+async def handle_run_all(sandbox):
     # Deprecated; kept for compatibility but directs users to new commands
     console.print(
         "[yellow]⚠️ 'Run All' is deprecated. Use 'Run Services' then 'Run Worker'.[/yellow]"
     )
 
 
-async def handle_display_sandbox_info(sandbox: Sandbox):
+async def handle_display_sandbox_info(sandbox):
     """Handle displaying sandbox information."""
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
@@ -775,7 +275,7 @@ async def handle_display_sandbox_info(sandbox: Sandbox):
     console.print(info_panel)
 
 
-async def handle_sim_backup(sandbox: Sandbox):
+async def handle_sim_backup(sandbox):
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
         return
@@ -788,7 +288,7 @@ async def handle_sim_backup(sandbox: Sandbox):
         console.print(f"[red]❌ Error creating backup: {e}[/red]")
 
 
-async def handle_sim_reset(sandbox: Sandbox):
+async def handle_sim_reset(sandbox):
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
         return
@@ -801,7 +301,7 @@ async def handle_sim_reset(sandbox: Sandbox):
         console.print(f"[red]❌ Error resetting simulator: {e}[/red]")
 
 
-async def handle_run_services(sandbox: Sandbox):
+async def handle_run_services(sandbox):
     """Submit start-services and loop on healthy-services with progress."""
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
@@ -901,7 +401,7 @@ async def handle_run_services(sandbox: Sandbox):
         console.print(f"[red]❌ Error running services: {e}[/red]")
 
 
-async def handle_run_worker(sandbox: Sandbox):
+async def handle_run_worker(sandbox):
     """Submit start-worker and loop on healthy-worker with progress."""
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
@@ -1014,7 +514,7 @@ async def handle_run_worker(sandbox: Sandbox):
         console.print(f"[red]❌ Error running worker: {e}[/red]")
 
 
-async def handle_create_snapshot(sandbox: Sandbox):
+async def handle_create_snapshot(sandbox):
     if not sandbox.sandbox_info:
         console.print("[red]❌ Sandbox not properly initialized[/red]")
         return
@@ -1062,6 +562,51 @@ async def handle_create_snapshot(sandbox: Sandbox):
 
     except Exception as e:
         console.print(f"[red]❌ Error creating snapshot: {e}[/red]")
+
+
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def hub(
+    ctx: typer.Context,
+):
+    """
+    Launch the Plato Hub CLI (interactive TUI for managing simulators).
+
+    The hub command opens the Go-based Plato CLI which provides an interactive
+    terminal UI for browsing simulators, launching environments, and managing VMs.
+
+    Available subcommands:
+    - clone <service>: Clone a service from Plato Hub
+    - credentials: Display your Plato Hub credentials
+    - (no args): Start interactive TUI mode
+
+    Examples:
+        plato hub clone espocrm
+        plato hub credentials
+        plato hub
+    """
+    # Find the bundled CLI binary
+    plato_bin = _find_bundled_cli()
+
+    if not plato_bin:
+        console.print("[red]❌ Plato CLI binary not found in package[/red]")
+        console.print("\n[yellow]The bundled CLI binary was not found in this installation.[/yellow]")
+        console.print("This indicates an installation issue with the plato-sdk package.")
+        console.print("\n[yellow]💡 Try reinstalling the package:[/yellow]")
+        console.print("   pip install --upgrade --force-reinstall plato-sdk")
+        console.print("\n[dim]If the issue persists, please report it at:[/dim]")
+        console.print("[dim]https://github.com/plato-app/plato-client/issues[/dim]")
+        raise typer.Exit(1)
+
+    # Get any additional arguments passed after 'hub'
+    args = ctx.args if hasattr(ctx, 'args') else []
+
+    try:
+        # Launch the Go CLI, passing through all arguments
+        # Use execvp to replace the current process so the TUI works properly
+        os.execvp(plato_bin, [plato_bin] + args)
+    except Exception as e:
+        console.print(f"[red]❌ Failed to launch Plato Hub: {e}[/red]")
+        raise typer.Exit(1)
 
 
 def main():

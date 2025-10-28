@@ -63,6 +63,24 @@ python/screenshot_context_2.png
 
 *.csv
 *.out
-sdk/plato
-sdk/cmd/plato/plato
-sdk/cmd/plato/plato_error.log
+
+# Go binaries
+cli/plato
+cli/plato-*
+*.exe
+
+# C bindings
+sdk/bindings/c/libplato.*
+sdk/bindings/c/*.so
+sdk/bindings/c/*.dylib
+sdk/bindings/c/*.dll
+sdk/bindings/c/*.h
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Logs
+*.log
+cli/bin/plato
+python/src/plato/bin
