@@ -18,7 +18,8 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      version: ${{ steps.new_version.outputs.version }}
+      cli_version: ${{ steps.new_cli_version.outputs.version }}
+      python_version: ${{ steps.new_python_version.outputs.version }}
 
     steps:
       - name: Checkout code
@@ -31,8 +32,8 @@ jobs:
         with:
           go-version: '1.23'
 
-      - name: Get current version
-        id: get_version
+      - name: Get current CLI version
+        id: get_cli_version
         run: |
           cd cli
           if [ -f VERSION ]; then
@@ -42,7 +43,13 @@ jobs:
             echo "current_version=1.0.0" >> $GITHUB_OUTPUT
           fi
 
-      - name: Determine version bump
+      - name: Get current Python SDK version
+        id: get_python_version
+        run: |
+          CURRENT_VERSION=$(grep -m1 'version = ' python/pyproject.toml | cut -d'"' -f2)
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Determine version bumps for CLI and Python
         id: bump_version
         run: |
           # Get commit messages and changed files since last tag
@@ -56,42 +63,77 @@ jobs:
             CHANGED_FILES=$(git diff --name-only ${LAST_TAG}..HEAD)
           fi
 
-          # Check if CLI files changed
+          # Check which components changed
           CLI_CHANGED=false
+          PYTHON_CHANGED=false
+          SDK_CHANGED=false
+
           if echo "$CHANGED_FILES" | grep -q "^cli/"; then
             CLI_CHANGED=true
             echo "🔧 CLI changes detected"
           fi
 
-          # Determine bump type based on conventional commits
-          BUMP_TYPE="patch"
-
-          # If CLI changed, at minimum bump minor version
-          if [ "$CLI_CHANGED" = true ]; then
-            BUMP_TYPE="minor"
-            echo "📦 CLI changed, bumping to minor version"
+          if echo "$CHANGED_FILES" | grep -q "^python/"; then
+            PYTHON_CHANGED=true
+            echo "🐍 Python SDK changes detected"
           fi
 
-          # Check for explicit feature commits (overrides CLI change to minor)
-          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?:"; then
-            BUMP_TYPE="minor"
-            echo "✨ Feature detected, bumping to minor version"
+          if echo "$CHANGED_FILES" | grep -q "^sdk/"; then
+            SDK_CHANGED=true
+            echo "📦 Go SDK changes detected"
           fi
 
-          # Breaking changes always take precedence
+          # Determine bump types
+          CLI_BUMP="none"
+          PYTHON_BUMP="none"
+
+          # Check for breaking changes
           if echo "$COMMITS" | grep -qiE "^.+!:|^BREAKING CHANGE:"; then
-            BUMP_TYPE="major"
-            echo "💥 Breaking change detected, bumping to major version"
+            if [ "$CLI_CHANGED" = true ]; then
+              CLI_BUMP="major"
+            fi
+            if [ "$PYTHON_CHANGED" = true ] || [ "$SDK_CHANGED" = true ]; then
+              PYTHON_BUMP="major"
+            fi
+            echo "💥 Breaking change detected"
           fi
 
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "Final bump type: $BUMP_TYPE"
+          # Check for features
+          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?:"; then
+            if [ "$CLI_CHANGED" = true ] && [ "$CLI_BUMP" = "none" ]; then
+              CLI_BUMP="minor"
+            fi
+            if ([ "$PYTHON_CHANGED" = true ] || [ "$SDK_CHANGED" = true ]) && [ "$PYTHON_BUMP" = "none" ]; then
+              PYTHON_BUMP="minor"
+            fi
+            echo "✨ Feature detected"
+          fi
 
-      - name: Calculate new version
-        id: new_version
+          # Default to patch if changed but no major/minor reason
+          if [ "$CLI_CHANGED" = true ] && [ "$CLI_BUMP" = "none" ]; then
+            CLI_BUMP="patch"
+          fi
+
+          if ([ "$PYTHON_CHANGED" = true ] || [ "$SDK_CHANGED" = true ]) && [ "$PYTHON_BUMP" = "none" ]; then
+            PYTHON_BUMP="patch"
+          fi
+
+          echo "cli_bump=$CLI_BUMP" >> $GITHUB_OUTPUT
+          echo "python_bump=$PYTHON_BUMP" >> $GITHUB_OUTPUT
+          echo "CLI bump type: $CLI_BUMP"
+          echo "Python bump type: $PYTHON_BUMP"
+
+      - name: Calculate new CLI version
+        id: new_cli_version
         run: |
-          CURRENT="${{ steps.get_version.outputs.current_version }}"
-          BUMP="${{ steps.bump_version.outputs.bump_type }}"
+          CURRENT="${{ steps.get_cli_version.outputs.current_version }}"
+          BUMP="${{ steps.bump_version.outputs.cli_bump }}"
+
+          if [ "$BUMP" = "none" ]; then
+            echo "version=$CURRENT" >> $GITHUB_OUTPUT
+            echo "CLI version unchanged: $CURRENT"
+            exit 0
+          fi
 
           IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT"
           MAJOR="${VERSION_PARTS[0]}"
@@ -111,17 +153,79 @@ jobs:
 
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "New version: $NEW_VERSION"
+          echo "New CLI version: $NEW_VERSION"
 
-      - name: Update VERSION file
+      - name: Calculate new Python SDK version
+        id: new_python_version
         run: |
-          cd cli
-          echo "${{ steps.new_version.outputs.version }}" > VERSION
+          CURRENT="${{ steps.get_python_version.outputs.current_version }}"
+          BUMP="${{ steps.bump_version.outputs.python_bump }}"
+
+          if [ "$BUMP" = "none" ]; then
+            echo "version=$CURRENT" >> $GITHUB_OUTPUT
+            echo "Python SDK version unchanged: $CURRENT"
+            exit 0
+          fi
+
+          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT"
+          MAJOR="${VERSION_PARTS[0]}"
+          MINOR="${VERSION_PARTS[1]}"
+          PATCH="${VERSION_PARTS[2]}"
+
+          if [ "$BUMP" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "$BUMP" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New Python SDK version: $NEW_VERSION"
+
+      - name: Update version files
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git commit -m "chore: bump version to ${{ steps.new_version.outputs.version }}"
-          git push
+
+          CLI_BUMP="${{ steps.bump_version.outputs.cli_bump }}"
+          PYTHON_BUMP="${{ steps.bump_version.outputs.python_bump }}"
+
+          # Update CLI VERSION if needed
+          if [ "$CLI_BUMP" != "none" ]; then
+            cd cli
+            echo "${{ steps.new_cli_version.outputs.version }}" > VERSION
+            git add VERSION
+            cd ..
+            echo "Updated CLI version to ${{ steps.new_cli_version.outputs.version }}"
+          fi
+
+          # Update Python pyproject.toml if needed
+          if [ "$PYTHON_BUMP" != "none" ]; then
+            python3 << 'EOF'
+          import pathlib, re
+          version = "${{ steps.new_python_version.outputs.version }}"
+          p = pathlib.Path("python/pyproject.toml")
+          text = p.read_text(encoding="utf-8")
+          patched = re.sub(r'(?m)^(\s*version\s*=\s*")([^"]+)(")',
+                          r'\g<1>' + version + r'\3', text)
+          p.write_text(patched, encoding="utf-8")
+          print(f"Updated Python SDK version to: {version}")
+          EOF
+            git add python/pyproject.toml
+          fi
+
+          # Commit if there are changes
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump versions - CLI: ${{ steps.new_cli_version.outputs.version }}, Python: ${{ steps.new_python_version.outputs.version }}"
+            git push
+          else
+            echo "No version changes to commit"
+          fi
 
       - name: Build proxytunnel
         run: |
@@ -130,7 +234,7 @@ jobs:
 
       - name: Build CLI for multiple platforms (cross-compile)
         run: |
-          VERSION="${{ steps.new_version.outputs.version }}"
+          VERSION="${{ steps.new_cli_version.outputs.version }}"
           GIT_COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 
@@ -153,26 +257,31 @@ jobs:
             mkdir -p "plato-${platform}-bundle"
             mv "plato-${platform}" "plato-${platform}-bundle/plato"
 
-            # Copy appropriate proxytunnel binary
-            if [[ "$platform" == *"darwin"* ]]; then
-              if [[ "$platform" == *"arm64"* ]]; then
-                cp "$PROXYTUNNEL_SRC/proxytunnel-darwin-arm64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-darwin-arm64 not found"
+            # Only bundle proxytunnel for Linux AMD64 (the platform we're building on)
+            # Other platforms will use system-installed proxytunnel or get it from Python wheels
+            if [[ "$platform" == "linux-amd64" ]]; then
+              if [ -f "$PROXYTUNNEL_SRC/proxytunnel-linux-amd64" ]; then
+                cp "$PROXYTUNNEL_SRC/proxytunnel-linux-amd64" "plato-${platform}-bundle/"
+                echo "✅ Bundled proxytunnel for ${platform}"
               else
-                cp "$PROXYTUNNEL_SRC/proxytunnel-darwin-amd64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-darwin-amd64 not found"
+                echo "⚠️  proxytunnel-linux-amd64 not found, skipping bundle"
               fi
             else
-              if [[ "$platform" == *"arm64"* ]]; then
-                cp "$PROXYTUNNEL_SRC/proxytunnel-linux-arm64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-linux-arm64 not found"
-              else
-                cp "$PROXYTUNNEL_SRC/proxytunnel-linux-amd64" "plato-${platform}-bundle/" || echo "⚠️  proxytunnel-linux-amd64 not found"
-              fi
+              echo "ℹ️  Skipping proxytunnel for ${platform} (not built on this runner)"
             fi
 
-            # Create archive with both binaries
+            # Create archive
             tar -czf "plato-${platform}.tar.gz" -C "plato-${platform}-bundle" .
             rm -rf "plato-${platform}-bundle"
             echo "✅ Created plato-${platform}.tar.gz"
           done
+
+          echo ""
+          echo "📝 Note: Only Linux AMD64 includes proxytunnel binary."
+          echo "   Other platforms should install proxytunnel via package manager:"
+          echo "   - macOS: brew install proxytunnel"
+          echo "   - Linux: sudo apt-get install proxytunnel"
+          echo "   Or use the Python SDK which includes platform-specific binaries."
 
       - name: Generate release notes
         id: release_notes
@@ -196,21 +305,27 @@ jobs:
 
           ## Installation
 
-          ### Python SDK
+          ### Python SDK (Recommended)
           ```bash
-          pip install plato-sdk==${{ steps.new_version.outputs.version }}
+          pip install plato-sdk==${{ steps.new_python_version.outputs.version }}
           ```
+          Platform-specific wheels include the CLI, C bindings, and proxytunnel binary.
 
-          ### CLI
+          ### Standalone CLI
           Download the appropriate CLI binary for your platform from the assets below.
+
+          **Note:** Only the Linux AMD64 CLI includes a bundled proxytunnel binary.
+          Other platforms require installing proxytunnel separately:
+          - macOS: `brew install proxytunnel`
+          - Linux: `sudo apt-get install proxytunnel`
 
           EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.new_version.outputs.version }}
-          name: v${{ steps.new_version.outputs.version }}
+          tag_name: cli-v${{ steps.new_cli_version.outputs.version }}
+          name: CLI v${{ steps.new_cli_version.outputs.version }} / Python SDK v${{ steps.new_python_version.outputs.version }}
           body_path: release_notes.md
           draft: false
           prerelease: false
@@ -289,18 +404,24 @@ jobs:
           ./scripts/build-python.sh
         shell: bash
 
-      - name: Update version in pyproject.toml
+      - name: Verify Python SDK version
         working-directory: .
         shell: python
         run: |
           import pathlib, re
-          version = "${{ needs.release.outputs.version }}"
+          # Version should already be updated by the release job
+          version = "${{ needs.release.outputs.python_version }}"
           p = pathlib.Path("python/pyproject.toml")
           text = p.read_text(encoding="utf-8")
-          patched = re.sub(r'(?m)^(\s*version\s*=\s*")([^"]+)(")',
-                          r'\g<1>' + version + r'\3', text)
-          p.write_text(patched, encoding="utf-8")
-          print(f"Updated version to: {version}")
+          m = re.search(r'(?m)^\s*version\s*=\s*"([^"]+)"\s*$', text)
+          if m:
+            current_version = m.group(1)
+            print(f"Building Python SDK version: {current_version}")
+            if current_version != version:
+              print(f"WARNING: Expected version {version} but found {current_version}")
+          else:
+            print("ERROR: Could not find version in pyproject.toml")
+            exit(1)
 
       - name: Build wheel
         run: python -m build --wheel
@@ -367,8 +488,8 @@ jobs:
           echo "✅ Published to PyPI"
           echo ""
           echo "📦 Package: plato-sdk"
-          echo "🏷️  Version: ${{ needs.release.outputs.version }}"
+          echo "🏷️  Version: ${{ needs.release.outputs.python_version }}"
           echo "🖥️  Platform: ${{ matrix.platform }}"
           echo ""
           echo "Install with:"
-          echo "  pip install plato-sdk==${{ needs.release.outputs.version }}"
+          echo "  pip install plato-sdk==${{ needs.release.outputs.python_version }}"
