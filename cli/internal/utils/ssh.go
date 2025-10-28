@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -197,10 +196,10 @@ func WriteSSHConfig(configContent string) error {
 // CreateTempSSHConfig creates a temporary SSH config file for a specific host
 // Returns the path to the temporary config file
 func CreateTempSSHConfig(baseURL, hostname string, port int, jobGroupID string, username string, privateKeyPath string) (string, error) {
-	// Find proxytunnel path
-	proxytunnelPath, err := exec.LookPath("proxytunnel")
+	// Find proxytunnel path (checks bundled binary first, then PATH)
+	proxytunnelPath, err := FindProxytunnelPath()
 	if err != nil {
-		return "", fmt.Errorf("proxytunnel not found in PATH: %w", err)
+		return "", fmt.Errorf("SSH config setup failed: %w", err)
 	}
 
 	// Get proxy configuration based on base URL
@@ -253,10 +252,10 @@ func AppendSSHHostEntry(baseURL, hostname string, port int, jobGroupID string, u
 		return err
 	}
 
-	// Find proxytunnel path
-	proxytunnelPath, err := exec.LookPath("proxytunnel")
+	// Find proxytunnel path (checks bundled binary first, then PATH)
+	proxytunnelPath, err := FindProxytunnelPath()
 	if err != nil {
-		return fmt.Errorf("proxytunnel not found in PATH: %w", err)
+		return fmt.Errorf("SSH config setup failed: %w", err)
 	}
 
 	// Get the private key path to include in the SSH config

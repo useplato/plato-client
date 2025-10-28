@@ -58,6 +58,40 @@ if [[ "$OSTYPE" != "msys" ]] && [[ "$OSTYPE" != "win32" ]]; then
     chmod +x "$OUTPUT_DIR/$BINARY_NAME"
 fi
 
+# Copy bundled proxytunnel binary to the same directory
+echo "📦 Copying bundled proxytunnel binary..."
+PROXYTUNNEL_SRC="$PROJECT_ROOT/python/src/plato/bin"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ "$(uname -m)" == "arm64" ]]; then
+        PROXYTUNNEL_NAME="proxytunnel-darwin-arm64"
+    else
+        PROXYTUNNEL_NAME="proxytunnel-darwin-amd64"
+    fi
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    if [[ "$(uname -m)" == "aarch64" ]] || [[ "$(uname -m)" == "arm64" ]]; then
+        PROXYTUNNEL_NAME="proxytunnel-linux-arm64"
+    else
+        PROXYTUNNEL_NAME="proxytunnel-linux-amd64"
+    fi
+elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    PROXYTUNNEL_NAME="proxytunnel.exe"
+else
+    echo "⚠️  Unknown platform, skipping proxytunnel copy"
+    PROXYTUNNEL_NAME=""
+fi
+
+if [[ -n "$PROXYTUNNEL_NAME" ]]; then
+    if [[ -f "$PROXYTUNNEL_SRC/$PROXYTUNNEL_NAME" ]]; then
+        cp "$PROXYTUNNEL_SRC/$PROXYTUNNEL_NAME" "$OUTPUT_DIR/"
+        chmod +x "$OUTPUT_DIR/$PROXYTUNNEL_NAME"
+        echo "✅ Copied $PROXYTUNNEL_NAME to $OUTPUT_DIR"
+    else
+        echo "⚠️  Proxytunnel binary not found at $PROXYTUNNEL_SRC/$PROXYTUNNEL_NAME"
+        echo "    Run ./scripts/build-proxytunnel.sh first"
+    fi
+fi
+echo ""
+
 # Test the binary
 echo "🧪 Testing binary..."
 if "$OUTPUT_DIR/$BINARY_NAME" --version; then
