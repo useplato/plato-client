@@ -35,7 +35,6 @@ jobs:
       - name: Get current CLI version
         id: get_cli_version
         run: |
-          cd cli
           if [ -f VERSION ]; then
             CURRENT_VERSION=$(cat VERSION | tr -d '\n')
             echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
@@ -46,8 +45,12 @@ jobs:
       - name: Get current Python SDK version
         id: get_python_version
         run: |
-          CURRENT_VERSION=$(grep -m1 'version = ' python/pyproject.toml | cut -d'"' -f2)
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          if [ -f VERSION ]; then
+            CURRENT_VERSION=$(cat VERSION | tr -d '\n')
+            echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "current_version=1.0.0" >> $GITHUB_OUTPUT
+          fi
 
       - name: Determine version bumps for CLI and Python
         id: bump_version
@@ -195,33 +198,19 @@ jobs:
           CLI_BUMP="${{ steps.bump_version.outputs.cli_bump }}"
           PYTHON_BUMP="${{ steps.bump_version.outputs.python_bump }}"
 
-          # Update CLI VERSION if needed
-          if [ "$CLI_BUMP" != "none" ]; then
-            cd cli
-            echo "${{ steps.new_cli_version.outputs.version }}" > VERSION
+          # Since CLI and Python share the same VERSION file now,
+          # we update it if either changed
+          if [ "$CLI_BUMP" != "none" ] || [ "$PYTHON_BUMP" != "none" ]; then
+            # Both should be the same version now
+            NEW_VERSION="${{ steps.new_cli_version.outputs.version }}"
+            echo "$NEW_VERSION" > VERSION
             git add VERSION
-            cd ..
-            echo "Updated CLI version to ${{ steps.new_cli_version.outputs.version }}"
-          fi
-
-          # Update Python pyproject.toml if needed
-          if [ "$PYTHON_BUMP" != "none" ]; then
-            python3 << 'EOF'
-          import pathlib, re
-          version = "${{ steps.new_python_version.outputs.version }}"
-          p = pathlib.Path("python/pyproject.toml")
-          text = p.read_text(encoding="utf-8")
-          patched = re.sub(r'(?m)^(\s*version\s*=\s*")([^"]+)(")',
-                          r'\g<1>' + version + r'\3', text)
-          p.write_text(patched, encoding="utf-8")
-          print(f"Updated Python SDK version to: {version}")
-          EOF
-            git add python/pyproject.toml
+            echo "Updated VERSION to $NEW_VERSION"
           fi
 
           # Commit if there are changes
           if ! git diff --cached --quiet; then
-            git commit -m "chore: bump versions - CLI: ${{ steps.new_cli_version.outputs.version }}, Python: ${{ steps.new_python_version.outputs.version }}"
+            git commit -m "chore: bump version to ${{ steps.new_cli_version.outputs.version }}"
             git push
           else
             echo "No version changes to commit"
