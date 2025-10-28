@@ -73,8 +73,9 @@ def install_proxytunnel_noninteractive() -> bool:
     Returns True on success, False otherwise. Avoids interactive prompts.
     """
     try:
-        if is_command_available("proxytunnel"):
-            logger.info("proxytunnel is already installed")
+        # Check if bundled or system proxytunnel is available
+        if find_proxytunnel_path():
+            logger.info("proxytunnel is already available (bundled or system)")
             return True
 
         system = platform.system().lower()
@@ -144,13 +145,14 @@ def install_proxytunnel_noninteractive() -> bool:
             )
             return False
 
-        # Verify installation
-        if not is_command_available("proxytunnel"):
-            logger.error("proxytunnel not found in PATH after installation")
+        # Verify installation - check if bundled or system proxytunnel is available
+        proxytunnel_path = find_proxytunnel_path()
+        if not proxytunnel_path:
+            logger.error("proxytunnel not found after installation")
             return False
 
         # Quick sanity check
-        check = subprocess.run(["proxytunnel", "-h"], capture_output=True, text=True)
+        check = subprocess.run([proxytunnel_path, "-h"], capture_output=True, text=True)
         if check.returncode not in (0, 1):  # -h may exit 1 depending on build
             logger.warning(
                 "proxytunnel installed but health check returned %s", check.returncode
