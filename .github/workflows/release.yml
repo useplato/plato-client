@@ -8,6 +8,7 @@ on:
       - 'sdk/**'
       - 'cli/**'
       - 'scripts/**'
+      - 'python/**'
       - '.github/workflows/release.yml'
 
 permissions:
