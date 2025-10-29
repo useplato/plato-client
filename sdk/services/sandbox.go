@@ -68,7 +68,7 @@ func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDat
 	payload := map[string]interface{}{
 		"dataset":              dataset,
 		"plato_dataset_config": configMap,
-		"timeout":              timeout,
+		"sandbox_timeout":      timeout,
 		"wait_time":            600,
 		"alias":                alias,
 	}
