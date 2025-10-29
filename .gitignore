@@ -80,6 +80,9 @@ sdk/bindings/c/*.h
 *.tar.gz
 *.zip
 
+dist/
+node_modules/
+
 # Logs
 *.log
 cli/bin/plato

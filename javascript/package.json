@@ -1,10 +1,9 @@
 {
   "name": "plato-sdk",
-  "version": "0.3.0",
-  "description": "JavaScript client for interacting with the Plato API",
+  "version": "0.4.0",
+  "description": "JavaScript/TypeScript client for interacting with the Plato API",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "browser": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "test": "jest",
@@ -16,7 +15,9 @@
     "plato",
     "ai",
     "automation",
-    "testing"
+    "testing",
+    "sandbox",
+    "vm"
   ],
   "author": "Plato AI",
   "license": "MIT",
@@ -31,12 +32,15 @@
   },
   "dependencies": {
     "axios": "^1.6.7",
+    "ffi-napi": "^4.0.3",
+    "ref-napi": "^3.0.3",
     "zod": "^3.22.4",
     "zod-to-json-schema": "^3.22.4"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.24",
+    "@types/ref-napi": "^3.0.6",
     "@typescript-eslint/eslint-plugin": "^7.1.1",
     "@typescript-eslint/parser": "^7.1.1",
     "eslint": "^8.57.0",
@@ -47,5 +51,21 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.3.3"
-  }
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "files": [
+    "dist/**/*",
+    "src/plato/*.so",
+    "src/plato/*.dylib",
+    "src/plato/*.dll",
+    "README.md"
+  ]
 }
