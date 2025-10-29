@@ -97,6 +97,15 @@ class SimulatorListItem(BaseModel):
     artifact_id: Optional[str] = None
 
 
+class DBConfig(BaseModel):
+    """Database configuration for pre-snapshot cleanup"""
+    db_type: str  # "postgresql" or "mysql"
+    user: str
+    password: str
+    dest_port: int
+    databases: List[str]
+
+
 class CreateSnapshotRequest(BaseModel):
     service: Optional[str] = None
     git_hash: Optional[str] = None

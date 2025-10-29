@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any, List, Union
 from plato.models.sandbox import (
     Sandbox,
     SimConfigDataset,
+    DBConfig,
     CreateSnapshotRequest,
     CreateSnapshotResponse,
     StartWorkerRequest,
@@ -84,6 +85,7 @@ def _get_lib():
             ctypes.c_char_p,  # alias
             ctypes.c_char_p,  # artifactID
             ctypes.c_char_p,  # service
+            ctypes.c_int,     # timeout
         ]
         _lib.plato_create_sandbox.restype = ctypes.c_void_p
 
@@ -92,6 +94,15 @@ def _get_lib():
 
         _lib.plato_create_snapshot.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_create_snapshot.restype = ctypes.c_void_p
+
+        _lib.plato_create_snapshot_with_cleanup.argtypes = [
+            ctypes.c_char_p,  # clientID
+            ctypes.c_char_p,  # publicID
+            ctypes.c_char_p,  # jobGroupID
+            ctypes.c_char_p,  # requestJSON
+            ctypes.c_char_p,  # dbConfigJSON
+        ]
+        _lib.plato_create_snapshot_with_cleanup.restype = ctypes.c_void_p
 
         _lib.plato_start_worker.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_start_worker.restype = ctypes.c_void_p
@@ -225,7 +236,8 @@ class PlatoSandboxClient:
         artifact_id: Optional[str] = None,
         service: str = "",
         wait: bool = True,
-        timeout: int = 600
+        timeout: int = 600,
+        sandbox_timeout: int | None = None
     ) -> Sandbox:
         """
         Create a new VM sandbox
@@ -243,6 +255,7 @@ class PlatoSandboxClient:
             service: Service name
             wait: If True, blocks until sandbox is ready (default: True)
             timeout: Timeout in seconds when wait=True (default: 600)
+            sandbox_timeout: Timeout in seconds for sandbox creation on server side (default: 1200)
 
         Returns:
             Sandbox object with public_id, url, status, etc.
@@ -303,7 +316,7 @@ class PlatoSandboxClient:
         else:
             config_json = "{}"
 
-        logger.info(f"Creating sandbox: artifact_id={artifact_id}, service={service}, dataset={dataset}")
+        logger.info(f"Creating sandbox: artifact_id={artifact_id}, service={service}, dataset={dataset}, sandbox_timeout={sandbox_timeout}")
         lib = _get_lib()
         result_ptr = lib.plato_create_sandbox(
             self._client_id.encode('utf-8'),
@@ -311,7 +324,8 @@ class PlatoSandboxClient:
             dataset.encode('utf-8'),
             alias.encode('utf-8'),
             artifact_id.encode('utf-8') if artifact_id else b'',
-            service.encode('utf-8')
+            service.encode('utf-8'),
+            ctypes.c_int(sandbox_timeout if sandbox_timeout is not None else -1),
         )
 
         result_str = _call_and_free(lib, result_ptr)
@@ -412,6 +426,106 @@ class PlatoSandboxClient:
         if 'error' in response:
             raise RuntimeError(f"Failed to create snapshot: {response['error']}")
 
+        return CreateSnapshotResponse(**response)
+
+    def create_snapshot_with_cleanup(
+        self,
+        public_id: str,
+        job_group_id: str,
+        request: CreateSnapshotRequest,
+        db_config: Optional[Union[DBConfig, Dict[str, Any]]] = None
+    ) -> CreateSnapshotResponse:
+        """
+        Create a snapshot with pre-snapshot database cleanup
+
+        This performs database cleanup (clears audit_log and env state) before creating the snapshot.
+        Useful for creating clean snapshots without residual data from testing/development.
+
+        Args:
+            public_id: Public ID of the sandbox
+            job_group_id: Job group ID of the sandbox
+            request: Snapshot request (CreateSnapshotRequest) with 'service', 'dataset', optional 'git_hash'
+            db_config: Optional database configuration (DBConfig or dict) with:
+                - db_type: "postgresql" or "mysql"
+                - user: Database user
+                - password: Database password
+                - dest_port: Database port (e.g., 5432 for PostgreSQL, 3306 for MySQL)
+                - databases: List of database names to clean
+
+        Returns:
+            CreateSnapshotResponse with artifact_id, s3_uri, status, etc.
+
+        Raises:
+            RuntimeError: If snapshot creation or cleanup fails
+
+        Example:
+            >>> from plato.models.sandbox import DBConfig, CreateSnapshotRequest
+            >>> 
+            >>> # Using Pydantic model (recommended)
+            >>> db_config = DBConfig(
+            ...     db_type="postgresql",
+            ...     user="postgres",
+            ...     password="password",
+            ...     dest_port=5432,
+            ...     databases=["postgres", "myapp"]
+            ... )
+            >>> request = CreateSnapshotRequest(service="web", dataset="base")
+            >>> snapshot = client.create_snapshot_with_cleanup(
+            ...     sandbox.public_id,
+            ...     sandbox.job_group_id,
+            ...     request,
+            ...     db_config
+            ... )
+            >>> print(snapshot.artifact_id)
+            >>>
+            >>> # Or using dict (also supported)
+            >>> db_config = {
+            ...     "db_type": "postgresql",
+            ...     "user": "postgres",
+            ...     "password": "password",
+            ...     "dest_port": 5432,
+            ...     "databases": ["postgres", "myapp"]
+            ... }
+            >>> snapshot = client.create_snapshot_with_cleanup(
+            ...     sandbox.public_id,
+            ...     sandbox.job_group_id,
+            ...     request,
+            ...     db_config
+            ... )
+        """
+        logger.info(f"Creating snapshot with cleanup for sandbox {public_id}")
+
+        # Convert request to dict if Pydantic model
+        request_dict = request.model_dump(mode='json', exclude_none=True)
+        request_json = json.dumps(request_dict)
+
+        # Convert db_config to JSON (or null if not provided)
+        if db_config is None:
+            db_config_json = "null"
+        elif isinstance(db_config, DBConfig):
+            db_config_dict = db_config.model_dump(mode='json', exclude_none=True)
+            db_config_json = json.dumps(db_config_dict)
+        else:
+            # Assume it's a dict
+            db_config_json = json.dumps(db_config)
+
+        lib = _get_lib()
+        result_ptr = lib.plato_create_snapshot_with_cleanup(
+            self._client_id.encode('utf-8'),
+            public_id.encode('utf-8'),
+            job_group_id.encode('utf-8'),
+            request_json.encode('utf-8'),
+            db_config_json.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            logger.error(f"Failed to create snapshot with cleanup: {response['error']}")
+            raise RuntimeError(f"Failed to create snapshot with cleanup: {response['error']}")
+
+        logger.info(f"Snapshot created successfully: {response.get('artifact_id')}")
         return CreateSnapshotResponse(**response)
 
     def start_worker(

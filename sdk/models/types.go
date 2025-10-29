@@ -129,3 +129,12 @@ type SSHInfo struct {
 	PrivateKeyPath string `json:"private_key_path"`
 	CorrelationID  string `json:"correlation_id"`
 }
+
+// DBConfig represents database configuration for pre-snapshot cleanup
+type DBConfig struct {
+	DBType    string   `json:"db_type"`
+	User      string   `json:"user"`
+	Password  string   `json:"password"`
+	DestPort  int      `json:"dest_port"`
+	Databases []string `json:"databases"`
+}

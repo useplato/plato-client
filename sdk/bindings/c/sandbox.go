@@ -52,7 +52,7 @@ func plato_new_client(baseURL *C.char, apiKey *C.char) *C.char {
 }
 
 //export plato_create_sandbox
-func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char, alias *C.char, artifactID *C.char, service *C.char) *C.char {
+func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char, alias *C.char, artifactID *C.char, service *C.char, timeout C.int) *C.char {
 	client, ok := clients[C.GoString(clientID)]
 	if !ok {
 		return C.CString(fmt.Sprintf(`{"error": "invalid client ID"}`))
@@ -69,6 +69,13 @@ func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char,
 		aid = &s
 	}
 
+	// Handle optional timeout: -1 means not provided
+	var timeoutPtr *int
+	if timeout >= 0 {
+		t := int(timeout)
+		timeoutPtr = &t
+	}
+
 	ctx := context.Background()
 	sandbox, err := client.Sandbox.Create(
 		ctx,
@@ -77,6 +84,7 @@ func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char,
 		C.GoString(alias),
 		aid,
 		C.GoString(service),
+		timeoutPtr,
 	)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
@@ -192,6 +200,48 @@ func plato_create_snapshot(clientID *C.char, publicID *C.char, requestJSON *C.ch
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
 	}
 
+	result, err := json.Marshal(resp)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
+	}
+
+	return C.CString(string(result))
+}
+
+//export plato_create_snapshot_with_cleanup
+func plato_create_snapshot_with_cleanup(clientID *C.char, publicID *C.char, jobGroupID *C.char, requestJSON *C.char, dbConfigJSON *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	var req models.CreateSnapshotRequest
+	if err := json.Unmarshal([]byte(C.GoString(requestJSON)), &req); err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to parse request: %v"}`, err))
+	}
+
+	// Parse DB config if provided (may be null/empty string)
+	var dbConfig *models.DBConfig
+	dbConfigStr := C.GoString(dbConfigJSON)
+	if dbConfigStr != "" && dbConfigStr != "null" {
+		var cfg models.DBConfig
+		if err := json.Unmarshal([]byte(dbConfigStr), &cfg); err != nil {
+			return C.CString(fmt.Sprintf(`{"error": "failed to parse db_config: %v"}`, err))
+		}
+		dbConfig = &cfg
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	logDebug("Creating snapshot with cleanup for publicID=%s, jobGroupID=%s", C.GoString(publicID), C.GoString(jobGroupID))
+	resp, err := client.Sandbox.CreateSnapshotWithCleanup(ctx, C.GoString(publicID), C.GoString(jobGroupID), &req, dbConfig)
+	if err != nil {
+		logDebug("CreateSnapshotWithCleanup failed: %v", err)
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	logDebug("Snapshot created successfully: %s", resp.ArtifactId)
 	result, err := json.Marshal(resp)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
