@@ -52,7 +52,7 @@ func plato_new_client(baseURL *C.char, apiKey *C.char) *C.char {
 }
 
 //export plato_create_sandbox
-func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char, alias *C.char, artifactID *C.char, service *C.char) *C.char {
+func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char, alias *C.char, artifactID *C.char, service *C.char, timeout C.int) *C.char {
 	client, ok := clients[C.GoString(clientID)]
 	if !ok {
 		return C.CString(fmt.Sprintf(`{"error": "invalid client ID"}`))
@@ -77,6 +77,7 @@ func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char,
 		C.GoString(alias),
 		aid,
 		C.GoString(service),
+		int(timeout),
 	)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))

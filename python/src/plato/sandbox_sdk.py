@@ -85,6 +85,7 @@ def _get_lib():
             ctypes.c_char_p,  # alias
             ctypes.c_char_p,  # artifactID
             ctypes.c_char_p,  # service
+            ctypes.c_int,     # timeout
         ]
         _lib.plato_create_sandbox.restype = ctypes.c_void_p
 
@@ -235,7 +236,8 @@ class PlatoSandboxClient:
         artifact_id: Optional[str] = None,
         service: str = "",
         wait: bool = True,
-        timeout: int = 600
+        timeout: int = 600,
+        sandbox_timeout: int = 1200
     ) -> Sandbox:
         """
         Create a new VM sandbox
@@ -253,6 +255,7 @@ class PlatoSandboxClient:
             service: Service name
             wait: If True, blocks until sandbox is ready (default: True)
             timeout: Timeout in seconds when wait=True (default: 600)
+            sandbox_timeout: Timeout in seconds for sandbox creation on server side (default: 1200)
 
         Returns:
             Sandbox object with public_id, url, status, etc.
@@ -313,7 +316,7 @@ class PlatoSandboxClient:
         else:
             config_json = "{}"
 
-        logger.info(f"Creating sandbox: artifact_id={artifact_id}, service={service}, dataset={dataset}")
+        logger.info(f"Creating sandbox: artifact_id={artifact_id}, service={service}, dataset={dataset}, sandbox_timeout={sandbox_timeout}")
         lib = _get_lib()
         result_ptr = lib.plato_create_sandbox(
             self._client_id.encode('utf-8'),
@@ -321,7 +324,8 @@ class PlatoSandboxClient:
             dataset.encode('utf-8'),
             alias.encode('utf-8'),
             artifact_id.encode('utf-8') if artifact_id else b'',
-            service.encode('utf-8')
+            service.encode('utf-8'),
+            ctypes.c_int(sandbox_timeout)
         )
 
         result_str = _call_and_free(lib, result_ptr)
