@@ -237,7 +237,7 @@ class PlatoSandboxClient:
         service: str = "",
         wait: bool = True,
         timeout: int = 600,
-        sandbox_timeout: int = 1200
+        sandbox_timeout: int | None = None
     ) -> Sandbox:
         """
         Create a new VM sandbox
@@ -325,7 +325,7 @@ class PlatoSandboxClient:
             alias.encode('utf-8'),
             artifact_id.encode('utf-8') if artifact_id else b'',
             service.encode('utf-8'),
-            ctypes.c_int(sandbox_timeout)
+            ctypes.c_int(sandbox_timeout if sandbox_timeout is not None else -1),
         )
 
         result_str = _call_and_free(lib, result_ptr)

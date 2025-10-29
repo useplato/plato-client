@@ -69,6 +69,13 @@ func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char,
 		aid = &s
 	}
 
+	// Handle optional timeout: -1 means not provided
+	var timeoutPtr *int
+	if timeout >= 0 {
+		t := int(timeout)
+		timeoutPtr = &t
+	}
+
 	ctx := context.Background()
 	sandbox, err := client.Sandbox.Create(
 		ctx,
@@ -77,7 +84,7 @@ func plato_create_sandbox(clientID *C.char, configJSON *C.char, dataset *C.char,
 		C.GoString(alias),
 		aid,
 		C.GoString(service),
-		int(timeout),
+		timeoutPtr,
 	)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))

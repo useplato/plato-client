@@ -85,7 +85,8 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 			alias = config.Metadata.Name
 		}
 
-		sandbox, err := client.Sandbox.Create(ctx, &config, dataset, alias, artifactID, service, 7200) // 2 hour default timeout
+		timeout := 7200 // 2 hour default timeout
+		sandbox, err := client.Sandbox.Create(ctx, &config, dataset, alias, artifactID, service, &timeout)
 		if err != nil {
 			close(statusChan)
 			return sandboxCreatedMsg{sandbox: nil, err: err}

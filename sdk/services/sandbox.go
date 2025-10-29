@@ -47,7 +47,7 @@ func NewSandboxService(client ClientInterface) *SandboxService {
 }
 
 // Create creates a new sandbox from a full SimConfigDataset configuration
-func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDataset, dataset, alias string, artifactID *string, service string, timeout int) (*models.Sandbox, error) {
+func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDataset, dataset, alias string, artifactID *string, service string, timeout *int) (*models.Sandbox, error) {
 	// Marshal config to JSON
 	configJSON, err := json.Marshal(config)
 	if err != nil {
@@ -60,17 +60,16 @@ func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDat
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	// Use default timeout if not provided (0 or negative)
-	if timeout <= 0 {
-		timeout = 1200
-	}
-
 	payload := map[string]interface{}{
 		"dataset":              dataset,
 		"plato_dataset_config": configMap,
-		"sandbox_timeout":      timeout,
 		"wait_time":            600,
 		"alias":                alias,
+	}
+
+	// Only include timeout if provided, otherwise server will use default
+	if timeout != nil {
+		payload["sandbox_timeout"] = *timeout
 	}
 
 	if artifactID != nil {
