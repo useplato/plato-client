@@ -13,4 +13,4 @@
 // HTTP Client (works in browser and Node.js)
 export { Plato, PlatoEnvironment, PlatoTask } from './plato/client';
 export { PlatoClientError } from './plato/exceptions';
-export { Config } from './plato/config';
+export { getConfig, type Config } from './plato/config';
