@@ -114,10 +114,10 @@ func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDat
 	}
 
 	var createResp struct {
-		URL          string `json:"url"`
-		PublicID     string `json:"job_public_id"`
-		JobGroupID   string `json:"job_group_id"`
-		Status       string `json:"status"`
+		URL           string `json:"url"`
+		PublicID      string `json:"job_public_id"`
+		JobGroupID    string `json:"job_group_id"`
+		Status        string `json:"status"`
 		CorrelationID string `json:"correlation_id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
@@ -285,7 +285,7 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 			case "connected":
 				// Initial connection, continue listening
 				continue
-			case "run_result", "ssh_result":
+			case "run_result", "ssh_result", "snapshot_result":
 				// Operation completed
 				if event.Success {
 					return nil // Success!
@@ -365,7 +365,7 @@ func (s *SandboxService) SetupSandbox(ctx context.Context, jobID string, config 
 			Error   string `json:"error"`
 			Message string `json:"message"`
 			Detail  []struct {
-				Msg string `json:"msg"`
+				Msg string        `json:"msg"`
 				Loc []interface{} `json:"loc"`
 			} `json:"detail"`
 		}
