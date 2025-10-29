@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	plato "plato-sdk"
 	"plato-cli/internal/ui/components"
 	"plato-cli/internal/utils"
+	plato "plato-sdk"
 	"plato-sdk/models"
 	"strconv"
 	"strings"
@@ -96,7 +96,11 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 
 		// Monitor the operation until completion using the correlation_id from the API
 		// Pass statusChan to get real-time event details
-		err = client.Sandbox.MonitorOperationWithEvents(ctx, sandbox.CorrelationId, 20*time.Minute, statusChan)
+		correlationId := ""
+		if sandbox.CorrelationId != nil {
+			correlationId = *sandbox.CorrelationId
+		}
+		err = client.Sandbox.MonitorOperationWithEvents(ctx, correlationId, 20*time.Minute, statusChan)
 		if err != nil {
 			return sandboxCreatedMsg{sandbox: sandbox, err: fmt.Errorf("VM provisioning failed: %w", err)}
 		}
@@ -471,18 +475,19 @@ func (m VMConfigModel) buildConfig(cpu, memory, disk int) models.SimConfigDatase
 		PlatoMessagingPort: 7000,
 	}
 
-	var variables []models.Variable
+	var variables *[]models.Variable
 	if cpu > 0 { // Only add variables if this is a real config
-		variables = []models.Variable{{Name: "PLATO_API_KEY", Value: "your-api-key"}}
+		vars := []models.Variable{{Name: "PLATO_API_KEY", Value: "your-api-key"}}
+		variables = &vars
 	}
 
 	metadata := models.SimConfigMetadata{
-		Favicon:       "https://plato.so/favicon.ico",
+		Favicon:       stringPtr("https://plato.so/favicon.ico"),
 		Name:          name,
-		Description:   description,
-		SourceCodeUrl: "https://github.com/useplato/plato",
-		StartUrl:      "http://localhost:8080",
-		License:       "MIT",
+		Description:   stringPtr(description),
+		SourceCodeUrl: stringPtr("https://github.com/useplato/plato"),
+		StartUrl:      stringPtr("http://localhost:8080"),
+		License:       stringPtr("MIT"),
 		Variables:     variables,
 	}
 
@@ -493,9 +498,14 @@ func (m VMConfigModel) buildConfig(cpu, memory, disk int) models.SimConfigDatase
 	return models.SimConfigDataset{
 		Compute:   compute,
 		Metadata:  metadata,
-		Services:  services,
-		Listeners: listeners,
+		Services:  &services,
+		Listeners: &listeners,
 	}
+}
+
+// Helper function to convert string to pointer
+func stringPtr(s string) *string {
+	return &s
 }
 
 func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
@@ -658,18 +668,20 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		// Save config if requested
 		saveConfig := m.form.GetBool("save_config")
 		if saveConfig {
-			config := models.PlatoConfig{
-				Service: serviceVal,
-				Datasets: map[string]models.SimConfigDataset{
-					datasetVal: datasetConfig,
-				},
+			datasets := map[string]models.SimConfigDataset{
+				datasetVal: datasetConfig,
 			}
 			// Update compute values
-			dc := config.Datasets[datasetVal]
+			dc := datasets[datasetVal]
 			dc.Compute.Cpus = int32(cpu)
 			dc.Compute.Memory = int32(memory)
 			dc.Compute.Disk = int32(disk)
-			config.Datasets[datasetVal] = dc
+			datasets[datasetVal] = dc
+
+			config := models.PlatoConfig{
+				Service:  &serviceVal,
+				Datasets: &datasets,
+			}
 			if err := SavePlatoConfig(&config); err != nil {
 				// Non-fatal: just continue without saving
 				// Could add error handling here if needed

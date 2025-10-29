@@ -32,12 +32,15 @@ type simItem struct {
 }
 
 func (s simItem) FilterValue() string { return s.sim.Name }
-func (s simItem) Title() string       { return s.sim.Name }
+func (s simItem) Title() string { return s.sim.Name }
 func (s simItem) Description() string {
 	if s.sim.Description != nil {
 		return *s.sim.Description
 	}
-	return fmt.Sprintf("Type: %s • Version: %s", s.sim.SimType, s.sim.VersionTag)
+	if s.sim.ArtifactId != nil {
+		return fmt.Sprintf("Artifact: %s", *s.sim.ArtifactId)
+	}
+	return "Plato Simulator"
 }
 
 type simulatorsLoadedMsg struct {
@@ -120,12 +123,10 @@ func (m SimSelectorModel) Update(msg tea.Msg) (SimSelectorModel, tea.Cmd) {
 			return m, nil
 		}
 
-		// Filter only enabled simulators
+		// Add all simulators (filtering happens server-side)
 		items := []list.Item{}
 		for _, sim := range msg.simulators {
-			if sim.Enabled {
-				items = append(items, simItem{sim: sim})
-			}
+			items = append(items, simItem{sim: sim})
 		}
 		m.list.SetItems(items)
 		return m, nil

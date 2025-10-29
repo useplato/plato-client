@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	plato "plato-sdk"
 	"plato-cli/internal/ui/components"
 	"plato-cli/internal/utils"
+	plato "plato-sdk"
 	"plato-sdk/models"
 	"plato-sdk/services"
 	"strings"
@@ -72,7 +72,7 @@ func launchEnvironment(client *plato.PlatoClient, simulator *models.SimulatorLis
 			return envCreatedMsg{env: nil, err: err}
 		}
 
-		statusChan <- fmt.Sprintf("Environment created (ID: %s)", env.JobID)
+		statusChan <- fmt.Sprintf("Environment created (ID: %s)", env.JobId)
 		return envCreatedMsg{env: env, err: nil}
 	}
 }
@@ -128,7 +128,11 @@ func resetEnvironment(client *plato.PlatoClient, jobID string, statusChan chan<-
 		}
 
 		statusChan <- "Environment reset complete"
-		return envResetMsg{runSessionID: resetResp.Data.RunSessionID, err: nil}
+		runSessionID := ""
+		if resetResp.Data.RunSessionId != nil {
+			runSessionID = *resetResp.Data.RunSessionId
+		}
+		return envResetMsg{runSessionID: runSessionID, err: nil}
 	}
 }
 
@@ -213,7 +217,7 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 		}
 		m.environment = msg.env
 		return m, tea.Batch(
-			waitForEnvironmentReady(m.client, msg.env.JobID, m.statusChan),
+			waitForEnvironmentReady(m.client, msg.env.JobId, m.statusChan),
 			waitForEnvStatusUpdates(m.statusChan),
 		)
 
@@ -224,7 +228,7 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 			return m, m.stopwatch.Stop()
 		}
 		return m, tea.Batch(
-			resetEnvironment(m.client, m.environment.JobID, m.statusChan),
+			resetEnvironment(m.client, m.environment.JobId, m.statusChan),
 			waitForEnvStatusUpdates(m.statusChan),
 		)
 
@@ -235,7 +239,7 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 			return m, m.stopwatch.Stop()
 		}
 		return m, tea.Batch(
-			setupSSHForEnvironment(m.client, m.environment.JobID, m.statusChan),
+			setupSSHForEnvironment(m.client, m.environment.JobId, m.statusChan),
 			waitForEnvStatusUpdates(m.statusChan),
 		)
 
@@ -254,15 +258,16 @@ func (m EnvLauncherModel) Update(msg tea.Msg) (EnvLauncherModel, tea.Cmd) {
 			func() tea.Msg {
 				time.Sleep(1 * time.Second)
 				// Create a sandbox object for compatibility with VMInfo
+				url := getPublicURL(m.client, m.environment)
 				sandbox := &models.Sandbox{
-					PublicId:   m.environment.JobID,
-					JobGroupId: m.environment.JobID,
-					Url:        getPublicURL(m.client, m.environment),
+					PublicId:   m.environment.JobId,
+					JobGroupId: m.environment.JobId,
+					Url:        &url,
 				}
 				return navigateToVMInfoMsg{
 					sandbox:         sandbox,
 					dataset:         m.dataset,
-					sshURL:          fmt.Sprintf("root@%s", m.environment.JobID),
+					sshURL:          fmt.Sprintf("root@%s", m.environment.JobId),
 					sshHost:         m.sshHost,
 					fromExistingSim: true,
 					artifactID:      nil, // Not available when launching from existing sim by name
@@ -338,9 +343,11 @@ func (m EnvLauncherModel) View() string {
 // getPublicURL computes the public URL for an environment based on the base URL
 func getPublicURL(client *plato.PlatoClient, env *models.Environment) string {
 	baseURL := client.GetBaseURL()
-	identifier := env.Alias
-	if identifier == "" {
-		identifier = env.JobID
+	identifier := ""
+	if env.Alias != nil && *env.Alias != "" {
+		identifier = *env.Alias
+	} else {
+		identifier = env.JobId
 	}
 
 	// Determine environment based on base_url

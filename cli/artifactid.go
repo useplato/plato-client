@@ -187,12 +187,12 @@ func (m *ArtifactIDModel) updateTableRows() {
 	for _, artifact := range m.allArtifacts {
 		// Check if any field contains the filter text
 		if filterText == "" ||
-			strings.Contains(strings.ToLower(artifact.ArtifactID), filterText) ||
+			strings.Contains(strings.ToLower(artifact.ArtifactId), filterText) ||
 			strings.Contains(strings.ToLower(artifact.Version), filterText) ||
 			strings.Contains(strings.ToLower(artifact.Dataset), filterText) ||
 			strings.Contains(strings.ToLower(artifact.CreatedAt), filterText) {
 			rows = append(rows, table.Row{
-				artifact.ArtifactID,
+				artifact.ArtifactId,
 				artifact.Version,
 				artifact.Dataset,
 				artifact.CreatedAt,

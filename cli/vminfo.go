@@ -13,9 +13,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	plato "plato-sdk"
 	"plato-cli/internal/ui/components"
 	"plato-cli/internal/utils"
+	plato "plato-sdk"
 	"plato-sdk/models"
 	"strings"
 	"time"
@@ -296,8 +296,8 @@ func (m VMInfoModel) Init() tea.Cmd {
 	}
 
 	// Fetch hub repository URL in background if we have a config
-	if m.config != nil && m.config.Service != "" {
-		cmds = append(cmds, fetchHubRepoURL(m.client, m.config.Service))
+	if m.config != nil && m.config.Service != nil && *m.config.Service != "" {
+		cmds = append(cmds, fetchHubRepoURL(m.client, *m.config.Service))
 	}
 
 	if len(cmds) > 0 {
@@ -379,8 +379,8 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			m.statusMessages = append(m.statusMessages, "✓ Snapshot created successfully!")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Artifact ID: %s", msg.response.ArtifactId))
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
-			if msg.response.GitHash != "" {
-				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Git Hash: %s", msg.response.GitHash))
+			if msg.response.GitHash != nil && *msg.response.GitHash != "" {
+				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Git Hash: %s", *msg.response.GitHash))
 			}
 			if msg.response.S3Uri != "" {
 				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3Uri))
@@ -606,7 +606,9 @@ func (m VMInfoModel) renderVMInfoMarkdown() string {
 	if m.version != nil {
 		output.WriteString(fmt.Sprintf("Version:  %s\n", *m.version))
 	}
-	output.WriteString(fmt.Sprintf("URL:      %s\n", m.sandbox.Url))
+	if m.sandbox.Url != nil {
+		output.WriteString(fmt.Sprintf("URL:      %s\n", *m.sandbox.Url))
+	}
 
 	// Show hub.plato.so repository link if we have it cached
 	if m.hubRepoURL != "" {
@@ -720,13 +722,13 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 		}
 
 		req := models.CreateSnapshotRequest{
-			Service: service,
+			Service: &service,
 		}
 		if dataset != nil {
-			req.Dataset = *dataset
+			req.Dataset = dataset
 		}
 		if gitHash != nil {
-			req.GitHash = *gitHash
+			req.GitHash = gitHash
 		}
 
 		utils.LogDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
@@ -761,10 +763,10 @@ func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, s
 		defer cancel()
 
 		req := models.CreateSnapshotRequest{
-			Service: service,
+			Service: &service,
 		}
 		if dataset != nil {
-			req.Dataset = *dataset
+			req.Dataset = dataset
 		}
 
 		utils.LogDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
@@ -790,9 +792,9 @@ func startWorker(client *plato.PlatoClient, publicID string, service string, dat
 
 		timeout := int32(600)
 		req := models.StartWorkerRequest{
-			Service:            service,
+			Service:            &service,
 			Dataset:            dataset,
-			PlatoDatasetConfig: &datasetConfig,
+			PlatoDatasetConfig: datasetConfig,
 			Timeout:            &timeout, // 10 minutes timeout
 		}
 
@@ -839,13 +841,13 @@ func mergeHubBranchToMain(client *plato.PlatoClient, serviceName string, branchN
 	}
 
 	// Get repository
-	repo, err := client.Gitea.GetSimulatorRepository(ctx, simulator.ID)
+	repo, err := client.Gitea.GetSimulatorRepository(ctx, int(simulator.Id))
 	if err != nil {
 		return "", fmt.Errorf("failed to get repository: %w", err)
 	}
 
 	// Build authenticated clone URL
-	cloneURL := repo.CloneURL
+	cloneURL := repo.CloneUrl
 	if strings.HasPrefix(cloneURL, "https://") {
 		cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 	}
@@ -922,19 +924,19 @@ func pushToHub(client *plato.PlatoClient, serviceName string) tea.Cmd {
 		// Get or create repository
 		var repo *models.GiteaRepository
 		if simulator.HasRepo {
-			repo, err = client.Gitea.GetSimulatorRepository(ctx, simulator.ID)
+			repo, err = client.Gitea.GetSimulatorRepository(ctx, int(simulator.Id))
 			if err != nil {
 				return hubPushMsg{err: fmt.Errorf("failed to get repository: %w", err)}
 			}
 		} else {
-			repo, err = client.Gitea.CreateSimulatorRepository(ctx, simulator.ID)
+			repo, err = client.Gitea.CreateSimulatorRepository(ctx, int(simulator.Id))
 			if err != nil {
 				return hubPushMsg{err: fmt.Errorf("failed to create repository: %w", err)}
 			}
 		}
 
 		// Build authenticated clone URL
-		cloneURL := repo.CloneURL
+		cloneURL := repo.CloneUrl
 		if strings.HasPrefix(cloneURL, "https://") {
 			cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 		}
@@ -991,11 +993,11 @@ func pushToHub(client *plato.PlatoClient, serviceName string) tea.Cmd {
 
 		if len(strings.TrimSpace(string(statusOutput))) == 0 {
 			// No changes to push - still return authenticated clone URL
-			authenticatedCloneURL := repo.CloneURL
+			authenticatedCloneURL := repo.CloneUrl
 			if strings.HasPrefix(authenticatedCloneURL, "https://") {
 				authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 			}
-			return hubPushMsg{err: nil, repoURL: repo.CloneURL, cloneCmd: fmt.Sprintf("git clone -b %s %s", branchName, authenticatedCloneURL), branchName: branchName}
+			return hubPushMsg{err: nil, repoURL: repo.CloneUrl, cloneCmd: fmt.Sprintf("git clone -b %s %s", branchName, authenticatedCloneURL), branchName: branchName}
 		}
 
 		// Commit changes
@@ -1013,14 +1015,14 @@ func pushToHub(client *plato.PlatoClient, serviceName string) tea.Cmd {
 		}
 
 		// Build authenticated clone URL for the user
-		authenticatedCloneURL := repo.CloneURL
+		authenticatedCloneURL := repo.CloneUrl
 		if strings.HasPrefix(authenticatedCloneURL, "https://") {
 			authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 		}
 
 		// Return success with authenticated clone command
 		cloneCommand := fmt.Sprintf("git clone -b %s %s", branchName, authenticatedCloneURL)
-		return hubPushMsg{err: nil, repoURL: repo.CloneURL, cloneCmd: cloneCommand, branchName: branchName}
+		return hubPushMsg{err: nil, repoURL: repo.CloneUrl, cloneCmd: cloneCommand, branchName: branchName}
 	}
 }
 
@@ -1059,19 +1061,19 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 		// Get or create repository
 		var repo *models.GiteaRepository
 		if simulator.HasRepo {
-			repo, err = client.Gitea.GetSimulatorRepository(ctx, simulator.ID)
+			repo, err = client.Gitea.GetSimulatorRepository(ctx, int(simulator.Id))
 			if err != nil {
 				return serviceStartedMsg{err: fmt.Errorf("failed to get repository: %w", err)}
 			}
 		} else {
-			repo, err = client.Gitea.CreateSimulatorRepository(ctx, simulator.ID)
+			repo, err = client.Gitea.CreateSimulatorRepository(ctx, int(simulator.Id))
 			if err != nil {
 				return serviceStartedMsg{err: fmt.Errorf("failed to create repository: %w", err)}
 			}
 		}
 
 		// Build authenticated clone URL
-		cloneURL := repo.CloneURL
+		cloneURL := repo.CloneUrl
 		if strings.HasPrefix(cloneURL, "https://") {
 			cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 		}
@@ -1148,7 +1150,7 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 		utils.LogDebug("Step 2: Cloning repo on VM via SSH")
 
 		// Build authenticated clone URL for SSH command
-		authenticatedCloneURL := repo.CloneURL
+		authenticatedCloneURL := repo.CloneUrl
 		if strings.HasPrefix(authenticatedCloneURL, "https://") {
 			authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 		}
@@ -1181,39 +1183,41 @@ func startService(client *plato.PlatoClient, serviceName string, datasetName str
 		utils.LogDebug("Step 3: Starting services from dataset config")
 		var servicesInfo []string
 
-		for serviceName, service := range datasetConfig.Services {
-			utils.LogDebug("Starting service: %s (type: %s)", serviceName, service.Type)
+		if datasetConfig.Services != nil {
+			for serviceName, service := range *datasetConfig.Services {
+				utils.LogDebug("Starting service: %s (type: %s)", serviceName, service.Type)
 
-			switch service.Type {
-			case "docker-compose":
-				// Run docker compose up (Docker Compose V2)
-				composeFile := service.File
-				if composeFile == "" {
-					composeFile = "docker-compose.yml"
+				switch service.Type {
+				case "docker-compose":
+					// Run docker compose up (Docker Compose V2)
+					composeFile := "docker-compose.yml"
+					if service.File != nil && *service.File != "" {
+						composeFile = *service.File
+					}
+
+					// Build the docker compose command (V2 syntax without hyphen)
+					// Set DOCKER_HOST to use rootless docker daemon socket
+					composeCmd := fmt.Sprintf("cd %s && DOCKER_HOST=unix:///var/run/docker-user.sock docker compose -f %s up -d", repoDir, composeFile)
+					sshCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, composeCmd)
+
+					output, err := sshCmd.CombinedOutput()
+					if err != nil {
+						return serviceStartedMsg{err: fmt.Errorf("failed to start docker compose service '%s': %w\nOutput: %s", serviceName, err, string(output))}
+					}
+
+					utils.LogDebug("Docker compose service '%s' started: %s", serviceName, string(output))
+					servicesInfo = append(servicesInfo, fmt.Sprintf("✓ Started docker compose service: %s", serviceName))
+
+				default:
+					utils.LogDebug("Unknown service type: %s for service: %s", service.Type, serviceName)
+					servicesInfo = append(servicesInfo, fmt.Sprintf("⚠ Skipped service '%s' (unknown type: %s)", serviceName, service.Type))
 				}
-
-				// Build the docker compose command (V2 syntax without hyphen)
-				// Set DOCKER_HOST to use rootless docker daemon socket
-				composeCmd := fmt.Sprintf("cd %s && DOCKER_HOST=unix:///var/run/docker-user.sock docker compose -f %s up -d", repoDir, composeFile)
-				sshCmd := exec.Command("ssh", "-F", sshConfigPath, sshHost, composeCmd)
-
-				output, err := sshCmd.CombinedOutput()
-				if err != nil {
-					return serviceStartedMsg{err: fmt.Errorf("failed to start docker compose service '%s': %w\nOutput: %s", serviceName, err, string(output))}
-				}
-
-				utils.LogDebug("Docker compose service '%s' started: %s", serviceName, string(output))
-				servicesInfo = append(servicesInfo, fmt.Sprintf("✓ Started docker compose service: %s", serviceName))
-
-			default:
-				utils.LogDebug("Unknown service type: %s for service: %s", service.Type, serviceName)
-				servicesInfo = append(servicesInfo, fmt.Sprintf("⚠ Skipped service '%s' (unknown type: %s)", serviceName, service.Type))
 			}
 		}
 
 		return serviceStartedMsg{
 			err:          nil,
-			repoURL:      repo.CloneURL,
+			repoURL:      repo.CloneUrl,
 			branchName:   branchName,
 			servicesInfo: servicesInfo,
 		}
@@ -1506,7 +1510,13 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		}
 
 		// Get dataset config
-		datasetConfig, exists := config.Datasets[m.dataset]
+		if config.Datasets == nil {
+			errMsg := "❌ No datasets found in plato-config.yml"
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+		datasetConfig, exists := (*config.Datasets)[m.dataset]
 		if !exists {
 			errMsg := fmt.Sprintf("❌ Dataset '%s' not found in plato-config.yml", m.dataset)
 			m.statusMessages = append(m.statusMessages, errMsg)
@@ -1515,7 +1525,10 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		}
 
 		// Get service from config
-		service := config.Service
+		service := ""
+		if config.Service != nil {
+			service = *config.Service
+		}
 		if service == "" {
 			errMsg := "❌ Service not specified in plato-config.yml"
 			m.statusMessages = append(m.statusMessages, errMsg)
@@ -1573,7 +1586,10 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		}
 
 		// Get service from config
-		service := config.Service
+		service := ""
+		if config.Service != nil {
+			service = *config.Service
+		}
 		if service == "" {
 			errMsg := "❌ Service not specified in plato-config.yml"
 			m.statusMessages = append(m.statusMessages, errMsg)
@@ -1582,7 +1598,13 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		}
 
 		// Get dataset config
-		datasetConfig, exists := config.Datasets[m.dataset]
+		if config.Datasets == nil {
+			errMsg := "❌ No datasets found in plato-config.yml"
+			m.statusMessages = append(m.statusMessages, errMsg)
+			logErrorToFile("plato_error.log", errMsg)
+			return m, nil
+		}
+		datasetConfig, exists := (*config.Datasets)[m.dataset]
 		if !exists {
 			errMsg := fmt.Sprintf("❌ Dataset '%s' not found in plato-config.yml", m.dataset)
 			m.statusMessages = append(m.statusMessages, errMsg)
@@ -1604,7 +1626,10 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 		}
 
 		// Get service from config
-		service := config.Service
+		service := ""
+		if config.Service != nil {
+			service = *config.Service
+		}
 		if service == "" {
 			errMsg := "❌ Service not specified in plato-config.yml"
 			m.statusMessages = append(m.statusMessages, errMsg)
@@ -1808,10 +1833,10 @@ func fetchHubRepoURL(client *plato.PlatoClient, serviceName string) tea.Cmd {
 			if strings.EqualFold(sim.Name, serviceName) {
 				if sim.HasRepo {
 					// Get the repository
-					repo, err := client.Gitea.GetSimulatorRepository(ctx, sim.ID)
+					repo, err := client.Gitea.GetSimulatorRepository(ctx, int(sim.Id))
 					if err == nil {
 						// Return the CloneURL without .git suffix
-						hubURL := strings.TrimSuffix(repo.CloneURL, ".git")
+						hubURL := strings.TrimSuffix(repo.CloneUrl, ".git")
 						return hubRepoURLMsg{url: hubURL}
 					}
 				}

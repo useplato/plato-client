@@ -84,11 +84,13 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 
 		// Build list of datasets
 		items := []list.Item{}
-		for name, dataset := range m.config.Datasets {
-			items = append(items, datasetItem{
-				name:   name,
-				config: dataset,
-			})
+		if m.config.Datasets != nil {
+			for name, dataset := range *m.config.Datasets {
+				items = append(items, datasetItem{
+					name:   name,
+					config: dataset,
+				})
+			}
 		}
 
 		l := list.New(items, list.NewDefaultDelegate(), 80, 12)
@@ -116,11 +118,15 @@ func (m PlatoConfigModel) Update(msg tea.Msg) (PlatoConfigModel, tea.Cmd) {
 				if selectedItem != nil {
 					dataset := selectedItem.(datasetItem)
 					// Navigate to VMConfigModel with the dataset config
+					service := ""
+					if m.config.Service != nil {
+						service = *m.config.Service
+					}
 					return m, func() tea.Msg {
 						return launchFromConfigMsg{
 							datasetName:   dataset.name,
 							datasetConfig: dataset.config,
-							service:       m.config.Service,
+							service:       service,
 						}
 					}
 				}
@@ -176,7 +182,7 @@ func (m PlatoConfigModel) View() string {
 		return components.RenderHeader() + "\n" + style.Render("Loading plato-config.yml...")
 	}
 
-	if m.config == nil || len(m.config.Datasets) == 0 {
+	if m.config == nil || m.config.Datasets == nil || len(*m.config.Datasets) == 0 {
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
 			Padding(2, 4)

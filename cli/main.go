@@ -495,13 +495,13 @@ func cloneService(serviceName string) error {
 
 	// Get repository information
 	fmt.Println("📦 Fetching repository information...")
-	repo, err := giteaService.GetSimulatorRepository(ctx, simulator.ID)
+	repo, err := giteaService.GetSimulatorRepository(ctx, int(simulator.Id))
 	if err != nil {
 		return fmt.Errorf("failed to get repository: %w", err)
 	}
 
 	// Build authenticated clone URL
-	cloneURL := repo.CloneURL
+	cloneURL := repo.CloneUrl
 	if strings.HasPrefix(cloneURL, "https://") {
 		cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 	}
@@ -521,7 +521,7 @@ func cloneService(serviceName string) error {
 	}
 
 	fmt.Printf("\n✅ Successfully cloned '%s' to '%s'\n", serviceName, targetDir)
-	fmt.Printf("📂 Repository: %s\n", repo.CloneURL)
+	fmt.Printf("📂 Repository: %s\n", repo.CloneUrl)
 	if repo.Description != "" {
 		fmt.Printf("📝 Description: %s\n", repo.Description)
 	}

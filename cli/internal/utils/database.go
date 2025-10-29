@@ -95,30 +95,47 @@ func GetDBConfigFromPlatoConfig(dataset string) (DBConfig, bool) {
 		return DBConfig{}, false
 	}
 
-	datasetConfig, ok := platoConfig.Datasets[dataset]
+	if platoConfig.Datasets == nil {
+		LogDebug("No datasets found in plato-config.yml")
+		return DBConfig{}, false
+	}
+	
+	datasetConfig, ok := (*platoConfig.Datasets)[dataset]
 	if !ok {
 		LogDebug("Dataset '%s' not found in plato-config.yml", dataset)
 		return DBConfig{}, false
 	}
 
 	// Look for a DB listener in the dataset's listeners
-	for _, listener := range datasetConfig.Listeners {
-		// Check if this is a DB listener
-		if listener.Type != "db" {
-			continue
+	if datasetConfig.Listeners != nil {
+		for _, listener := range *datasetConfig.Listeners {
+			// Check if this is a DB listener
+			if listener.Type != "db" {
+				continue
+			}
+
+			// Extract DB configuration from the structured listener
+			dbConfig := DBConfig{}
+
+			if listener.DbType != nil {
+				dbConfig.DBType = *listener.DbType
+			}
+			if listener.DbUser != nil {
+				dbConfig.User = *listener.DbUser
+			}
+			if listener.DbPassword != nil {
+				dbConfig.Password = *listener.DbPassword
+			}
+			if listener.DbPort != nil {
+				dbConfig.DestPort = int(*listener.DbPort)
+			}
+			if listener.DbDatabase != nil {
+				dbConfig.Databases = []string{*listener.DbDatabase}
+			}
+
+			LogDebug("Found DB config in plato-config.yml for dataset '%s': type=%s, port=%d", dataset, dbConfig.DBType, dbConfig.DestPort)
+			return dbConfig, true
 		}
-
-		// Extract DB configuration from the structured listener
-		dbConfig := DBConfig{}
-
-		dbConfig.DBType = listener.DbType
-		dbConfig.User = listener.DbUser
-		dbConfig.Password = listener.DbPassword
-		dbConfig.DestPort = int(listener.DbPort)
-		dbConfig.Databases = []string{listener.DbDatabase}
-
-		LogDebug("Found DB config in plato-config.yml for dataset '%s': type=%s, port=%d", dataset, dbConfig.DBType, dbConfig.DestPort)
-		return dbConfig, true
 	}
 
 	LogDebug("No DB listener found in plato-config.yml for dataset '%s'", dataset)

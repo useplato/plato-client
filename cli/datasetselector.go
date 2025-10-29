@@ -1,11 +1,11 @@
 package main
 
 import (
-
-"plato-cli/internal/ui/components"
 	"fmt"
-	"strings"
+	"plato-cli/internal/ui/components"
 	"plato-sdk/models"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -22,9 +22,9 @@ type DatasetSelectorModel struct {
 }
 
 type snapshotParams struct {
-	publicID       string
-	jobGroupID     string
-	service        string
+	publicID         string
+	jobGroupID       string
+	service          string
 	lastPushedBranch string
 }
 
@@ -57,26 +57,28 @@ func NewDatasetSelectorModel(service string, params snapshotParams) DatasetSelec
 		errMsg = fmt.Sprintf("Failed to load plato-config.yml: %v", err)
 	} else {
 		// Build dataset options
-		for name, dataset := range config.Datasets {
-			// Build description with listener info
-			var desc strings.Builder
-			desc.WriteString(fmt.Sprintf("%dCPU/%dMB", dataset.Compute.Cpus, dataset.Compute.Memory))
+		if config.Datasets != nil {
+			for name, dataset := range *config.Datasets {
+				// Build description with listener info
+				var desc strings.Builder
+				desc.WriteString(fmt.Sprintf("%dCPU/%dMB", dataset.Compute.Cpus, dataset.Compute.Memory))
 
-			// Add listener info from Listeners map
-			if len(dataset.Listeners) > 0 {
-				desc.WriteString(" • Listeners: ")
-				listenerNames := []string{}
-				for listenerName := range dataset.Listeners {
-					listenerNames = append(listenerNames, listenerName)
+				// Add listener info from Listeners map
+				if dataset.Listeners != nil && len(*dataset.Listeners) > 0 {
+					desc.WriteString(" • Listeners: ")
+					listenerNames := []string{}
+					for listenerName := range *dataset.Listeners {
+						listenerNames = append(listenerNames, listenerName)
+					}
+					desc.WriteString(strings.Join(listenerNames, ", "))
 				}
-				desc.WriteString(strings.Join(listenerNames, ", "))
-			}
 
-			items = append(items, datasetOption{
-				name:        name,
-				description: desc.String(),
-				dataset:     dataset,
-			})
+				items = append(items, datasetOption{
+					name:        name,
+					description: desc.String(),
+					dataset:     dataset,
+				})
+			}
 		}
 
 		// Add refresh option at the end
