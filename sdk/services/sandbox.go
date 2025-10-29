@@ -125,12 +125,15 @@ func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDat
 	}
 
 	// Map to Sandbox model
+	url := createResp.URL
+	status := createResp.Status
+	correlationId := createResp.CorrelationID
 	sandbox := &models.Sandbox{
 		PublicId:      createResp.PublicID,
 		JobGroupId:    createResp.JobGroupID,
-		Url:           createResp.URL,
-		Status:        createResp.Status,
-		CorrelationId: createResp.CorrelationID,
+		Url:           &url,
+		Status:        &status,
+		CorrelationId: &correlationId,
 	}
 
 	return sandbox, nil
@@ -649,12 +652,12 @@ func (s *SandboxService) SetupSSHAndGetInfo(ctx context.Context, baseURL string,
 	sshCommand := fmt.Sprintf("ssh -F %s %s", configPath, sshHost)
 
 	return &models.SSHInfo{
-		SSHCommand:     sshCommand,
-		SSHHost:        sshHost,
-		SSHConfigPath:  configPath,
-		PublicID:       jobPublicID,
+		SshCommand:     sshCommand,
+		SshHost:        sshHost,
+		SshConfigPath:  configPath,
+		PublicId:       jobPublicID,
 		PublicKey:      publicKey,
 		PrivateKeyPath: privateKeyPath,
-		CorrelationID:  correlationID,
+		CorrelationId:  correlationID,
 	}, nil
 }

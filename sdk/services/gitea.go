@@ -181,19 +181,19 @@ func (s *GiteaService) PushToHub(ctx context.Context, serviceName string, source
 	// Get or create repository
 	var repo *models.GiteaRepository
 	if simulator.HasRepo {
-		repo, err = s.GetSimulatorRepository(ctx, simulator.ID)
+		repo, err = s.GetSimulatorRepository(ctx, int(simulator.Id))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get repository: %w", err)
 		}
 	} else {
-		repo, err = s.CreateSimulatorRepository(ctx, simulator.ID)
+		repo, err = s.CreateSimulatorRepository(ctx, int(simulator.Id))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create repository: %w", err)
 		}
 	}
 
 	// Build authenticated clone URL
-	cloneURL := repo.CloneURL
+	cloneURL := repo.CloneUrl
 	if strings.HasPrefix(cloneURL, "https://") {
 		cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 	}
@@ -244,12 +244,12 @@ func (s *GiteaService) PushToHub(ctx context.Context, serviceName string, source
 
 	if len(strings.TrimSpace(string(statusOutput))) == 0 {
 		// No changes to push - still return authenticated clone URL
-		authenticatedCloneURL := repo.CloneURL
+		authenticatedCloneURL := repo.CloneUrl
 		if strings.HasPrefix(authenticatedCloneURL, "https://") {
 			authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 		}
 		return &PushResult{
-			RepoURL:    repo.CloneURL,
+			RepoURL:    repo.CloneUrl,
 			CloneCmd:   fmt.Sprintf("git clone -b %s %s", branchName, authenticatedCloneURL),
 			BranchName: branchName,
 		}, nil
@@ -270,7 +270,7 @@ func (s *GiteaService) PushToHub(ctx context.Context, serviceName string, source
 	}
 
 	// Build authenticated clone URL for the user
-	authenticatedCloneURL := repo.CloneURL
+	authenticatedCloneURL := repo.CloneUrl
 	if strings.HasPrefix(authenticatedCloneURL, "https://") {
 		authenticatedCloneURL = strings.Replace(authenticatedCloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 	}
@@ -278,7 +278,7 @@ func (s *GiteaService) PushToHub(ctx context.Context, serviceName string, source
 	// Return success with authenticated clone command
 	cloneCommand := fmt.Sprintf("git clone -b %s %s", branchName, authenticatedCloneURL)
 	return &PushResult{
-		RepoURL:    repo.CloneURL,
+		RepoURL:    repo.CloneUrl,
 		CloneCmd:   cloneCommand,
 		BranchName: branchName,
 	}, nil
@@ -311,13 +311,13 @@ func (s *GiteaService) MergeToMain(ctx context.Context, serviceName string, bran
 	}
 
 	// Get repository
-	repo, err := s.GetSimulatorRepository(ctx, simulator.ID)
+	repo, err := s.GetSimulatorRepository(ctx, int(simulator.Id))
 	if err != nil {
 		return "", fmt.Errorf("failed to get repository: %w", err)
 	}
 
 	// Build authenticated clone URL
-	cloneURL := repo.CloneURL
+	cloneURL := repo.CloneUrl
 	if strings.HasPrefix(cloneURL, "https://") {
 		cloneURL = strings.Replace(cloneURL, "https://", fmt.Sprintf("https://%s:%s@", creds.Username, creds.Password), 1)
 	}

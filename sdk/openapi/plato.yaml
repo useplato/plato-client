@@ -858,6 +858,8 @@ components:
       properties:
         job_id:
           type: string
+        env_id:
+          type: string
         alias:
           type: string
         status:
@@ -874,6 +876,31 @@ components:
           type: string
         artifact_id:
           type: string
+    
+    WorkerStatus:
+      type: object
+      required:
+        - ready
+      properties:
+        ready:
+          type: boolean
+        error:
+          type: string
+      
+    ResetResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+        data:
+          type: object
+          properties:
+            run_session_id:
+              type: string
 
     CreateSnapshotRequest:
       type: object
@@ -995,6 +1022,67 @@ components:
         job_id:
           type: string
         alias:
+          type: string
+
+    DBConfig:
+      type: object
+      required:
+        - db_type
+        - user
+        - password
+        - dest_port
+        - databases
+      properties:
+        db_type:
+          type: string
+          description: Database type (postgresql, mysql, etc.)
+        user:
+          type: string
+          description: Database user
+        password:
+          type: string
+          description: Database password
+        dest_port:
+          type: integer
+          format: int32
+          description: Database port
+        databases:
+          type: array
+          items:
+            type: string
+          description: List of database names
+
+    CreateSnapshotWithCleanupRequest:
+      type: object
+      required:
+        - service
+        - job_group_id
+      properties:
+        service:
+          type: string
+          description: Service name
+        dataset:
+          type: string
+          description: Dataset name
+        git_hash:
+          type: string
+          description: Git commit hash
+        job_group_id:
+          type: string
+          description: Job group ID for clearing env state
+        branch_name:
+          type: string
+          description: Branch name to merge to main before snapshot
+        db_config:
+          $ref: '#/components/schemas/DBConfig'
+          description: Database configuration for pre-snapshot cleanup
+
+    JobStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
           type: string
 
     JobStatusResponse:
@@ -1459,7 +1547,7 @@ components:
           type: integer
           format: int32
           description: Timeout in seconds for sandbox creation
-          default: 1200
+          default: 1800
         wait_time:
           type: integer
           format: int32
@@ -1552,6 +1640,181 @@ components:
           type: string
           description: Correlation ID for monitoring setup progress via SSE
 
+    GiteaCredentials:
+      type: object
+      required:
+        - username
+        - password
+        - org_name
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        org_name:
+          type: string
+
+    GiteaSimulator:
+      type: object
+      required:
+        - id
+        - name
+        - has_repo
+        - gitea_repo_owner
+        - gitea_repo_name
+      properties:
+        id:
+          type: integer
+          format: int32
+        name:
+          type: string
+        has_repo:
+          type: boolean
+        gitea_repo_owner:
+          type: string
+        gitea_repo_name:
+          type: string
+
+    GiteaRepository:
+      type: object
+      required:
+        - name
+        - full_name
+        - clone_url
+        - ssh_url
+        - description
+        - private
+        - has_repo
+      properties:
+        name:
+          type: string
+        full_name:
+          type: string
+        clone_url:
+          type: string
+        ssh_url:
+          type: string
+        description:
+          type: string
+        private:
+          type: boolean
+        has_repo:
+          type: boolean
+
+    Organization:
+      type: object
+      required:
+        - id
+        - name
+        - api_key
+      properties:
+        id:
+          type: integer
+          format: int32
+        name:
+          type: string
+        api_key:
+          type: string
+
+    OrganizationMember:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - role
+      properties:
+        id:
+          type: integer
+          format: int32
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+
+    SessionSummary:
+      type: object
+      required:
+        - organization_id
+        - last_n_hours
+        - running_sessions
+        - pending_sessions
+        - peak_running_count
+      properties:
+        organization_id:
+          type: integer
+          format: int32
+        last_n_hours:
+          type: integer
+          format: int32
+        running_sessions:
+          type: integer
+          format: int32
+        pending_sessions:
+          type: integer
+          format: int32
+        peak_running_count:
+          type: integer
+          format: int32
+
+    RunningJobsResponse:
+      type: object
+      required:
+        - organization_id
+        - running_jobs
+      properties:
+        organization_id:
+          type: integer
+          format: int32
+        running_jobs:
+          type: integer
+          format: int32
+
+    JobMetrics:
+      type: object
+      required:
+        - organization_id
+        - total_jobs_analyzed
+        - time_window_hours
+      properties:
+        organization_id:
+          type: integer
+          format: int32
+        p50_time_to_start:
+          type: number
+          format: double
+        p90_time_to_start:
+          type: number
+          format: double
+        p99_time_to_start:
+          type: number
+          format: double
+        total_jobs_analyzed:
+          type: integer
+          format: int32
+        time_window_hours:
+          type: number
+          format: double
+
+    SimulatorVersion:
+      type: object
+      required:
+        - artifact_id
+        - version
+        - dataset
+        - created_at
+      properties:
+        artifact_id:
+          type: string
+        version:
+          type: string
+        dataset:
+          type: string
+        created_at:
+          type: string
+
     SSHInfo:
       type: object
       required:
@@ -1559,6 +1822,9 @@ components:
         - ssh_host
         - ssh_config_path
         - public_id
+        - public_key
+        - private_key_path
+        - correlation_id
       properties:
         ssh_command:
           type: string

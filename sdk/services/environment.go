@@ -142,11 +142,11 @@ func (s *EnvironmentService) Make(ctx context.Context, envID string, opts *MakeO
 	fmt.Printf("Decoded JobID: %s, Alias: %v\n", makeResp.JobID, makeResp.Alias)
 
 	env := &models.Environment{
-		JobID: makeResp.JobID,
-		EnvID: envID,
+		JobId: makeResp.JobID,
+		EnvId: &envID,
 	}
 	if makeResp.Alias != nil {
-		env.Alias = *makeResp.Alias
+		env.Alias = makeResp.Alias
 	}
 
 	return env, nil
@@ -224,7 +224,11 @@ func (s *EnvironmentService) Reset(ctx context.Context, jobID string) (*models.R
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	fmt.Printf("Reset success: %v, RunSessionID: %s\n", resetResp.Success, resetResp.Data.RunSessionID)
+	runSessionID := ""
+	if resetResp.Data != nil && resetResp.Data.RunSessionId != nil {
+		runSessionID = *resetResp.Data.RunSessionId
+	}
+	fmt.Printf("Reset success: %v, RunSessionID: %s\n", resetResp.Success, runSessionID)
 
 	return &resetResp, nil
 }
