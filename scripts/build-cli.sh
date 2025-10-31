@@ -102,14 +102,35 @@ else
 fi
 echo ""
 
+# Copy to Python package bin directory for integration with Python SDK
+echo "📦 Copying CLI to Python package..."
+PYTHON_BIN_DIR="$PROJECT_ROOT/python/src/plato/bin"
+mkdir -p "$PYTHON_BIN_DIR"
+
+# Copy with the name expected by the Python CLI wrapper
+if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    PYTHON_BINARY_NAME="plato-cli.exe"
+else
+    PYTHON_BINARY_NAME="plato-cli"
+fi
+
+cp "$OUTPUT_DIR/$BINARY_NAME" "$PYTHON_BIN_DIR/$PYTHON_BINARY_NAME"
+chmod +x "$PYTHON_BIN_DIR/$PYTHON_BINARY_NAME"
+echo "✅ Copied to $PYTHON_BIN_DIR/$PYTHON_BINARY_NAME"
+echo ""
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✨ CLI ready!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "Binary: $OUTPUT_DIR/$BINARY_NAME"
+echo "Python package: $PYTHON_BIN_DIR/$PYTHON_BINARY_NAME"
 echo ""
 echo "To install globally:"
 echo "  sudo cp $OUTPUT_DIR/$BINARY_NAME /usr/local/bin/"
 echo ""
 echo "Or add to PATH:"
 echo "  export PATH=\"$OUTPUT_DIR:\$PATH\""
+echo ""
+echo "To update Python package with new CLI:"
+echo "  cd python && uv pip install -e . --force-reinstall --no-deps"
