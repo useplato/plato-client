@@ -80,11 +80,13 @@ if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
     BINARY_NAME="plato-cli.exe"
 fi
 
-# Read version from VERSION file
+# Read version from VERSION file at project root
 VERSION="dev"
-if [ -f "VERSION" ]; then
-    VERSION=$(cat VERSION | tr -d '[:space:]')
+if [ -f "$PROJECT_ROOT/VERSION" ]; then
+    VERSION=$(cat "$PROJECT_ROOT/VERSION" | tr -d '[:space:]')
     echo "📌 Version: $VERSION"
+else
+    echo "⚠️  VERSION file not found, using: $VERSION"
 fi
 
 # Get git commit and build time

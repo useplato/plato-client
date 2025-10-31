@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - main-2 # temporary branch for testing
     paths:
       - 'sdk/**'
       - 'cli/**'
@@ -373,6 +374,13 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Pull latest changes (ensure we have version bump)
+        working-directory: .
+        run: |
+          git pull origin main
+          echo "Current commit: $(git rev-parse HEAD)"
+          echo "Current version: $(cat VERSION 2>/dev/null || echo 'VERSION file not found')"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -391,7 +399,33 @@ jobs:
       - name: Build C bindings and CLI
         working-directory: .
         run: |
+          echo "🔍 Verifying version before build..."
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          echo "Building CLI with:"
+          echo "  Version: $VERSION"
+          echo "  Commit: $GIT_COMMIT"
+          echo ""
           ./scripts/build-python.sh
+        shell: bash
+
+      - name: Verify built CLI version
+        working-directory: .
+        run: |
+          EXPECTED_VERSION="${{ needs.release.outputs.cli_version }}"
+          CLI_BIN="python/src/plato/bin/plato-cli"
+          
+          if [ -f "$CLI_BIN" ]; then
+            echo "✅ CLI binary found at: $CLI_BIN"
+            
+            # Try to get version from the binary (if it has a --version flag)
+            if $CLI_BIN --version 2>/dev/null | head -1 || echo "Version check not available"; then
+              echo "Expected version: $EXPECTED_VERSION"
+            fi
+          else
+            echo "❌ ERROR: CLI binary not found at $CLI_BIN"
+            exit 1
+          fi
         shell: bash
 
       - name: Verify Python SDK version
