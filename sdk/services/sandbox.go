@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -173,15 +172,9 @@ func (s *SandboxService) MonitorOperationWithEvents(ctx context.Context, correla
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// SSE format: "data: <base64-encoded-json>"
+		// SSE format: "data: <json>"
 		if strings.HasPrefix(line, "data: ") {
-			encodedData := strings.TrimPrefix(line, "data: ")
-
-			// Decode base64
-			decodedData, err := base64.StdEncoding.DecodeString(encodedData)
-			if err != nil {
-				continue // Skip malformed data
-			}
+			jsonData := strings.TrimPrefix(line, "data: ")
 
 			// Parse JSON
 			var event struct {
@@ -190,9 +183,12 @@ func (s *SandboxService) MonitorOperationWithEvents(ctx context.Context, correla
 				Error   string `json:"error"`
 				Message string `json:"message"`
 			}
-			if err := json.Unmarshal(decodedData, &event); err != nil {
+			if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
+				eventChan <- fmt.Sprintf("[DEBUG] Failed to parse JSON: %v, data: %s", err, jsonData)
 				continue // Skip malformed JSON
 			}
+
+			eventChan <- fmt.Sprintf("[DEBUG] Received event - Type: %s, Success: %v, Message: %s", event.Type, event.Success, event.Message)
 
 			// Send event message to channel if available
 			// Send both message and type information
@@ -207,9 +203,19 @@ func (s *SandboxService) MonitorOperationWithEvents(ctx context.Context, correla
 			switch event.Type {
 			case "connected":
 				// Initial connection, continue listening
+				eventChan <- "[DEBUG] SSE connected"
 				continue
-			case "run_result", "ssh_result":
-				// Operation completed
+			case "error":
+				// Error event
+				eventChan <- fmt.Sprintf("[DEBUG] Error event: %s", event.Error)
+				errorMsg := event.Error
+				if errorMsg == "" {
+					errorMsg = event.Message
+				}
+				return fmt.Errorf("operation error: %s", errorMsg)
+			default:
+				// Handle all other event types by checking success field
+				eventChan <- fmt.Sprintf("[DEBUG] Event type=%s, success=%v", event.Type, event.Success)
 				if event.Success {
 					return nil // Success!
 				}
@@ -222,21 +228,16 @@ func (s *SandboxService) MonitorOperationWithEvents(ctx context.Context, correla
 					errorMsg = "Operation failed"
 				}
 				return fmt.Errorf("operation failed: %s", errorMsg)
-			case "error":
-				// Error event
-				errorMsg := event.Error
-				if errorMsg == "" {
-					errorMsg = event.Message
-				}
-				return fmt.Errorf("operation error: %s", errorMsg)
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
+		eventChan <- fmt.Sprintf("[DEBUG] Scanner error: %v", err)
 		return fmt.Errorf("error reading SSE stream: %w", err)
 	}
 
+	eventChan <- "[DEBUG] SSE stream ended without receiving completion event"
 	return fmt.Errorf("SSE stream ended without completion")
 }
 
@@ -268,15 +269,9 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// SSE format: "data: <base64-encoded-json>"
+		// SSE format: "data: <json>"
 		if strings.HasPrefix(line, "data: ") {
-			encodedData := strings.TrimPrefix(line, "data: ")
-
-			// Decode base64
-			decodedData, err := base64.StdEncoding.DecodeString(encodedData)
-			if err != nil {
-				continue // Skip malformed data
-			}
+			jsonData := strings.TrimPrefix(line, "data: ")
 
 			// Parse JSON
 			var event struct {
@@ -285,7 +280,7 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 				Error   string `json:"error"`
 				Message string `json:"message"`
 			}
-			if err := json.Unmarshal(decodedData, &event); err != nil {
+			if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
 				continue // Skip malformed JSON
 			}
 
@@ -294,8 +289,15 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 			case "connected":
 				// Initial connection, continue listening
 				continue
-			case "run_result", "ssh_result", "snapshot_result":
-				// Operation completed
+			case "error":
+				// Error event
+				errorMsg := event.Error
+				if errorMsg == "" {
+					errorMsg = event.Message
+				}
+				return fmt.Errorf("operation error: %s", errorMsg)
+			default:
+				// Handle all other event types by checking success field
 				if event.Success {
 					return nil // Success!
 				}
@@ -308,13 +310,6 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 					errorMsg = "Operation failed"
 				}
 				return fmt.Errorf("operation failed: %s", errorMsg)
-			case "error":
-				// Error event
-				errorMsg := event.Error
-				if errorMsg == "" {
-					errorMsg = event.Message
-				}
-				return fmt.Errorf("operation error: %s", errorMsg)
 			}
 		}
 	}
