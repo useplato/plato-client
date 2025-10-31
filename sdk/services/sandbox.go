@@ -289,8 +289,15 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 			case "connected":
 				// Initial connection, continue listening
 				continue
-			case "run_result", "ssh_result", "snapshot_result":
-				// Operation completed
+			case "error":
+				// Error event
+				errorMsg := event.Error
+				if errorMsg == "" {
+					errorMsg = event.Message
+				}
+				return fmt.Errorf("operation error: %s", errorMsg)
+			default:
+				// Handle all other event types by checking success field
 				if event.Success {
 					return nil // Success!
 				}
@@ -303,13 +310,6 @@ func (s *SandboxService) MonitorOperation(ctx context.Context, correlationID str
 					errorMsg = "Operation failed"
 				}
 				return fmt.Errorf("operation failed: %s", errorMsg)
-			case "error":
-				// Error event
-				errorMsg := event.Error
-				if errorMsg == "" {
-					errorMsg = event.Message
-				}
-				return fmt.Errorf("operation error: %s", errorMsg)
 			}
 		}
 	}
