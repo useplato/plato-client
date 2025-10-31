@@ -79,6 +79,17 @@ func (s *SandboxService) Create(ctx context.Context, config *models.SimConfigDat
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Debug: Log the exact payload being sent to API
+	fmt.Printf("\n=== API REQUEST PAYLOAD ===\n")
+	fmt.Printf("Endpoint: POST /public-build/vm/create\n")
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, body, "", "  "); err == nil {
+		fmt.Printf("Payload:\n%s\n", prettyJSON.String())
+	} else {
+		fmt.Printf("Payload (raw): %s\n", string(body))
+	}
+	fmt.Printf("===========================\n\n")
+
 	req, err := s.client.NewRequest(ctx, "POST", "/public-build/vm/create", bytes.NewReader(body))
 	if err != nil {
 		return nil, err

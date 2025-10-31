@@ -1,0 +1,12 @@
+# Files and directories to exclude from Fern SDK generation
+# These files will NOT be overwritten when running `fern generate`
+
+# Custom helper utilities (business logic, not auto-generated)
+helpers/
+helpers/**
+
+# Preserve custom README if you've modified it
+# README.md
+
+# Add any other custom files you want to preserve here
+
