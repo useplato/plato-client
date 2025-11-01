@@ -94,6 +94,7 @@ func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, da
 
 		statusChan <- fmt.Sprintf("VM created (ID: %s)", sandbox.PublicId)
 		statusChan <- "Monitoring VM provisioning..."
+		statusChan <- fmt.Sprintf("[DEBUG] Monitoring correlation ID: %s", sandbox.CorrelationId)
 
 		// Monitor the operation until completion using the correlation_id from the API
 		// Pass statusChan to get real-time event details
@@ -198,7 +199,7 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		statusChan <- "Calling setup-sandbox API..."
 
 		// Call the setup-sandbox API with full config and SSH public key
-		correlationID, err := client.Sandbox.SetupSandbox(ctx, sandbox.PublicId, &config, dataset, sshPublicKey)
+		_, err = client.Sandbox.SetupSandbox(ctx, sandbox.PublicId, &config, dataset, sshPublicKey)
 		if err != nil {
 			close(statusChan)
 			return sandboxSetupCompleteMsg{
@@ -211,20 +212,6 @@ func setupSandboxFromConfig(client *plato.PlatoClient, sandbox *models.Sandbox, 
 		}
 
 		statusChan <- "Monitoring sandbox setup..."
-
-		// Monitor the setup operation via SSE using the returned correlation_id
-		// Pass statusChan to get real-time event details
-		err = client.Sandbox.MonitorOperationWithEvents(ctx, correlationID, 20*time.Minute, statusChan)
-		if err != nil {
-			close(statusChan)
-			return sandboxSetupCompleteMsg{
-				sshURL:            "",
-				sshHost:           "",
-				sshConfigPath:     "",
-				sshPrivateKeyPath: "",
-				err:               fmt.Errorf("setup monitoring failed: %w", err),
-			}
-		}
 
 		// Inform user how to connect
 		statusChan <- fmt.Sprintf("SSH configured: ssh -F %s %s", configPath, sshHost)

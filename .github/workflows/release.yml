@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - main-2 # temporary branch for testing
     paths:
       - 'sdk/**'
       - 'cli/**'
