@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,9 +20,6 @@ import (
 
 	"plato-sdk/models"
 	"plato-sdk/utils"
-
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
 )
 
 // ClientInterface defines the methods needed from PlatoClient
@@ -622,12 +618,6 @@ func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req *
 // 3. Get the git hash
 // 4. Create snapshot with that git hash
 func (s *SandboxService) CreateSnapshotWithGit(ctx context.Context, publicID string, req *models.CreateSnapshotRequest, sourceDir string) (*models.CreateSnapshotResponse, error) {
-	// Get Gitea service from the same client
-	// We need to type assert to get access to the Gitea service
-	type giteaClient interface {
-		GetGiteaService() interface{}
-	}
-
 	// For now, just call CreateSnapshot without git workflow
 	// The git workflow should be called explicitly by the user via C bindings
 	return s.CreateSnapshot(ctx, publicID, req)
@@ -662,84 +652,6 @@ func (s *SandboxService) SetupSSHAndGetInfo(ctx context.Context, baseURL string,
 	}, nil
 }
 
-// clearAuditLog connects to the database and clears the audit_log table
-func (s *SandboxService) clearAuditLog(dbConfig models.DBConfig, localPort int) error {
-	var db *sql.DB
-	var err error
-	clearedCount := 0
-
-	if dbConfig.DBType == "postgresql" {
-		for _, dbName := range dbConfig.Databases {
-			connStr := fmt.Sprintf("host=127.0.0.1 port=%d user=%s password=%s dbname=%s sslmode=disable",
-				localPort, dbConfig.User, dbConfig.Password, dbName)
-
-			db, err = sql.Open("postgres", connStr)
-			if err != nil {
-				continue
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-			if err = db.PingContext(ctx); err != nil {
-				cancel()
-				db.Close()
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, "TRUNCATE TABLE public.audit_log RESTART IDENTITY CASCADE")
-			if err == nil {
-				clearedCount++
-			}
-			cancel()
-			db.Close()
-		}
-	} else if dbConfig.DBType == "mysql" {
-		for _, dbName := range dbConfig.Databases {
-			dsn := fmt.Sprintf("%s:%s@tcp(127.0.0.1:%d)/%s",
-				dbConfig.User, dbConfig.Password, localPort, dbName)
-
-			db, err = sql.Open("mysql", dsn)
-			if err != nil {
-				continue
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-			if err = db.PingContext(ctx); err != nil {
-				cancel()
-				db.Close()
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0")
-			if err != nil {
-				cancel()
-				db.Close()
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, "DELETE FROM `audit_log`")
-			if err != nil {
-				db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1")
-				cancel()
-				db.Close()
-				continue
-			}
-
-			db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1")
-			clearedCount++
-			cancel()
-			db.Close()
-		}
-	}
-
-	if clearedCount == 0 {
-		return fmt.Errorf("could not find or clear audit_log table in any database")
-	}
-
-	return nil
-}
-
 // clearEnvState calls the /env/{job_group_id}/state endpoint to clear cache
 func (s *SandboxService) clearEnvState(ctx context.Context, jobGroupID string) error {
 	req, err := s.client.NewRequest(ctx, "GET", fmt.Sprintf("/env/%s/state", jobGroupID), nil)
@@ -765,15 +677,24 @@ func (s *SandboxService) clearEnvState(ctx context.Context, jobGroupID string) e
 func (s *SandboxService) CreateSnapshotWithCleanup(ctx context.Context, publicID, jobGroupID string, req *models.CreateSnapshotRequest, dbConfig *models.DBConfig) (*models.CreateSnapshotResponse, error) {
 	// Step 1: Perform pre-snapshot cleanup if dbConfig is provided
 	if dbConfig != nil {
-		// Open a proxy tunnel using the shared ProxyTunnelService
-		proxySvc := NewProxyTunnelService(s.client)
-		tunnelID, localPort, err := proxySvc.Start(publicID, dbConfig.DestPort, 0)
+		// Convert models.DBConfig to utils.DBConfig
+		utilsDBConfig := utils.DBConfig{
+			DBType:    dbConfig.DBType,
+			User:      dbConfig.User,
+			Password:  dbConfig.Password,
+			DestPort:  dbConfig.DestPort,
+			Databases: dbConfig.Databases,
+		}
+
+		// Open a temporary proxy tunnel using SDK utils
+		tunnelCmd, localPort, err := utils.OpenTemporaryProxytunnel(s.client.GetBaseURL(), publicID, utilsDBConfig.DestPort)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open proxytunnel: %w", err)
 		}
-		defer proxySvc.Stop(tunnelID)
+		defer utils.CloseTemporaryProxytunnel(tunnelCmd)
 
-		if err := s.clearAuditLog(*dbConfig, localPort); err != nil {
+		// Clear audit log using SDK utils
+		if err := utils.ClearAuditLog(utilsDBConfig, localPort); err != nil {
 			return nil, fmt.Errorf("failed to clear audit log: %w", err)
 		}
 

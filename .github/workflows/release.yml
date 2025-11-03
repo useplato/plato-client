@@ -72,7 +72,6 @@ jobs:
           # Check which components changed
           CLI_CHANGED=false
           PYTHON_CHANGED=false
-          SDK_CHANGED=false
 
           if echo "$CHANGED_FILES" | grep -q "^cli/"; then
             CLI_CHANGED=true
@@ -85,8 +84,9 @@ jobs:
           fi
 
           if echo "$CHANGED_FILES" | grep -q "^sdk/"; then
-            SDK_CHANGED=true
-            echo "📦 Go SDK changes detected"
+            PYTHON_CHANGED=true
+            CLI_CHANGED=true
+            echo "💼 SDK changes detected"
           fi
 
           # Determine bump types

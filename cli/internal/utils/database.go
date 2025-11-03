@@ -6,7 +6,6 @@ package utils
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,9 +15,7 @@ import (
 
 	plato "plato-sdk"
 	"plato-cli/internal/config"
-
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
+	sdkutils "plato-sdk/utils"
 )
 
 // DBConfig represents database configuration for a simulator
@@ -166,43 +163,16 @@ func GetDBConfigForDataset(service string, dataset string) (DBConfig, bool) {
 func OpenTemporaryProxytunnel(baseURL, publicID string, remotePort int) (*exec.Cmd, int, error) {
 	LogDebug("Opening temporary proxytunnel for port %d", remotePort)
 
-	localPort, err := FindFreePortPreferred(remotePort)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to find free port: %w", err)
-	}
-
-	proxytunnelPath, err := FindProxytunnelPath()
-	if err != nil {
-		return nil, 0, fmt.Errorf("proxytunnel not found: %w", err)
-	}
-
-	// Get proxy configuration based on base URL
-	proxyConfig := GetProxyConfig(baseURL)
+	// Get proxy configuration to log it
+	proxyConfig := sdkutils.GetProxyConfig(baseURL)
 	LogDebug("Using proxy server: %s (secure: %v)", proxyConfig.Server, proxyConfig.Secure)
 
-	// Build proxytunnel command arguments
-	args := []string{}
-	if proxyConfig.Secure {
-		args = append(args, "-E")
-	}
-	args = append(args,
-		"-p", proxyConfig.Server,
-		"-P", fmt.Sprintf("%s@%d:newpass", publicID, remotePort),
-		"-d", fmt.Sprintf("127.0.0.1:%d", remotePort),
-		"-a", fmt.Sprintf("%d", localPort),
-		"-v",
-		"--no-check-certificate",
-	)
-
-	cmd := exec.Command(proxytunnelPath, args...)
-
-	if err := cmd.Start(); err != nil {
-		return nil, 0, fmt.Errorf("failed to start proxytunnel: %w", err)
+	cmd, localPort, err := sdkutils.OpenTemporaryProxytunnel(baseURL, publicID, remotePort)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	LogDebug("Temporary proxytunnel started with PID: %d on localhost:%d", cmd.Process.Pid, localPort)
-	time.Sleep(500 * time.Millisecond)
-
 	return cmd, localPort, nil
 }
 
@@ -210,8 +180,7 @@ func OpenTemporaryProxytunnel(baseURL, publicID string, remotePort int) (*exec.C
 func CloseTemporaryProxytunnel(cmd *exec.Cmd) {
 	if cmd != nil && cmd.Process != nil {
 		LogDebug("Closing temporary proxytunnel PID: %d", cmd.Process.Pid)
-		cmd.Process.Kill()
-		go cmd.Wait()
+		sdkutils.CloseTemporaryProxytunnel(cmd)
 	}
 }
 
@@ -219,94 +188,22 @@ func CloseTemporaryProxytunnel(cmd *exec.Cmd) {
 func ClearAuditLog(dbConfig DBConfig, localPort int) error {
 	LogDebug("Clearing audit_log from %s database on localhost:%d", dbConfig.DBType, localPort)
 
-	var db *sql.DB
-	var err error
-	clearedCount := 0
-
-	if dbConfig.DBType == "postgresql" {
-		for _, dbName := range dbConfig.Databases {
-			connStr := fmt.Sprintf("host=127.0.0.1 port=%d user=%s password=%s dbname=%s sslmode=disable",
-				localPort, dbConfig.User, dbConfig.Password, dbName)
-
-			db, err = sql.Open("postgres", connStr)
-			if err != nil {
-				LogDebug("Failed to connect to postgres db %s: %v", dbName, err)
-				continue
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-			if err = db.PingContext(ctx); err != nil {
-				LogDebug("Failed to ping postgres db %s: %v", dbName, err)
-				cancel()
-				db.Close()
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, "TRUNCATE TABLE public.audit_log RESTART IDENTITY CASCADE")
-			if err == nil {
-				LogDebug("Successfully truncated audit_log from postgres db: %s", dbName)
-				clearedCount++
-			} else {
-				LogDebug("No audit_log in %s (or error): %v", dbName, err)
-			}
-			cancel()
-			db.Close()
-		}
-	} else if dbConfig.DBType == "mysql" {
-		for _, dbName := range dbConfig.Databases {
-			dsn := fmt.Sprintf("%s:%s@tcp(127.0.0.1:%d)/%s",
-				dbConfig.User, dbConfig.Password, localPort, dbName)
-
-			db, err = sql.Open("mysql", dsn)
-			if err != nil {
-				LogDebug("Failed to connect to mysql db %s: %v", dbName, err)
-				continue
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-			if err = db.PingContext(ctx); err != nil {
-				LogDebug("Failed to ping mysql db %s: %v", dbName, err)
-				cancel()
-				db.Close()
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0")
-			if err != nil {
-				LogDebug("Failed to disable foreign key checks in %s: %v", dbName, err)
-				cancel()
-				db.Close()
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, "DELETE FROM `audit_log`")
-			if err != nil {
-				LogDebug("Failed to truncate audit_log in %s: %v", dbName, err)
-				db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1")
-				cancel()
-				db.Close()
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1")
-			if err != nil {
-				LogDebug("Warning: failed to re-enable foreign key checks in %s: %v", dbName, err)
-			}
-
-			LogDebug("Successfully truncated audit.audit_log from mysql db: %s", dbName)
-			clearedCount++
-			cancel()
-			db.Close()
-		}
+	// Convert CLI DBConfig to SDK DBConfig
+	sdkDBConfig := sdkutils.DBConfig{
+		DBType:    dbConfig.DBType,
+		User:      dbConfig.User,
+		Password:  dbConfig.Password,
+		DestPort:  dbConfig.DestPort,
+		Databases: dbConfig.Databases,
 	}
 
-	if clearedCount == 0 {
-		return fmt.Errorf("could not find or clear audit_log table in any database")
+	err := sdkutils.ClearAuditLog(sdkDBConfig, localPort)
+	if err != nil {
+		LogDebug("Warning: failed to clear audit_log: %v", err)
+		return err
 	}
 
-	LogDebug("Successfully cleared audit_log from %d database(s)", clearedCount)
+	LogDebug("Successfully cleared audit_log from database(s)")
 	return nil
 }
 
