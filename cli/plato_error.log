@@ -78,4 +78,3 @@
 [2025-10-26 17:09:26] API: POST /api/public-build/vm/412bd90f-11d8-4506-864c-cedc9fcd4e70/setup-root-access - STATUS: 200
 [2025-10-26 17:09:27] API: GET /api/gitea/simulators - STATUS: 200
 [2025-10-26 17:09:33] API: DELETE /api/public-build/vm/412bd90f-11d8-4506-864c-cedc9fcd4e70 - STATUS: 200
-Temp for CI

@@ -342,13 +342,22 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            platform: linux
+            platform: linux-amd64
             python-version: "3.10"
           - os: ubuntu-latest
-            platform: linux
+            platform: linux-amd64
             python-version: "3.11"
           - os: ubuntu-latest
-            platform: linux
+            platform: linux-amd64
+            python-version: "3.12"
+          - os: ubuntu-latest
+            platform: linux-arm64
+            python-version: "3.10"
+          - os: ubuntu-latest
+            platform: linux-arm64
+            python-version: "3.11"
+          - os: ubuntu-latest
+            platform: linux-arm64
             python-version: "3.12"
           - os: macos-13  # Intel Mac
             platform: macos-x86_64
@@ -392,7 +401,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.23'
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -403,6 +412,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build twine
+          
+          # Install cross-compilation tools for Linux ARM64
+          if [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
 
       - name: Build C bindings and CLI
         working-directory: .
@@ -414,10 +429,30 @@ jobs:
           echo "  Version: $VERSION"
           echo "  Commit: $GIT_COMMIT"
           echo ""
+          
+          # Set explicit GOOS and GOARCH based on runner platform
+          if [[ "${{ matrix.platform }}" == "linux-amd64" ]]; then
+            export GOOS=linux
+            export GOARCH=amd64
+          elif [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+            export GOOS=linux
+            export GOARCH=arm64
+            # Enable cross-compilation for ARM on AMD64 runner
+            export CGO_ENABLED=1
+            export CC=aarch64-linux-gnu-gcc
+          elif [[ "${{ matrix.platform }}" == "macos-x86_64" ]]; then
+            export GOOS=darwin
+            export GOARCH=amd64
+          elif [[ "${{ matrix.platform }}" == "macos-arm64" ]]; then
+            export GOOS=darwin
+            export GOARCH=arm64
+          fi
+          
+          echo "Building for platform: GOOS=$GOOS GOARCH=$GOARCH"
           ./scripts/build-python.sh
         shell: bash
 
-      - name: Verify built CLI version
+      - name: Verify built CLI version and platform
         working-directory: .
         run: |
           EXPECTED_VERSION="${{ needs.release.outputs.cli_version }}"
@@ -426,7 +461,59 @@ jobs:
           if [ -f "$CLI_BIN" ]; then
             echo "✅ CLI binary found at: $CLI_BIN"
             
+            # Check binary file type
+            file "$CLI_BIN" || true
+            
+            # Verify it's for the correct platform
+            if [[ "${{ matrix.platform }}" == "linux-amd64" ]]; then
+              if file "$CLI_BIN" | grep -q "ELF.*x86-64"; then
+                echo "✅ Binary is correctly built for Linux x86-64"
+              else
+                echo "❌ ERROR: Binary is not for Linux x86-64"
+                file "$CLI_BIN"
+                exit 1
+              fi
+            elif [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+              if file "$CLI_BIN" | grep -qE "ELF.*(aarch64|ARM aarch64)"; then
+                echo "✅ Binary is correctly built for Linux ARM64"
+              else
+                echo "❌ ERROR: Binary is not for Linux ARM64"
+                file "$CLI_BIN"
+                exit 1
+              fi
+            elif [[ "${{ matrix.platform }}" == "macos-x86_64" ]]; then
+              if file "$CLI_BIN" | grep -q "Mach-O.*x86_64"; then
+                echo "✅ Binary is correctly built for macOS x86-64"
+              else
+                echo "❌ ERROR: Binary is not for macOS x86-64"
+                file "$CLI_BIN"
+                exit 1
+              fi
+            elif [[ "${{ matrix.platform }}" == "macos-arm64" ]]; then
+              if file "$CLI_BIN" | grep -q "Mach-O.*arm64"; then
+                echo "✅ Binary is correctly built for macOS ARM64"
+              else
+                echo "❌ ERROR: Binary is not for macOS ARM64"
+                file "$CLI_BIN"
+                exit 1
+              fi
+            fi
+            
+            # Check library file too
+            if [[ "${{ matrix.platform }}" == "linux-amd64" ]] || [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+              LIB_FILE="python/src/plato/libplato.so"
+            else
+              LIB_FILE="python/src/plato/libplato.dylib"
+            fi
+            
+            if [ -f "$LIB_FILE" ]; then
+              echo ""
+              echo "Library file type:"
+              file "$LIB_FILE"
+            fi
+            
             # Try to get version from the binary (if it has a --version flag)
+            echo ""
             if $CLI_BIN --version 2>/dev/null | head -1 || echo "Version check not available"; then
               echo "Expected version: $EXPECTED_VERSION"
             fi
@@ -458,12 +545,12 @@ jobs:
       - name: Build wheel
         run: python -m build --wheel
 
-      - name: Build sdist (Linux only)
-        if: matrix.platform == 'linux'
+      - name: Build sdist (Linux AMD64 only, once)
+        if: matrix.platform == 'linux-amd64' && matrix.python-version == '3.10'
         run: python -m build --sdist
 
       - name: Fix Linux wheel tag (if needed)
-        if: matrix.platform == 'linux'
+        if: startsWith(matrix.platform, 'linux')
         working-directory: python
         shell: python
         run: |
@@ -481,6 +568,10 @@ jobs:
             # If it has linux_x86_64, rename to manylinux
             if 'linux_x86_64' in wheel:
               new_wheel = wheel.replace('linux_x86_64', 'manylinux_2_17_x86_64.manylinux2014_x86_64')
+              shutil.move(wheel, new_wheel)
+              print(f"✅ Fixed wheel tag: {os.path.basename(new_wheel)}")
+            elif 'linux_aarch64' in wheel:
+              new_wheel = wheel.replace('linux_aarch64', 'manylinux_2_17_aarch64.manylinux2014_aarch64')
               shutil.move(wheel, new_wheel)
               print(f"✅ Fixed wheel tag: {os.path.basename(new_wheel)}")
             else:
@@ -506,22 +597,156 @@ jobs:
 
           print(f"✅ Wheel is platform-specific")
 
+      - name: List wheels before upload
+        working-directory: python
+        run: |
+          echo "📦 Wheels to upload:"
+          ls -lh dist/
+          echo ""
+          echo "Files:"
+          for file in dist/*; do
+            echo "  - $(basename "$file")"
+          done
+
       - name: Publish to PyPI
         working-directory: python
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m twine upload --skip-existing --verbose dist/*
+          # Upload with skip-existing to handle race conditions between matrix jobs
+          echo "🚀 Uploading to PyPI..."
+          python -m twine upload --skip-existing --verbose dist/* 2>&1 | tee upload.log
+          
+          # Check upload results
+          echo ""
+          echo "📊 Upload Summary:"
+          if grep -q "Uploading.*100%" upload.log; then
+            UPLOADED=$(grep -c "Uploading.*100%" upload.log || echo "0")
+            echo "  ✅ Successfully uploaded: $UPLOADED file(s)"
+          fi
+          
+          if grep -q "File already exists" upload.log; then
+            SKIPPED=$(grep -c "File already exists" upload.log || echo "0")
+            echo "  ⏭️  Skipped (already exists): $SKIPPED file(s)"
+          fi
+          
+          if grep -q "error" upload.log; then
+            echo "  ❌ Errors detected in upload"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ PyPI upload completed for ${{ matrix.platform }} / Python ${{ matrix.python-version }}"
 
-      - name: Summary
-        working-directory: .
+      - name: Verify upload to PyPI
         run: |
-          echo "✅ Published to PyPI"
+          echo "🔍 Verifying package is available on PyPI..."
+          
+          # Wait a bit for PyPI to process
+          sleep 10
+          
+          # Try to fetch package info from PyPI
+          VERSION="${{ needs.release.outputs.python_version }}"
+          
+          # Check if version exists on PyPI
+          if pip index versions plato-sdk | grep -q "$VERSION"; then
+            echo "✅ Version $VERSION found on PyPI"
+          else
+            echo "⚠️  Version $VERSION not yet visible on PyPI (may take a few minutes to propagate)"
+          fi
+          
           echo ""
           echo "📦 Package: plato-sdk"
-          echo "🏷️  Version: ${{ needs.release.outputs.python_version }}"
+          echo "🏷️  Version: $VERSION"
           echo "🖥️  Platform: ${{ matrix.platform }}"
+          echo "🐍 Python: ${{ matrix.python-version }}"
           echo ""
           echo "Install with:"
-          echo "  pip install plato-sdk==${{ needs.release.outputs.python_version }}"
+          echo "  pip install plato-sdk==$VERSION"
+
+  verify-pypi-release:
+    needs: [release, build-python-wheels]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify all wheels are on PyPI
+        run: |
+          VERSION="${{ needs.release.outputs.python_version }}"
+          
+          echo "🔍 Verifying PyPI release for version $VERSION"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          # Wait for PyPI to fully process all uploads
+          echo "⏳ Waiting 30 seconds for PyPI to process uploads..."
+          sleep 30
+          
+          # Install package to check availability
+          echo ""
+          echo "📦 Testing installation from PyPI..."
+          if pip install --dry-run "plato-sdk==$VERSION" 2>&1 | tee install.log; then
+            echo "✅ Package plato-sdk==$VERSION is installable from PyPI"
+          else
+            echo "❌ ERROR: Cannot install plato-sdk==$VERSION from PyPI"
+            cat install.log
+            exit 1
+          fi
+          
+          # Check PyPI JSON API for wheel files
+          echo ""
+          echo "🔍 Checking available wheels on PyPI..."
+          PYPI_JSON=$(curl -s "https://pypi.org/pypi/plato-sdk/$VERSION/json")
+          
+          # Expected platforms
+          EXPECTED_PLATFORMS=(
+            "linux.*x86_64"
+            "linux.*aarch64"
+            "macosx.*x86_64"
+            "macosx.*arm64"
+          )
+          
+          EXPECTED_PYTHONS=("cp310" "cp311" "cp312")
+          
+          MISSING=0
+          
+          for platform in "${EXPECTED_PLATFORMS[@]}"; do
+            for python in "${EXPECTED_PYTHONS[@]}"; do
+              PATTERN="${python}.*${platform}"
+              if echo "$PYPI_JSON" | grep -qE "$PATTERN"; then
+                echo "  ✅ Found wheel matching: $python / $platform"
+              else
+                echo "  ❌ Missing wheel for: $python / $platform"
+                MISSING=$((MISSING + 1))
+              fi
+            done
+          done
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          if [ $MISSING -eq 0 ]; then
+            echo "✅ All expected wheels are available on PyPI!"
+            echo ""
+            echo "🎉 Release $VERSION is complete and verified"
+          else
+            echo "⚠️  Warning: $MISSING expected wheel(s) not found on PyPI"
+            echo ""
+            echo "Available wheels:"
+            echo "$PYPI_JSON" | grep -oE '"filename":"[^"]*\.whl"' | cut -d'"' -f4 || echo "  (Could not parse wheel list)"
+            echo ""
+            echo "This may be normal if some platforms failed to build."
+            echo "Check individual build job logs for details."
+          fi
+          
+          echo ""
+          echo "🔗 View release: https://pypi.org/project/plato-sdk/$VERSION/"
