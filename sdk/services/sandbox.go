@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -663,49 +662,6 @@ func (s *SandboxService) SetupSSHAndGetInfo(ctx context.Context, baseURL string,
 	}, nil
 }
 
-// openTemporaryProxytunnel opens a temporary proxy tunnel for database access
-func (s *SandboxService) openTemporaryProxytunnel(baseURL, publicID string, destPort int) (*exec.Cmd, int, error) {
-	// Start the proxytunnel command
-	localPort := 0 // Let it auto-assign a port
-	cmd := exec.Command("proxytunnel", "start", baseURL, publicID, fmt.Sprintf("%d", destPort), fmt.Sprintf("%d", localPort))
-
-	// Get stdout to read the assigned port
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get stdout: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, 0, fmt.Errorf("failed to start proxytunnel: %w", err)
-	}
-
-	// Read the output to get the local port (proxytunnel prints it)
-	scanner := bufio.NewScanner(stdout)
-	if scanner.Scan() {
-		line := scanner.Text()
-		// Parse the port from output like "Tunnel started on localhost:12345"
-		var port int
-		if _, err := fmt.Sscanf(line, "Tunnel started on localhost:%d", &port); err == nil {
-			localPort = port
-		}
-	}
-
-	if localPort == 0 {
-		localPort = 13306 // Default fallback port
-	}
-
-	time.Sleep(500 * time.Millisecond) // Give tunnel time to establish
-	return cmd, localPort, nil
-}
-
-// closeTemporaryProxytunnel closes a temporary proxy tunnel
-func (s *SandboxService) closeTemporaryProxytunnel(cmd *exec.Cmd) {
-	if cmd != nil && cmd.Process != nil {
-		cmd.Process.Kill()
-		go cmd.Wait()
-	}
-}
-
 // clearAuditLog connects to the database and clears the audit_log table
 func (s *SandboxService) clearAuditLog(dbConfig models.DBConfig, localPort int) error {
 	var db *sql.DB
@@ -809,18 +765,16 @@ func (s *SandboxService) clearEnvState(ctx context.Context, jobGroupID string) e
 func (s *SandboxService) CreateSnapshotWithCleanup(ctx context.Context, publicID, jobGroupID string, req *models.CreateSnapshotRequest, dbConfig *models.DBConfig) (*models.CreateSnapshotResponse, error) {
 	// Step 1: Perform pre-snapshot cleanup if dbConfig is provided
 	if dbConfig != nil {
-		baseURL := s.client.GetBaseURL()
-
-		// Open temporary proxy tunnel
-		tunnelCmd, localPort, err := s.openTemporaryProxytunnel(baseURL, publicID, dbConfig.DestPort)
+		// Open a proxy tunnel using the shared ProxyTunnelService
+		proxySvc := NewProxyTunnelService(s.client)
+		tunnelID, localPort, err := proxySvc.Start(publicID, dbConfig.DestPort, 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open proxytunnel: %w", err)
 		}
-		defer s.closeTemporaryProxytunnel(tunnelCmd)
+		defer proxySvc.Stop(tunnelID)
 
-		// Clear audit log (best effort, don't fail if it doesn't exist)
 		if err := s.clearAuditLog(*dbConfig, localPort); err != nil {
-			// Log but don't fail - audit_log might not exist
+			return nil, fmt.Errorf("failed to clear audit log: %w", err)
 		}
 
 		// Clear env state
