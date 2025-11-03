@@ -53,18 +53,25 @@ func IsPortAvailable(port int) bool {
 
 // ProxyConfig holds the proxy server configuration
 type ProxyConfig struct {
-	Server string // e.g., "proxy.plato.so:9000" or "proxy.localhost:9000"
+	Server string // e.g., "proxy.plato.so:9000", "staging.proxy.plato.so:9000", or "proxy.localhost:9000"
 	Secure bool   // Whether to use the -E (secure) flag
 }
 
 // GetProxyConfig returns the appropriate proxy configuration based on the base URL.
 // If the base URL contains "localhost", it returns proxy.localhost:9000 without secure flag.
+// If the base URL contains "staging", it returns staging.proxy.plato.so:9000 with secure flag.
 // Otherwise, it returns proxy.plato.so:9000 with secure flag.
 func GetProxyConfig(baseURL string) ProxyConfig {
 	if strings.Contains(baseURL, "localhost") {
 		return ProxyConfig{
 			Server: "proxy.localhost:9000",
 			Secure: false,
+		}
+	}
+	if strings.Contains(baseURL, "staging") {
+		return ProxyConfig{
+			Server: "staging.proxy.plato.so:9000",
+			Secure: true,
 		}
 	}
 	return ProxyConfig{
