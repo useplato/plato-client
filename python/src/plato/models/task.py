@@ -125,6 +125,7 @@ class PlatoTask(BaseModel):
     is_sample: Optional[bool] = False
     simulator_artifact_id: Optional[str] = None
     metadata: Optional[PlatoTaskMetadata] = None
+    version: Optional[int] = 1
 
     @field_serializer('eval_config')
     def serialize_eval_config(self, eval_config: Optional[BasePlatoEvalConfig], _info):

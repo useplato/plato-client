@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoTaskMetadata
 from plato.models.task import ScoringType
@@ -539,6 +539,7 @@ class SyncPlato:
                 )
                 if t.get("metadataConfig")
                 else None,
+                version=t.get("version"),
             )
             for t in test_cases
         ]
