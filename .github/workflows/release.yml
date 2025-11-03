@@ -17,6 +17,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Skip if the commit is from github-actions to prevent infinite loops
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && github.event.head_commit.author.name != 'github-actions[bot]' }}
 
     outputs:
       cli_version: ${{ steps.new_cli_version.outputs.version }}
@@ -193,6 +195,7 @@ jobs:
 
       - name: Update version files
         run: |
+          # Check if running in GitHub Actions
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -217,7 +220,7 @@ jobs:
 
           # Commit if there are changes
           if ! git diff --cached --quiet; then
-            git commit -m "chore: bump version to ${{ steps.new_cli_version.outputs.version }}"
+            git commit -m "chore: bump version to ${{ steps.new_cli_version.outputs.version }} [skip ci]"
             git push
           else
             echo "No version changes to commit"
