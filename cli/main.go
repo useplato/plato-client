@@ -5,6 +5,8 @@
 // uses the Bubble Tea framework to provide a view-based navigation system with
 // multiple screens including main menu, configuration, simulator selection,
 // environment launching, and VM management.
+//
+// Test change: Version bump test
 package main
 
 import (

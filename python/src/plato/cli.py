@@ -9,6 +9,8 @@ This CLI orchestrates the various Plato services:
 
 The CLI handles user interaction, command routing, and error display,
 while delegating business logic to the appropriate services.
+
+Test change: Version bump test
 """
 
 import asyncio

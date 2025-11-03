@@ -207,6 +207,12 @@ jobs:
             echo "$NEW_VERSION" > VERSION
             git add VERSION
             echo "Updated VERSION to $NEW_VERSION"
+            
+            # ALSO update pyproject.toml
+            sed -i.bak "s/^version = \".*\"/version = \"$NEW_VERSION\"/" python/pyproject.toml
+            rm python/pyproject.toml.bak 2>/dev/null || true
+            git add python/pyproject.toml
+            echo "Updated python/pyproject.toml to $NEW_VERSION"
           fi
 
           # Commit if there are changes
