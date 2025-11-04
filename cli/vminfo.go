@@ -473,6 +473,15 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		m.runningCommand = true
 		return m, tea.Batch(m.spinner.Tick, authenticateECR(m.sshHost, m.sshConfigPath))
 
+	case auditUILaunchedMsg:
+		m.runningCommand = false
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ %v", msg.err))
+		} else {
+			m.statusMessages = append(m.statusMessages, "✅ Audit Ignore UI launched at http://localhost:8501")
+		}
+		return m, nil
+
 	case ecrAuthenticatedMsg:
 		m.runningCommand = false
 		if msg.err != nil {

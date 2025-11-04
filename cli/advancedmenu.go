@@ -34,6 +34,7 @@ func NewAdvancedMenuModel(publicID, sshHost, sshConfigPath string) AdvancedMenuM
 	items := []list.Item{
 		advancedAction{title: "Authenticate ECR", description: "Authenticate Docker with AWS ECR on the VM"},
 		advancedAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
+		advancedAction{title: "Audit Ignore UI", description: "Configure ignore_tables via web UI"},
 		advancedAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		advancedAction{title: "Back", description: "Return to main menu"},
 	}

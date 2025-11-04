@@ -57,6 +57,15 @@ echo ""
 if [[ "$OSTYPE" != "msys" ]] && [[ "$OSTYPE" != "win32" ]]; then
     chmod +x "$OUTPUT_DIR/$BINARY_NAME"
 fi
+# Copy Python scripts to bin directory
+echo "📦 Copying Python scripts..."
+if [[ -f "$CLI_DIR/configure_ignore_tables_ui.py" ]]; then
+    cp "$CLI_DIR/configure_ignore_tables_ui.py" "$OUTPUT_DIR/"
+    echo "✅ Copied configure_ignore_tables_ui.py"
+else
+    echo "⚠️  configure_ignore_tables_ui.py not found"
+fi
+
 
 # Copy bundled proxytunnel binary to the same directory
 echo "📦 Copying bundled proxytunnel binary..."

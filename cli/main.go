@@ -15,6 +15,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"path/filepath"
+	"time"
 
 	"plato-cli/internal/ui/components"
 	"plato-cli/internal/utils"
@@ -238,6 +240,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				return navigateToProxytunnelPortMsg{publicID: m.vmInfo.sandbox.PublicId}
 			}
+		case "Audit Ignore UI":
+			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Launching Audit Ignore UI in browser...")
+			m.vmInfo.runningCommand = true
+			return m, tea.Batch(m.vmInfo.spinner.Tick, launchAuditIgnoreUI())
 		case "Set up root SSH":
 			if m.vmInfo.rootPasswordSetup {
 				m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "⚠️  Root SSH password is already configured")
@@ -596,5 +602,44 @@ func main() {
 
 	if _, err := p.Run(); err != nil {
 		fmt.Println("could not run program:", err)
+	}
+}
+type auditUILaunchedMsg struct {
+	err error
+}
+
+func launchAuditIgnoreUI() tea.Cmd {
+	return func() tea.Msg {
+		// Find the script in the same directory as the binary
+		exePath, err := os.Executable()
+		if err != nil {
+			return auditUILaunchedMsg{err: fmt.Errorf("failed to find executable: %w", err)}
+		}
+
+		scriptPath := filepath.Join(filepath.Dir(exePath), "configure_ignore_tables_ui.py")
+
+		// Check if file exists
+		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+			return auditUILaunchedMsg{err: fmt.Errorf("UI script not found at %s", scriptPath)}
+		}
+
+		// Check if uv is installed
+		if _, err := exec.LookPath("uv"); err != nil {
+			return auditUILaunchedMsg{err: fmt.Errorf("uv not found - install from https://docs.astral.sh/uv/")}
+		}
+
+		// Launch streamlit (uv will auto-install dependencies: streamlit, psycopg2-binary, pymysql)
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("uv run --with streamlit --with psycopg2-binary --with pymysql streamlit run %s &", scriptPath))
+		err = cmd.Start()
+
+		if err != nil {
+			return auditUILaunchedMsg{err: fmt.Errorf("failed to launch: %w", err)}
+		}
+
+		// Open browser
+		time.Sleep(2 * time.Second)
+		exec.Command("open", "http://localhost:8501").Start()
+
+		return auditUILaunchedMsg{err: nil}
 	}
 }
