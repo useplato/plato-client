@@ -506,7 +506,7 @@ class SyncPlato:
             requests.RequestException: If the API request fails.
         """
         response = self.http_session.get(
-            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000",
+            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=10000",
         )
         self._handle_response_error(response)
         res = response.json()
