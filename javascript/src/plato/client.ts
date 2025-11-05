@@ -2,8 +2,6 @@ import axios, { AxiosInstance } from 'axios';
 import { PlatoClientError } from './exceptions';
 import { z } from 'zod';
 
-
-
 export const PlatoTaskSchema = z.object({
   name: z.string(),
   prompt: z.string(),
@@ -255,14 +253,15 @@ export class Plato {
     keepalive: boolean = false,
     alias?: string,
     fast: boolean = false,
-    artifactId?: string
+    artifactId?: string,
+    interfaceType?: "browser" | "noop"
   ): Promise<PlatoEnvironment> {
     if (fast) {
       console.log('Running in fast mode');
     }
     try {
       const requestBody: any = {
-        interface_type: "browser",
+        interface_type: interfaceType || "browser",
         interface_width: 1280,
         interface_height: 720,
         source: "SDK",
