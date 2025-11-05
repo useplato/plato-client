@@ -229,6 +229,38 @@ func (s *EnvironmentService) Reset(ctx context.Context, jobID string) (*models.R
 	return &resetResp, nil
 }
 
+// GetState retrieves the current state of an environment
+func (s *EnvironmentService) GetState(ctx context.Context, jobID string, mergeMutations bool) (map[string]interface{}, error) {
+	params := fmt.Sprintf("?merge_mutations=%t", mergeMutations)
+	req, err := s.client.NewRequest(ctx, "GET", fmt.Sprintf("/env/%s/state%s", jobID, params), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result struct {
+		Data struct {
+			State map[string]interface{} `json:"state"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.Data.State, nil
+}
+
 // Close closes an environment
 func (s *EnvironmentService) Close(ctx context.Context, jobID string) error {
 	req, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/env/%s/close", jobID), nil)

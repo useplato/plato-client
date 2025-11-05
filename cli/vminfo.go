@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -503,6 +504,48 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 				for _, line := range lines {
 					if strings.TrimSpace(line) != "" {
 						m.statusMessages = append(m.statusMessages, "   "+strings.TrimSpace(line))
+					}
+				}
+			}
+		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
+		return m, nil
+
+	case stateRetrievedMsg:
+		m.runningCommand = false
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Failed to get state: %v", msg.err))
+		} else {
+			// Save state to file
+			stateJSON, err := json.MarshalIndent(msg.state, "", "  ")
+			if err != nil {
+				m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Error formatting state: %v", err))
+			} else {
+				// Save to ./states/ directory relative to plato-config.yml
+				configDir, err := GetPlatoConfigDir()
+				if err != nil {
+					m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ plato-config.yml not found in current directory"))
+				} else {
+					statesDir := filepath.Join(configDir, "states")
+					os.MkdirAll(statesDir, 0755)
+
+					// Generate filename with timestamp
+					timestamp := time.Now().Format("20060102-150405")
+					filename := fmt.Sprintf("state-%s-%s.json", m.sandbox.PublicId[:8], timestamp)
+					filePath := filepath.Join(statesDir, filename)
+
+					// Write to file
+					if err := os.WriteFile(filePath, stateJSON, 0644); err != nil {
+						m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Error saving state: %v", err))
+					} else {
+						lineCount := strings.Count(string(stateJSON), "\n") + 1
+						// Show relative path from current directory
+						relPath, _ := filepath.Rel(configDir, filePath)
+						m.statusMessages = append(m.statusMessages, "✅ Simulator state retrieved:")
+						m.statusMessages = append(m.statusMessages, fmt.Sprintf("   📄 Saved to: %s", relPath))
+						m.statusMessages = append(m.statusMessages, fmt.Sprintf("   📊 Lines: %d", lineCount))
+						m.statusMessages = append(m.statusMessages, fmt.Sprintf("   💡 View with: cat %s", relPath))
 					}
 				}
 			}

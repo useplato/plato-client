@@ -36,6 +36,7 @@ func NewAdvancedMenuModel(publicID, sshHost, sshConfigPath string) AdvancedMenuM
 		advancedAction{title: "Open Proxytunnel", description: "Create local port forward to VM"},
 		advancedAction{title: "Audit Ignore UI", description: "Configure ignore_tables via web UI"},
 		advancedAction{title: "Run Flow", description: "Execute a test flow against the VM"},
+		advancedAction{title: "Get State", description: "Print the current simulator state"},
 		advancedAction{title: "Set up root SSH", description: "Configure root SSH password access"},
 		advancedAction{title: "Back", description: "Return to main menu"},
 	}

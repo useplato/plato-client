@@ -20,6 +20,7 @@ import (
 
 	"plato-cli/internal/ui/components"
 	"plato-cli/internal/utils"
+	plato "plato-sdk"
 	"plato-sdk/models"
 	"plato-sdk/services"
 
@@ -281,6 +282,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flowEntry = NewFlowEntryModel(defaultURL, defaultFlowPath)
 			m.currentView = ViewFlowEntry
 			return m, m.flowEntry.Init()
+		case "Get State":
+			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Fetching simulator state...")
+			m.vmInfo.runningCommand = true
+			return m, tea.Batch(m.vmInfo.spinner.Tick, getEnvironmentState(m.config.client, m.vmInfo.sandbox.JobGroupId))
 		case "Set up root SSH":
 			if m.vmInfo.rootPasswordSetup {
 				m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "⚠️  Root SSH password is already configured")
@@ -698,6 +703,19 @@ func launchAuditIgnoreUI() tea.Cmd {
 type runFlowCompletedMsg struct {
 	err    error
 	output string
+}
+
+type stateRetrievedMsg struct {
+	state map[string]interface{}
+	err   error
+}
+
+func getEnvironmentState(client *plato.PlatoClient, jobGroupID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		state, err := client.Environment.GetState(ctx, jobGroupID, false)
+		return stateRetrievedMsg{state: state, err: err}
+	}
 }
 
 func launchRunFlow(url, flowPath, flowName string) tea.Cmd {
