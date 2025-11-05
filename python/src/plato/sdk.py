@@ -534,7 +534,7 @@ class Plato:
         """
         headers = {"X-API-Key": self.api_key}
         async with self.http_session.get(
-            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=1000",
+            f"{self.base_url}/testcases?simulator_name={simulator_name}&page_size=10000",
             headers=headers,
         ) as response:
             await self._handle_response_error(response)
