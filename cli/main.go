@@ -73,6 +73,7 @@ const (
 	ViewDBEntry
 	ViewDatasetSelector
 	ViewAdvanced
+	ViewFlowEntry
 )
 
 type Model struct {
@@ -90,6 +91,7 @@ type Model struct {
 	dbEntry          DBEntryModel
 	datasetSelector  DatasetSelectorModel
 	advancedMenu     AdvancedMenuModel
+	flowEntry        FlowEntryModel
 	quitting         bool
 }
 
@@ -208,6 +210,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Initialize advanced menu with current VM info
 			m.advancedMenu = NewAdvancedMenuModel(m.vmInfo.sandbox.PublicId, m.vmInfo.sshHost, m.vmInfo.sshConfigPath)
 			return m, m.advancedMenu.Init()
+		case ViewFlowEntry:
+			return m, m.flowEntry.Init()
 		}
 		return m, nil
 	}
@@ -244,6 +248,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Launching Audit Ignore UI in browser...")
 			m.vmInfo.runningCommand = true
 			return m, tea.Batch(m.vmInfo.spinner.Tick, launchAuditIgnoreUI())
+		case "Run Flow":
+			// Get public URL from sandbox and flow path from plato-config
+			defaultURL := ""
+			defaultFlowPath := ""
+
+			// Use the sandbox public URL
+			if m.vmInfo.sandbox != nil && m.vmInfo.sandbox.Url != "" {
+				defaultURL = m.vmInfo.sandbox.Url
+			}
+
+			// Get flow path from plato-config based on current dataset
+			if m.vmInfo.config != nil && m.vmInfo.dataset != "" {
+				if datasetConfig, ok := m.vmInfo.config.Datasets[m.vmInfo.dataset]; ok {
+					flowsPath := datasetConfig.Metadata.FlowsPath
+					if flowsPath != "" {
+						// Resolve path relative to plato-config.yml location
+						if !filepath.IsAbs(flowsPath) {
+							if configDir, err := GetPlatoConfigDir(); err == nil {
+								defaultFlowPath = filepath.Join(configDir, flowsPath)
+							} else {
+								defaultFlowPath = flowsPath
+							}
+						} else {
+							defaultFlowPath = flowsPath
+						}
+					}
+				}
+			}
+
+			// Navigate to flow entry form with defaults
+			m.flowEntry = NewFlowEntryModel(defaultURL, defaultFlowPath)
+			m.currentView = ViewFlowEntry
+			return m, m.flowEntry.Init()
 		case "Set up root SSH":
 			if m.vmInfo.rootPasswordSetup {
 				m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "⚠️  Root SSH password is already configured")
@@ -315,6 +352,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		)
 	}
 
+	// Handle flow config entered message - launch flow with user-provided config
+	if flowMsg, ok := msg.(flowConfigEnteredMsg); ok {
+		logDebug("Flow config entered: url=%s, flowPath=%s, flowName=%s", flowMsg.url, flowMsg.flowPath, flowMsg.flowName)
+		m.currentView = ViewVMInfo
+
+		m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, fmt.Sprintf("Running flow '%s' against %s...", flowMsg.flowName, flowMsg.url))
+		m.vmInfo.runningCommand = true
+		return m, tea.Batch(m.vmInfo.spinner.Tick, launchRunFlow(flowMsg.url, flowMsg.flowPath, flowMsg.flowName))
+	}
+
 	// Handle global key commands
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		k := msg.String()
@@ -381,6 +428,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.datasetSelector, cmd = m.datasetSelector.Update(msg)
 	case ViewAdvanced:
 		m.advancedMenu, cmd = m.advancedMenu.Update(msg)
+	case ViewFlowEntry:
+		m.flowEntry, cmd = m.flowEntry.Update(msg)
 	}
 
 	return m, cmd
@@ -419,6 +468,8 @@ func (m Model) View() string {
 		return m.datasetSelector.View()
 	case ViewAdvanced:
 		return m.advancedMenu.View()
+	case ViewFlowEntry:
+		return m.flowEntry.View()
 	default:
 		return "Unknown view\n"
 	}
@@ -641,5 +692,49 @@ func launchAuditIgnoreUI() tea.Cmd {
 		exec.Command("open", "http://localhost:8501").Start()
 
 		return auditUILaunchedMsg{err: nil}
+	}
+}
+
+type runFlowCompletedMsg struct {
+	err    error
+	output string
+}
+
+func launchRunFlow(url, flowPath, flowName string) tea.Cmd {
+	return func() tea.Msg {
+		// Find the script in the same directory as the binary
+		exePath, err := os.Executable()
+		if err != nil {
+			return runFlowCompletedMsg{err: fmt.Errorf("failed to find executable: %w", err), output: ""}
+		}
+
+		scriptPath := filepath.Join(filepath.Dir(exePath), "run_flow.py")
+
+		// Check if file exists
+		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+			return runFlowCompletedMsg{err: fmt.Errorf("run_flow.py not found at %s", scriptPath), output: ""}
+		}
+
+		// Check if uv is installed
+		if _, err := exec.LookPath("uv"); err != nil {
+			return runFlowCompletedMsg{err: fmt.Errorf("uv not found - install from https://docs.astral.sh/uv/"), output: ""}
+		}
+
+		// Build command with arguments
+		cmdStr := fmt.Sprintf("uv run --with playwright --with pyyaml --with pydantic python %s --url %s --flow-file %s --flow-name %s",
+			scriptPath, url, flowPath, flowName)
+
+		// Run command and capture output
+		cmd := exec.Command("sh", "-c", cmdStr)
+		output, err := cmd.CombinedOutput()
+
+		if err != nil {
+			return runFlowCompletedMsg{
+				err:    fmt.Errorf("flow execution failed: %w", err),
+				output: string(output),
+			}
+		}
+
+		return runFlowCompletedMsg{err: nil, output: string(output)}
 	}
 }

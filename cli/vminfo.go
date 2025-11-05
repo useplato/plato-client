@@ -482,6 +482,35 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case runFlowCompletedMsg:
+		m.runningCommand = false
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Flow execution failed: %v", msg.err))
+			// Display output if available
+			if msg.output != "" {
+				lines := strings.Split(msg.output, "\n")
+				for _, line := range lines {
+					if strings.TrimSpace(line) != "" {
+						m.statusMessages = append(m.statusMessages, "   "+strings.TrimSpace(line))
+					}
+				}
+			}
+		} else {
+			m.statusMessages = append(m.statusMessages, "✅ Flow executed successfully")
+			// Display the flow execution logs
+			if msg.output != "" {
+				lines := strings.Split(msg.output, "\n")
+				for _, line := range lines {
+					if strings.TrimSpace(line) != "" {
+						m.statusMessages = append(m.statusMessages, "   "+strings.TrimSpace(line))
+					}
+				}
+			}
+		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
+		return m, nil
+
 	case ecrAuthenticatedMsg:
 		m.runningCommand = false
 		if msg.err != nil {

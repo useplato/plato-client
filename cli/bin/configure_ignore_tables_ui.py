@@ -98,7 +98,14 @@ def main():
                 st.session_state.all_data = all_data
                 st.sidebar.success(f"✅ {len(tables)} tables")
             except Exception as e:
-                st.sidebar.error(f"❌ {e}")
+                error_str = str(e)
+                st.sidebar.error(f"❌ {error_str}")
+
+                # Add helpful hint for connection refused errors
+                if "Connection refused" in error_str or "connection to server" in error_str.lower():
+                    st.sidebar.warning("💡 **Hint:** If connecting to a remote database, you may need to create a proxy tunnel first.")
+                    st.sidebar.info("In the Plato CLI, go to **Advanced → Open Proxytunnel** to forward the database port to localhost.")
+
                 import traceback
                 st.sidebar.code(traceback.format_exc())
                 return
@@ -179,7 +186,7 @@ def main():
                 h3.caption("Type")
                 h4.caption("Examples")
 
-                for col in data['columns']:
+                for col_idx, col in enumerate(data['columns']):
                     col_name = col['name']
                     is_global = col_name in st.session_state.ignore_cols_global
                     is_local = col_name in st.session_state.ignore_cols_per_table[table]
@@ -190,9 +197,9 @@ def main():
                     c1, c2, c3, c4 = st.columns([0.5, 2, 1.5, 4], gap="small")
                     with c1:
                         if is_global:
-                            st.checkbox("", True, disabled=True, key=f"c_dis_{table}_{col_name}", label_visibility="collapsed", help="Globally ignored")
+                            st.checkbox("", True, disabled=True, key=f"c_dis_{table}_{col_idx}_{col_name}", label_visibility="collapsed", help="Globally ignored")
                         else:
-                            chk = st.checkbox("", is_local, key=f"c_{table}_{col_name}", label_visibility="collapsed", help="Check to ignore this column")
+                            chk = st.checkbox("", is_local, key=f"c_{table}_{col_idx}_{col_name}", label_visibility="collapsed", help="Check to ignore this column")
                             if chk:
                                 st.session_state.ignore_cols_per_table[table].add(col_name)
                             else:

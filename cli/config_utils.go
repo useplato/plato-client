@@ -32,6 +32,22 @@ func LoadPlatoConfig() (*models.PlatoConfig, error) {
 	return &config, nil
 }
 
+// GetPlatoConfigDir returns the absolute directory path where plato-config.yml is located
+func GetPlatoConfigDir() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	// Check if plato-config.yml exists in current directory
+	configPath := filepath.Join(cwd, platoConfigFilename)
+	if _, err := os.Stat(configPath); err != nil {
+		return "", err
+	}
+
+	return cwd, nil
+}
+
 // SavePlatoConfig saves a PlatoConfig to plato-config.yml in the current directory
 func SavePlatoConfig(config *models.PlatoConfig) error {
 	data, err := yaml.Marshal(config)
