@@ -768,3 +768,128 @@ class Plato:
         ) as response:
             await self._handle_response_error(response)
             return await response.json()
+
+    async def get_simulator_flows(self, artifact_id: str) -> List[Dict[str, Any]]:
+        """Get login flows for a simulator artifact.
+
+        This method fetches flow configurations from the API using a simulator artifact ID,
+        allowing you to retrieve login flows independently of an environment instance.
+
+        Args:
+            artifact_id (str): The simulator artifact ID to fetch flows for.
+
+        Returns:
+            List[Dict[str, Any]]: List of flow configurations parsed from the YAML response.
+
+        Raises:
+            PlatoClientError: If the API request fails or flows cannot be parsed.
+            aiohttp.ClientError: If the API request fails.
+
+        Example:
+            ```python
+            client = Plato()
+            flows = await client.get_simulator_flows("artifact_123")
+            # Use the flows for authentication
+            ```
+        """
+        import yaml
+        import json
+
+        try:
+            headers = {"X-API-Key": self.api_key}
+            async with self.http_session.get(
+                f"{self.base_url}/simulator/{artifact_id}/flows", headers=headers
+            ) as resp:
+                await self._handle_response_error(resp)
+                body_text = await resp.text()
+
+                # Endpoint may return JSON with { data: { flows: "...yaml..." } } or raw YAML
+                try:
+                    parsed = json.loads(body_text)
+                    flows_yaml = (
+                        parsed.get("data", {}).get("flows")
+                        if isinstance(parsed, dict)
+                        else None
+                    )
+                    if not flows_yaml:
+                        raise ValueError("flows missing in JSON body")
+                except Exception:
+                    flows_yaml = body_text
+
+                scripts = yaml.safe_load(flows_yaml)
+                flows_data = scripts.get("flows", [])
+                return flows_data
+        except Exception as e:
+            raise PlatoClientError(f"Failed to load flows from API: {e}")
+
+    async def login_artifact(
+        self,
+        artifact_id: str,
+        page,
+        throw_on_login_error: bool = False,
+        screenshots_dir: Optional[Any] = None,
+        dataset: str = "base",
+    ) -> None:
+        """Login using flows from a simulator artifact.
+
+        This method fetches flow configurations from the API using a simulator artifact ID
+        and executes the login flow on the provided Playwright page. This is independent
+        of any environment instance.
+
+        Args:
+            artifact_id (str): The simulator artifact ID to fetch flows for.
+            page: The Playwright page to authenticate (async_api.Page).
+            throw_on_login_error (bool): Whether to raise an error on login failure.
+            screenshots_dir (Optional[Path]): Directory to store screenshots during the flow.
+            dataset (str): The dataset/flow name to use for login (default: "base", which maps to "login").
+
+        Raises:
+            PlatoClientError: If flows cannot be fetched, parsed, or executed.
+
+        Example:
+            ```python
+            from plato.sdk import Plato
+            from playwright.async_api import async_playwright
+
+            client = Plato()
+            async with async_playwright() as p:
+                browser = await p.chromium.launch()
+                page = await browser.new_page()
+                await client.login_artifact("artifact_123", page)
+                # Page is now authenticated
+            ```
+        """
+        from plato.flow_executor import FlowExecutor
+        from plato.models.flow import Flow
+        from pathlib import Path
+
+        try:
+            flows_data = await self.get_simulator_flows(artifact_id)
+            flows_list = [Flow.model_validate(f) for f in flows_data]
+
+            # Determine flow name based on dataset
+            if dataset == "base":
+                flow_name = "login"
+            else:
+                flow_name = dataset
+
+            login_flow = next(
+                (flow for flow in flows_list if flow.name == flow_name), None
+            )
+            if not login_flow:
+                raise PlatoClientError(f"No login flow '{flow_name}' found")
+
+            flow_executor = FlowExecutor(
+                page, login_flow, logger=logger, screenshots_dir=screenshots_dir
+            )
+            success = await flow_executor.execute_flow()
+            if not success:
+                if throw_on_login_error:
+                    raise PlatoClientError("Failed to login")
+                else:
+                    logger.warning("Failed to login")
+        except Exception as e:
+            if throw_on_login_error:
+                raise PlatoClientError(f"Login failed: {e}")
+            else:
+                logger.error(f"Login failed: {e}")
