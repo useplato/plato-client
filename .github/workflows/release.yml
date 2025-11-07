@@ -23,6 +23,7 @@ jobs:
     outputs:
       cli_version: ${{ steps.new_cli_version.outputs.version }}
       python_version: ${{ steps.new_python_version.outputs.version }}
+      version_commit_sha: ${{ steps.get_version_commit.outputs.sha }}
 
     steps:
       - name: Checkout code
@@ -226,6 +227,14 @@ jobs:
             echo "No version changes to commit"
           fi
 
+      - name: Get version commit SHA
+        id: get_version_commit
+        run: |
+          # Get the current commit SHA (which includes the version bump if it was committed)
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "Version commit SHA: $COMMIT_SHA"
+
       - name: Build proxytunnel
         run: |
           sudo apt-get update && sudo apt-get install -y proxytunnel
@@ -385,18 +394,25 @@ jobs:
         working-directory: python
 
     steps:
-      - name: Checkout
+      - name: Checkout version-bumped commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.release.outputs.version_commit_sha }}
           fetch-depth: 0
 
-      - name: Pull latest changes (ensure we have version bump)
+      - name: Verify version
         working-directory: .
         run: |
-          git pull origin main
-          echo "Current commit: $(git rev-parse HEAD)"
+          echo "Checked out commit: $(git rev-parse HEAD)"
+          echo "Expected commit: ${{ needs.release.outputs.version_commit_sha }}"
           echo "Current version: $(cat VERSION 2>/dev/null || echo 'VERSION file not found')"
+          echo "Expected version: ${{ needs.release.outputs.python_version }}"
+          
+          # Verify we're on the correct commit
+          if [ "$(git rev-parse HEAD)" != "${{ needs.release.outputs.version_commit_sha }}" ]; then
+            echo "ERROR: Checked out wrong commit!"
+            exit 1
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -671,8 +687,10 @@ jobs:
     if: always()
     
     steps:
-      - name: Checkout
+      - name: Checkout version-bumped commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.version_commit_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
