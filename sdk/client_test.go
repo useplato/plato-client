@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// force client update
+// force client update again
 
 func TestNewClient(t *testing.T) {
 	apiKey := "test-api-key"
