@@ -177,6 +177,46 @@ Run Python SDK tests.
 
 ### Utility Scripts
 
+#### `retag_wheel.py`
+Retag Python wheels with correct platform-specific tags.
+
+**What it does:**
+1. Parses wheel filename to extract metadata
+2. Updates internal WHEEL metadata file
+3. Renames wheel file with correct platform tag
+4. Used for cross-compiled builds in CI/CD
+
+**Usage:**
+```bash
+cd python
+python ../scripts/retag_wheel.py <platform> [dist_dir]
+```
+
+**Platforms:**
+- `linux-amd64` → `manylinux_2_17_x86_64.manylinux2014_x86_64`
+- `linux-arm64` → `manylinux_2_17_aarch64.manylinux2014_aarch64`
+- `macos-x86_64` → `macosx_10_9_x86_64`
+- `macos-arm64` → `macosx_11_0_arm64`
+
+**Example:**
+```bash
+# Build a wheel
+cd python
+python -m build --wheel
+
+# Retag it for Linux ARM64
+python ../scripts/retag_wheel.py linux-arm64
+
+# Result: plato_sdk-1.1.20-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
+```
+
+**Use Case:**
+This script is essential for cross-compilation scenarios where the build
+platform differs from the target platform. For example, building ARM64
+wheels on an x86_64 GitHub Actions runner.
+
+---
+
 #### `clean.sh`
 Remove all build artifacts and caches.
 
