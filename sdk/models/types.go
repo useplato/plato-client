@@ -89,13 +89,13 @@ type Sandbox struct {
 
 // CreateSnapshotRequest is a request to create a VM snapshot
 type CreateSnapshotRequest struct {
-	Service         string            `json:"service,omitempty"`
-	GitHash         string            `json:"git_hash,omitempty"`
-	Dataset         string            `json:"dataset,omitempty"`
-	DatasetConfig   *SimConfigDataset `json:"dataset_config,omitempty"`
-	Flows           string            `json:"flows,omitempty"`
-	InternalAppPort *int32            `json:"internal_app_port,omitempty"`
-	MessagingPort   *int32            `json:"messaging_port,omitempty"`
+	Service         string `json:"service,omitempty"`
+	GitHash         string `json:"git_hash,omitempty"`
+	Dataset         string `json:"dataset,omitempty"`
+	DatasetConfig   string `json:"plato_config,omitempty"`
+	Flows           string `json:"flows,omitempty"`
+	InternalAppPort *int32 `json:"internal_app_port,omitempty"`
+	MessagingPort   *int32 `json:"messaging_port,omitempty"`
 }
 
 // CreateSnapshotResponse is the response from creating a snapshot

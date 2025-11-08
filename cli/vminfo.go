@@ -26,6 +26,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"gopkg.in/yaml.v3"
 )
 
 const vmInfoMaxWidth = 120
@@ -110,8 +111,9 @@ type rootPasswordSetupMsg struct {
 }
 
 type snapshotCreatedMsg struct {
-	err      error
-	response *models.CreateSnapshotResponse
+	err       error
+	response  *models.CreateSnapshotResponse
+	debugInfo []string
 }
 
 type proxytunnelOpenedMsg struct {
@@ -376,7 +378,13 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 		m.runningCommand = false
 		if msg.err != nil {
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Snapshot failed: %v", msg.err))
+			if len(msg.debugInfo) > 0 {
+				m.statusMessages = append(m.statusMessages, msg.debugInfo...)
+			}
 		} else if msg.response != nil {
+			if len(msg.debugInfo) > 0 {
+				m.statusMessages = append(m.statusMessages, msg.debugInfo...)
+			}
 			m.statusMessages = append(m.statusMessages, "✓ Snapshot created successfully!")
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Artifact ID: %s", msg.response.ArtifactId))
 			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
@@ -811,53 +819,38 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 		}
 
 		// Try to load plato-config.yml and get dataset config
+		var statusInfo []string
 		if config, err := LoadPlatoConfig(); err == nil {
-			utils.LogDebug("Loaded plato-config.yml successfully")
-
 			// Get the dataset config for the current dataset
 			if datasetConfig, ok := config.Datasets[datasetName]; ok {
-				utils.LogDebug("Found dataset config for: %s", datasetName)
-				req.DatasetConfig = &datasetConfig
+				// Serialize dataset config to YAML
+				configYAML, err := yaml.Marshal(datasetConfig)
+				if err == nil {
+					req.DatasetConfig = string(configYAML)
+					statusInfo = append(statusInfo, fmt.Sprintf("  ✓ Loaded dataset config (%d bytes)", len(configYAML)))
+				}
 
 				// Extract port information from compute config
 				if datasetConfig.Compute.AppPort > 0 {
 					req.InternalAppPort = &datasetConfig.Compute.AppPort
-					utils.LogDebug("Set internal_app_port: %d", datasetConfig.Compute.AppPort)
 				}
 				if datasetConfig.Compute.PlatoMessagingPort > 0 {
 					req.MessagingPort = &datasetConfig.Compute.PlatoMessagingPort
-					utils.LogDebug("Set messaging_port: %d", datasetConfig.Compute.PlatoMessagingPort)
 				}
 
 				// Check if there's a flow path in the metadata
 				if datasetConfig.Metadata.FlowsPath != "" {
-					utils.LogDebug("Found flows_path: %s", datasetConfig.Metadata.FlowsPath)
-
-					// Get the config directory to resolve relative paths
 					configDir, err := GetPlatoConfigDir()
-					if err != nil {
-						utils.LogDebug("Failed to get config directory: %v", err)
-					} else {
-						// Resolve the flow path relative to the config directory
+					if err == nil {
 						flowPath := filepath.Join(configDir, datasetConfig.Metadata.FlowsPath)
-
-						// Read the flow yaml file
 						flowData, err := os.ReadFile(flowPath)
-						if err != nil {
-							utils.LogDebug("Failed to read flow file at %s: %v", flowPath, err)
-						} else {
-							utils.LogDebug("Successfully read flow file, size: %d bytes", len(flowData))
+						if err == nil {
 							req.Flows = string(flowData)
+							statusInfo = append(statusInfo, fmt.Sprintf("  ✓ Loaded flows (%d bytes)", len(flowData)))
 						}
 					}
-				} else {
-					utils.LogDebug("No flows_path specified in dataset metadata")
 				}
-			} else {
-				utils.LogDebug("Dataset %s not found in plato-config.yml", datasetName)
 			}
-		} else {
-			utils.LogDebug("Failed to load plato-config.yml: %v", err)
 		}
 
 		utils.LogDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
@@ -869,11 +862,11 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 			if logErr != nil {
 				fmt.Printf("Failed to write error log: %v\n", logErr)
 			}
-			return snapshotCreatedMsg{err: err, response: nil}
+			return snapshotCreatedMsg{err: err, response: nil, debugInfo: statusInfo}
 		}
 
 		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactId)
-		return snapshotCreatedMsg{err: nil, response: resp}
+		return snapshotCreatedMsg{err: nil, response: resp, debugInfo: statusInfo}
 	}
 }
 
