@@ -31,10 +31,10 @@ type SimConfigMetadata struct {
 
 // SimConfigService defines a service configuration
 type SimConfigService struct {
-	Type                       string   `json:"type" yaml:"type"`
-	File                       string   `json:"file,omitempty" yaml:"file,omitempty"`
-	RequiredHealthyContainers  []string `json:"required_healthy_containers,omitempty" yaml:"required_healthy_containers,omitempty"`
-	HealthyWaitTimeout         int32    `json:"healthy_wait_timeout,omitempty" yaml:"healthy_wait_timeout,omitempty"`
+	Type                      string   `json:"type" yaml:"type"`
+	File                      string   `json:"file,omitempty" yaml:"file,omitempty"`
+	RequiredHealthyContainers []string `json:"required_healthy_containers,omitempty" yaml:"required_healthy_containers,omitempty"`
+	HealthyWaitTimeout        int32    `json:"healthy_wait_timeout,omitempty" yaml:"healthy_wait_timeout,omitempty"`
 }
 
 // SimConfigListener defines a listener configuration (DB, File, or Proxy)
@@ -63,16 +63,16 @@ type SimConfigListener struct {
 
 // SimConfigDataset defines a complete dataset configuration
 type SimConfigDataset struct {
-	Compute   SimConfigCompute              `json:"compute" yaml:"compute"`
-	Metadata  SimConfigMetadata             `json:"metadata" yaml:"metadata"`
-	Services  map[string]SimConfigService   `json:"services" yaml:"services,omitempty"`
-	Listeners map[string]SimConfigListener  `json:"listeners" yaml:"listeners,omitempty"`
+	Compute   SimConfigCompute             `json:"compute" yaml:"compute"`
+	Metadata  SimConfigMetadata            `json:"metadata" yaml:"metadata"`
+	Services  map[string]SimConfigService  `json:"services" yaml:"services,omitempty"`
+	Listeners map[string]SimConfigListener `json:"listeners" yaml:"listeners,omitempty"`
 }
 
 // PlatoConfig is the root plato-config.yml structure
 type PlatoConfig struct {
-	Service  string                       `json:"service,omitempty" yaml:"service,omitempty"`
-	Datasets map[string]SimConfigDataset  `json:"datasets,omitempty" yaml:"datasets,omitempty"`
+	Service  string                      `json:"service,omitempty" yaml:"service,omitempty"`
+	Datasets map[string]SimConfigDataset `json:"datasets,omitempty" yaml:"datasets,omitempty"`
 }
 
 // Sandbox represents a VM sandbox
@@ -89,9 +89,13 @@ type Sandbox struct {
 
 // CreateSnapshotRequest is a request to create a VM snapshot
 type CreateSnapshotRequest struct {
-	Service string `json:"service,omitempty"`
-	GitHash string `json:"git_hash,omitempty"`
-	Dataset string `json:"dataset,omitempty"`
+	Service         string            `json:"service,omitempty"`
+	GitHash         string            `json:"git_hash,omitempty"`
+	Dataset         string            `json:"dataset,omitempty"`
+	DatasetConfig   *SimConfigDataset `json:"dataset_config,omitempty"`
+	Flows           string            `json:"flows,omitempty"`
+	InternalAppPort *int32            `json:"internal_app_port,omitempty"`
+	MessagingPort   *int32            `json:"messaging_port,omitempty"`
 }
 
 // CreateSnapshotResponse is the response from creating a snapshot
@@ -106,10 +110,10 @@ type CreateSnapshotResponse struct {
 
 // StartWorkerRequest is a request to start the Plato worker
 type StartWorkerRequest struct {
-	Service             string               `json:"service,omitempty"`
-	Dataset             string               `json:"dataset"`
-	PlatoDatasetConfig *SimConfigDataset   `json:"plato_dataset_config"`
-	Timeout             *int32               `json:"timeout,omitempty"`
+	Service            string            `json:"service,omitempty"`
+	Dataset            string            `json:"dataset"`
+	PlatoDatasetConfig *SimConfigDataset `json:"plato_dataset_config"`
+	Timeout            *int32            `json:"timeout,omitempty"`
 }
 
 // StartWorkerResponse is the response from starting the worker

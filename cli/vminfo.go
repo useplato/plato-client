@@ -14,9 +14,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	plato "plato-sdk"
 	"plato-cli/internal/ui/components"
 	"plato-cli/internal/utils"
+	plato "plato-sdk"
 	"plato-sdk/models"
 	"strings"
 	"time"
@@ -808,6 +808,56 @@ func createSnapshotWithCleanup(client *plato.PlatoClient, publicID, jobGroupID, 
 		}
 		if gitHash != nil {
 			req.GitHash = *gitHash
+		}
+
+		// Try to load plato-config.yml and get dataset config
+		if config, err := LoadPlatoConfig(); err == nil {
+			utils.LogDebug("Loaded plato-config.yml successfully")
+
+			// Get the dataset config for the current dataset
+			if datasetConfig, ok := config.Datasets[datasetName]; ok {
+				utils.LogDebug("Found dataset config for: %s", datasetName)
+				req.DatasetConfig = &datasetConfig
+
+				// Extract port information from compute config
+				if datasetConfig.Compute.AppPort > 0 {
+					req.InternalAppPort = &datasetConfig.Compute.AppPort
+					utils.LogDebug("Set internal_app_port: %d", datasetConfig.Compute.AppPort)
+				}
+				if datasetConfig.Compute.PlatoMessagingPort > 0 {
+					req.MessagingPort = &datasetConfig.Compute.PlatoMessagingPort
+					utils.LogDebug("Set messaging_port: %d", datasetConfig.Compute.PlatoMessagingPort)
+				}
+
+				// Check if there's a flow path in the metadata
+				if datasetConfig.Metadata.FlowsPath != "" {
+					utils.LogDebug("Found flows_path: %s", datasetConfig.Metadata.FlowsPath)
+
+					// Get the config directory to resolve relative paths
+					configDir, err := GetPlatoConfigDir()
+					if err != nil {
+						utils.LogDebug("Failed to get config directory: %v", err)
+					} else {
+						// Resolve the flow path relative to the config directory
+						flowPath := filepath.Join(configDir, datasetConfig.Metadata.FlowsPath)
+
+						// Read the flow yaml file
+						flowData, err := os.ReadFile(flowPath)
+						if err != nil {
+							utils.LogDebug("Failed to read flow file at %s: %v", flowPath, err)
+						} else {
+							utils.LogDebug("Successfully read flow file, size: %d bytes", len(flowData))
+							req.Flows = string(flowData)
+						}
+					}
+				} else {
+					utils.LogDebug("No flows_path specified in dataset metadata")
+				}
+			} else {
+				utils.LogDebug("Dataset %s not found in plato-config.yml", datasetName)
+			}
+		} else {
+			utils.LogDebug("Failed to load plato-config.yml: %v", err)
 		}
 
 		utils.LogDebug("Calling CreateSnapshot for: %s (service: %s)", publicID, service)
