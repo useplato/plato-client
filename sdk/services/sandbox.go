@@ -580,6 +580,42 @@ func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, re
 	return &snapshotResp, nil
 }
 
+// CreateCheckpoint creates a checkpoint of a VM
+func (s *SandboxService) CreateCheckpoint(ctx context.Context, publicID string, req *models.CreateSnapshotRequest) (*models.CreateSnapshotResponse, error) {
+	// Prefix dataset with "ckpt-" for checkpoints
+	if req.Dataset != "" {
+		req.Dataset = fmt.Sprintf("ckpt-%s", req.Dataset)
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := s.client.NewRequest(ctx, "POST", fmt.Sprintf("/public-build/vm/%s/checkpoint", publicID), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var checkpointResp models.CreateSnapshotResponse
+	if err := json.NewDecoder(resp.Body).Decode(&checkpointResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &checkpointResp, nil
+}
+
 // StartWorker starts the Plato worker and listeners on a VM
 func (s *SandboxService) StartWorker(ctx context.Context, publicID string, req *models.StartWorkerRequest) (*models.StartWorkerResponse, error) {
 	body, err := json.Marshal(req)

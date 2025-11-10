@@ -116,6 +116,11 @@ type snapshotCreatedMsg struct {
 	debugInfo []string
 }
 
+type checkpointCreatedMsg struct {
+	err      error
+	response *models.CreateSnapshotResponse
+}
+
 type proxytunnelOpenedMsg struct {
 	localPort  int
 	remotePort int
@@ -397,6 +402,22 @@ func (m VMInfoModel) Update(msg tea.Msg) (VMInfoModel, tea.Cmd) {
 			// Clear the last pushed branch and cached clone cmd since it's been merged
 			m.lastPushedBranch = ""
 			m.cachedCloneCmd = ""
+		}
+		// Update viewport content to reflect new status
+		m.viewport.SetContent(m.renderVMInfoMarkdown())
+		return m, nil
+
+	case checkpointCreatedMsg:
+		m.runningCommand = false
+		if msg.err != nil {
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("❌ Checkpoint failed: %v", msg.err))
+		} else if msg.response != nil {
+			m.statusMessages = append(m.statusMessages, "✓ Checkpoint created successfully!")
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Artifact ID: %s", msg.response.ArtifactId))
+			m.statusMessages = append(m.statusMessages, fmt.Sprintf("   Status: %s", msg.response.Status))
+			if msg.response.S3Uri != "" {
+				m.statusMessages = append(m.statusMessages, fmt.Sprintf("   S3 URI: %s", msg.response.S3Uri))
+			}
 		}
 		// Update viewport content to reflect new status
 		m.viewport.SetContent(m.renderVMInfoMarkdown())
@@ -905,6 +926,35 @@ func createSnapshotWithConfig(client *plato.PlatoClient, publicID, jobGroupID, s
 
 		utils.LogDebug("Snapshot created successfully: %s", resp.ArtifactId)
 		return snapshotCreatedMsg{err: nil, response: resp}
+	}
+}
+
+func createCheckpoint(client *plato.PlatoClient, publicID, service string, dataset *string) tea.Cmd {
+	return func() tea.Msg {
+		// Create checkpoint without cleanup or git merge
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		req := models.CreateSnapshotRequest{
+			Service: service,
+		}
+		if dataset != nil {
+			req.Dataset = *dataset
+		}
+
+		utils.LogDebug("Calling CreateCheckpoint for: %s (service: %s)", publicID, service)
+		resp, err := client.Sandbox.CreateCheckpoint(ctx, publicID, &req)
+		if err != nil {
+			utils.LogDebug("CreateCheckpoint failed: %v", err)
+			logErr := logErrorToFile("plato_error.log", fmt.Sprintf("API: CreateCheckpoint failed for %s: %v", publicID, err))
+			if logErr != nil {
+				fmt.Printf("Failed to write error log: %v\n", logErr)
+			}
+			return checkpointCreatedMsg{err: err, response: nil}
+		}
+
+		utils.LogDebug("Checkpoint created successfully: %s", resp.ArtifactId)
+		return checkpointCreatedMsg{err: nil, response: resp}
 	}
 }
 

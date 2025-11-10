@@ -298,6 +298,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, "Setting up root SSH password...")
 			m.vmInfo.runningCommand = true
 			return m, tea.Batch(m.vmInfo.spinner.Tick, setupRootPassword(m.config.client, m.vmInfo.sandbox.PublicId, m.vmInfo.sshPrivateKeyPath, m.vmInfo.sshHost))
+		case "Create Checkpoint":
+			// Load the config to get service
+			config, err := LoadPlatoConfig()
+			if err != nil {
+				errMsg := fmt.Sprintf("❌ Failed to load plato-config.yml: %v", err)
+				m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, errMsg)
+				logErrorToFile("plato_error.log", errMsg)
+				return m, nil
+			}
+
+			// Get service from config
+			service := config.Service
+			if service == "" {
+				errMsg := "❌ Service not specified in plato-config.yml"
+				m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, errMsg)
+				logErrorToFile("plato_error.log", errMsg)
+				return m, nil
+			}
+
+			// Use the current dataset (or nil for default)
+			var dataset *string
+			if m.vmInfo.dataset != "" {
+				dataset = &m.vmInfo.dataset
+			}
+
+			m.vmInfo.statusMessages = append(m.vmInfo.statusMessages, fmt.Sprintf("Creating checkpoint for service: %s...", service))
+			m.vmInfo.runningCommand = true
+			return m, tea.Batch(m.vmInfo.spinner.Tick, createCheckpoint(m.config.client, m.vmInfo.sandbox.PublicId, service, dataset))
 		}
 		return m, nil
 	}
