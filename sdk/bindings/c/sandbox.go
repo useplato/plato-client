@@ -208,6 +208,34 @@ func plato_create_snapshot(clientID *C.char, publicID *C.char, requestJSON *C.ch
 	return C.CString(string(result))
 }
 
+//export plato_create_checkpoint
+func plato_create_checkpoint(clientID *C.char, publicID *C.char, requestJSON *C.char) *C.char {
+	client, ok := clients[C.GoString(clientID)]
+	if !ok {
+		return C.CString(`{"error": "invalid client ID"}`)
+	}
+
+	var req models.CreateSnapshotRequest
+	if err := json.Unmarshal([]byte(C.GoString(requestJSON)), &req); err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to parse request: %v"}`, err))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := client.Sandbox.CreateCheckpoint(ctx, C.GoString(publicID), &req)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "%v"}`, err))
+	}
+
+	result, err := json.Marshal(resp)
+	if err != nil {
+		return C.CString(fmt.Sprintf(`{"error": "failed to marshal result: %v"}`, err))
+	}
+
+	return C.CString(string(result))
+}
+
 //export plato_create_snapshot_with_cleanup
 func plato_create_snapshot_with_cleanup(clientID *C.char, publicID *C.char, jobGroupID *C.char, requestJSON *C.char, dbConfigJSON *C.char) *C.char {
 	client, ok := clients[C.GoString(clientID)]

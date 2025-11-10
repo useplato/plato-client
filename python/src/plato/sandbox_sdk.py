@@ -95,6 +95,9 @@ def _get_lib():
         _lib.plato_create_snapshot.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         _lib.plato_create_snapshot.restype = ctypes.c_void_p
 
+        _lib.plato_create_checkpoint.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+        _lib.plato_create_checkpoint.restype = ctypes.c_void_p
+
         _lib.plato_create_snapshot_with_cleanup.argtypes = [
             ctypes.c_char_p,  # clientID
             ctypes.c_char_p,  # publicID
@@ -425,6 +428,49 @@ class PlatoSandboxClient:
 
         if 'error' in response:
             raise RuntimeError(f"Failed to create snapshot: {response['error']}")
+
+        return CreateSnapshotResponse(**response)
+
+    def create_checkpoint(
+        self,
+        public_id: str,
+        request: CreateSnapshotRequest
+    ) -> CreateSnapshotResponse:
+        """
+        Create a checkpoint of a sandbox
+
+        Args:
+            public_id: Public ID of the sandbox
+            request: Checkpoint request (CreateSnapshotRequest or dict) with 'service', 'dataset', optional 'git_hash'
+
+        Returns:
+            CreateSnapshotResponse with artifact_id, s3_uri, status, etc.
+
+        Raises:
+            RuntimeError: If checkpoint creation fails
+
+        Example:
+            >>> request = CreateSnapshotRequest(service="web", dataset="base")
+            >>> checkpoint = client.create_checkpoint(sandbox.public_id, request)
+            >>> print(checkpoint.artifact_id)
+        """
+        # Convert to dict if Pydantic model
+        # Use mode='json' to properly serialize enums to their values
+        request_dict = request.model_dump(mode='json', exclude_none=True)
+        request_json = json.dumps(request_dict)
+
+        lib = _get_lib()
+        result_ptr = lib.plato_create_checkpoint(
+            self._client_id.encode('utf-8'),
+            public_id.encode('utf-8'),
+            request_json.encode('utf-8')
+        )
+
+        result_str = _call_and_free(lib, result_ptr)
+        response = json.loads(result_str)
+
+        if 'error' in response:
+            raise RuntimeError(f"Failed to create checkpoint: {response['error']}")
 
         return CreateSnapshotResponse(**response)
 
