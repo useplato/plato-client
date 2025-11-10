@@ -582,6 +582,11 @@ func (s *SandboxService) CreateSnapshot(ctx context.Context, publicID string, re
 
 // CreateCheckpoint creates a checkpoint of a VM
 func (s *SandboxService) CreateCheckpoint(ctx context.Context, publicID string, req *models.CreateSnapshotRequest) (*models.CreateSnapshotResponse, error) {
+	// Prefix dataset with "ckpt-" for checkpoints
+	if req.Dataset != "" {
+		req.Dataset = fmt.Sprintf("ckpt-%s", req.Dataset)
+	}
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
