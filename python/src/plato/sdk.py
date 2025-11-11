@@ -288,6 +288,7 @@ class Plato:
         job_id: str,
         task: Optional[PlatoTask] = None,
         agent_version: Optional[str] = None,
+        model: Optional[str] = None,
         load_authenticated: bool = False,
         **kwargs,
     ) -> Dict[str, Any]:
@@ -309,6 +310,7 @@ class Plato:
         body = {
             "test_case_public_id": task.public_id if task else None,
             "agent_version": agent_version,
+            "model": model,
             "load_browser_state": load_authenticated,
             **kwargs,
         }

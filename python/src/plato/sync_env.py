@@ -257,6 +257,7 @@ class SyncPlatoEnvironment:
         self,
         task: Optional[PlatoTask] = None,
         agent_version: Optional[str] = None,
+        model: Optional[str] = None,
         load_authenticated: bool = False,
         **kwargs,
     ) -> str:
@@ -271,7 +272,7 @@ class SyncPlatoEnvironment:
             str: The environment is reset and a new run session is created.
         """
         response = self._client.reset_environment(
-            self.id, task, agent_version, load_authenticated, **kwargs
+            self.id, task, agent_version, model, load_authenticated, **kwargs
         )
         if task:
             self._current_task = task

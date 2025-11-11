@@ -260,6 +260,7 @@ class SyncPlato:
         job_id: str,
         task: Optional[PlatoTask] = None,
         agent_version: Optional[str] = None,
+        model: Optional[str] = None,
         load_authenticated: bool = False,
         **kwargs,
     ) -> Dict[str, Any]:
@@ -269,6 +270,7 @@ class SyncPlato:
             job_id (str): The ID of the job to reset.
             task (Optional[PlatoTask]): Optional new task for the environment.
             agent_version (Optional[str]): Optional agent version.
+            model (Optional[str]): Optional model.
             load_authenticated (bool): Whether to load authenticated browser state.
 
         Returns:
@@ -280,6 +282,7 @@ class SyncPlato:
         body = {
             "test_case_public_id": task.public_id if task else None,
             "agent_version": agent_version,
+            "model": model,
             "load_browser_state": load_authenticated,
             **kwargs,
         }
