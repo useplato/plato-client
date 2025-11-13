@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 from plato.config import get_config
 from plato.models import PlatoTask, PlatoTaskMetadata
@@ -674,7 +675,6 @@ class SyncPlato:
         """
         from plato.sync_flow_executor import SyncFlowExecutor
         from plato.models.flow import Flow
-        from pathlib import Path
 
         try:
             flows_data = self.get_simulator_flows(artifact_id)
