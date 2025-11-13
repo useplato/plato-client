@@ -226,9 +226,9 @@ class Plato:
             f"{self.base_url}/env/{job_id}/cdp_url", headers=headers
         ) as response:
             data = await response.json()
-            if data["error"] is not None:
-                raise PlatoClientError(data["error"])
-            return data["data"]["cdp_url"]
+            if data.get("error") is not None:
+                raise PlatoClientError(data.get("error"))
+            return data.get("data", {}).get("cdp_url")
 
     async def get_proxy_url(self, job_id: str) -> str:
         """Get the proxy URL for a job.
@@ -863,7 +863,6 @@ class Plato:
         """
         from plato.flow_executor import FlowExecutor
         from plato.models.flow import Flow
-        from pathlib import Path
 
         try:
             flows_data = await self.get_simulator_flows(artifact_id)
