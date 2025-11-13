@@ -4,6 +4,20 @@
 
 The  Go library provides convenient access to the  APIs from Go.
 
+## Table of Contents
+
+- [Reference](#reference)
+- [Usage](#usage)
+- [Environments](#environments)
+- [Errors](#errors)
+- [Request Options](#request-options)
+- [Advanced](#advanced)
+  - [Response Headers](#response-headers)
+  - [Retries](#retries)
+  - [Timeouts](#timeouts)
+  - [Explicit Null](#explicit-null)
+- [Contributing](#contributing)
+
 ## Reference
 
 A full reference for this library is available [here](./reference.md).
@@ -92,112 +106,6 @@ response, err := client.MakeEnvironment(
 ```
 
 ## Advanced
-
-### SSE Monitoring Helper Methods
-
-The SDK provides convenient helper methods for monitoring long-running operations via Server-Sent Events (SSE). These methods wrap the low-level `MonitorOperation` stream with simpler, more convenient APIs.
-
-#### MonitorOperationSync
-
-Monitor an operation synchronously and wait for completion:
-
-```go
-import (
-    "context"
-    "time"
-    client "sdk/client"
-    option "sdk/option"
-)
-
-func monitorOperation() error {
-    c := client.NewClient(
-        option.WithBaseURL("https://api.plato.so"),
-        option.WithAPIKey("your-api-key"),
-    )
-
-    // Monitor operation with 10 minute timeout
-    ctx := context.Background()
-    err := c.MonitorOperationSync(ctx, "correlation-id-123", 10*time.Minute)
-    if err != nil {
-        return fmt.Errorf("operation failed: %w", err)
-    }
-
-    fmt.Println("Operation completed successfully!")
-    return nil
-}
-```
-
-#### MonitorOperationWithEvents
-
-Monitor an operation with real-time event updates:
-
-```go
-func monitorWithEvents() error {
-    c := client.NewClient(
-        option.WithBaseURL("https://api.plato.so"),
-        option.WithAPIKey("your-api-key"),
-    )
-
-    // Create channel for receiving events
-    eventChan := make(chan string, 10)
-
-    // Start goroutine to print events as they arrive
-    go func() {
-        for msg := range eventChan {
-            fmt.Println("Event:", msg)
-        }
-    }()
-
-    // Monitor operation with real-time events
-    ctx := context.Background()
-    err := c.MonitorOperationWithEvents(ctx, "correlation-id-123", 10*time.Minute, eventChan)
-    close(eventChan)
-
-    if err != nil {
-        return fmt.Errorf("operation failed: %w", err)
-    }
-
-    return nil
-}
-```
-
-#### Low-level Stream Access
-
-If you need more control, you can use the low-level `MonitorOperation` method directly:
-
-```go
-stream, err := client.MonitorOperation(ctx, correlationID)
-if err != nil {
-    return err
-}
-defer stream.Close()
-
-for {
-    event, err := stream.Recv()
-    if err == io.EOF {
-        break
-    }
-    if err != nil {
-        return err
-    }
-
-    // Handle event based on type
-    switch event.Type {
-    case sdk.OperationEventTypeConnected:
-        // Connection established
-    case sdk.OperationEventTypeProgress:
-        // Progress update
-    case sdk.OperationEventTypeRunResult, sdk.OperationEventTypeSshResult:
-        // Operation completed
-        if event.Success != nil && *event.Success {
-            return nil
-        }
-    case sdk.OperationEventTypeError:
-        // Error occurred
-        return fmt.Errorf("operation error: %s", *event.Error)
-    }
-}
-```
 
 ### Response Headers
 

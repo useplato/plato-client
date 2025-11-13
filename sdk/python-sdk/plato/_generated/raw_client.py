@@ -1176,18 +1176,6 @@ class RawApi:
         HttpResponse[CreateSandboxResponse]
             Sandbox creation initiated successfully
         """
-        input_json = {
-                "dataset": dataset,
-                "plato_dataset_config": convert_and_respect_annotation_metadata(
-                    object_=plato_dataset_config, annotation=SimConfigDataset, direction="write"
-                ),
-                "timeout": timeout,
-                "wait_time": wait_time,
-                "alias": alias,
-                "artifact_id": artifact_id,
-                "service": service,
-            }
-        print(f"input_json: {input_json}")
         _response = self._client_wrapper.httpx_client.request(
             "public-build/vm/create",
             method="POST",

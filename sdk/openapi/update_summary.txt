@@ -1,0 +1,188 @@
+=== Paths Summary ===
+
+Total paths: 67
+Existing in plato.yaml: 13
+New to add: 54
+
+=== Paths by Category ===
+
+
+/env (28 paths):
+  /env/admin/clear-handler-cache (NEW)
+  /env/generate_mutations (NEW)
+  /env/generate_mutations_single (NEW)
+  /env/job/{job_id} (NEW)
+  /env/job/{job_public_id}/worker_info (NEW)
+  /env/make2 (EXISTS)
+  /env/session/{session_id}/evaluate (EXISTS)
+  /env/session/{session_id}/score (EXISTS)
+  /env/simulators (EXISTS)
+  /env/simulators/{id} (NEW)
+  /env/simulators/{name} (NEW)
+  /env/simulators/{simulator_id}/rescore (NEW)
+  /env/{job_group_id}/active_session (NEW)
+  /env/{job_group_id}/app_sim_worker_info (NEW)
+  /env/{job_group_id}/backup (NEW)
+  /env/{job_group_id}/cdp_url (NEW)
+  /env/{job_group_id}/close (NEW)
+  /env/{job_group_id}/close_async (NEW)
+  /env/{job_group_id}/flows (NEW)
+  /env/{job_group_id}/proxy_url (NEW)
+  /env/{job_group_id}/public_url (NEW)
+  /env/{job_group_id}/reset (NEW)
+  /env/{job_group_id}/state (NEW)
+  /env/{job_group_id}/status (NEW)
+  /env/{job_id}/heartbeat (EXISTS)
+  /env/{job_id}/interface_worker_info (NEW)
+  /env/{job_id}/worker_ready (EXISTS)
+  /env/{session_id}/log (EXISTS)
+
+/public-build (10 paths):
+  /public-build/events/{correlation_id} (EXISTS)
+  /public-build/vm/create (EXISTS)
+  /public-build/vm/{public_id} (EXISTS)
+  /public-build/vm/{public_id}/checkpoint (NEW)
+  /public-build/vm/{public_id}/healthy-services (NEW)
+  /public-build/vm/{public_id}/healthy-worker (NEW)
+  /public-build/vm/{public_id}/setup-root-access (EXISTS)
+  /public-build/vm/{public_id}/setup-sandbox (NEW)
+  /public-build/vm/{public_id}/snapshot (EXISTS)
+  /public-build/vm/{public_id}/start-worker (EXISTS)
+
+/simulator (17 paths):
+  /simulator/artifacts/batch-metadata (NEW)
+  /simulator/get-version-by-tag (NEW)
+  /simulator/info (NEW)
+  /simulator/list (NEW)
+  /simulator/list-by-org (NEW)
+  /simulator/list-status (NEW)
+  /simulator/sessions/batch-by-job-groups (NEW)
+  /simulator/sessions/by-job-group/{job_group_id} (NEW)
+  /simulator/start-path (NEW)
+  /simulator/test-cases/batch-create (NEW)
+  /simulator/update-tag (NEW)
+  /simulator/{artifact_id}/db_config (NEW)
+  /simulator/{artifact_id}/flows (NEW)
+  /simulator/{simulator_name}/register (NEW)
+  /simulator/{simulator_name}/versions (NEW)
+  /simulator/{simulator_name}/{dataset}/info (NEW)
+  /simulator/{simulator_name}/{dataset}/version/{version} (NEW)
+
+/gitea (12 paths):
+  /gitea/credentials (NEW)
+  /gitea/my-info (NEW)
+  /gitea/my-repositories (NEW)
+  /gitea/repositories (NEW)
+  /gitea/repositories/{owner}/{repo} (NEW)
+  /gitea/repositories/{owner}/{repo}/branches (NEW)
+  /gitea/repositories/{owner}/{repo}/contents (NEW)
+  /gitea/simulators (NEW)
+  /gitea/simulators/{simulator_id}/repo (NEW)
+  /gitea/simulators/{simulator_id}/repo/branches (NEW)
+  /gitea/simulators/{simulator_id}/repo/contents (NEW)
+  /gitea/simulators/{simulator_id}/repo/file-content (NEW)
+
+
+=== New Paths to Add ===
+
+/env/admin/clear-handler-cache
+/env/generate_mutations
+/env/generate_mutations_single
+/env/job/{job_id}
+/env/job/{job_public_id}/worker_info
+/env/simulators/{id}
+/env/simulators/{name}
+/env/simulators/{simulator_id}/rescore
+/env/{job_group_id}/active_session
+/env/{job_group_id}/app_sim_worker_info
+/env/{job_group_id}/backup
+/env/{job_group_id}/cdp_url
+/env/{job_group_id}/close
+/env/{job_group_id}/close_async
+/env/{job_group_id}/flows
+/env/{job_group_id}/proxy_url
+/env/{job_group_id}/public_url
+/env/{job_group_id}/reset
+/env/{job_group_id}/state
+/env/{job_group_id}/status
+/env/{job_id}/interface_worker_info
+/gitea/credentials
+/gitea/my-info
+/gitea/my-repositories
+/gitea/repositories
+/gitea/repositories/{owner}/{repo}
+/gitea/repositories/{owner}/{repo}/branches
+/gitea/repositories/{owner}/{repo}/contents
+/gitea/simulators
+/gitea/simulators/{simulator_id}/repo
+/gitea/simulators/{simulator_id}/repo/branches
+/gitea/simulators/{simulator_id}/repo/contents
+/gitea/simulators/{simulator_id}/repo/file-content
+/public-build/vm/{public_id}/checkpoint
+/public-build/vm/{public_id}/healthy-services
+/public-build/vm/{public_id}/healthy-worker
+/public-build/vm/{public_id}/setup-sandbox
+/simulator/artifacts/batch-metadata
+/simulator/get-version-by-tag
+/simulator/info
+/simulator/list
+/simulator/list-by-org
+/simulator/list-status
+/simulator/sessions/batch-by-job-groups
+/simulator/sessions/by-job-group/{job_group_id}
+/simulator/start-path
+/simulator/test-cases/batch-create
+/simulator/update-tag
+/simulator/{artifact_id}/db_config
+/simulator/{artifact_id}/flows
+/simulator/{simulator_name}/register
+/simulator/{simulator_name}/versions
+/simulator/{simulator_name}/{dataset}/info
+/simulator/{simulator_name}/{dataset}/version/{version}
+
+
+=== Schemas (43) ===
+
+BaseStructuredRunLog
+BatchArtifactMetadataRequest
+BatchArtifactMetadataResponse
+BatchCreateTestCasesRequest
+BatchCreateTestCasesResponse
+BatchLogRequest
+BatchSessionsResponse
+CreateRepoRequest
+CreateSimulatorRequest
+CreateSnapshotRequest
+CreateSnapshotResponse
+CreateVMRequest
+CreateVMResponse
+DbConfigResponse
+EvaluateRequest
+GenerateMutationsRequest
+GenerateMutationsSingleRequest
+GetVersionByTagRequest
+GetVersionByTagResponse
+HTTPValidationError
+JobStatusResponse
+MakeEnvRequest2
+RegisterResponse
+ResetEnvRequest
+ScoreRequest
+SessionListResponse
+SetupRootPasswordRequest
+SetupSandboxRequest
+SetupSandboxResponse
+SimulatorInfoResponse
+SimulatorListItem
+SimulatorStatus
+SimulatorVersionDetails
+SimulatorVersionsResponse
+StartPathRequest
+StartPathResponse
+UpdateSimulatorRequest
+UpdateTagRequest
+UpdateTagResponse
+VMManagementRequest
+VMManagementResponse
+WorkerReadyResponse
+app__api__simulator_routes__RegisterRequest
