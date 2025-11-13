@@ -48,6 +48,14 @@ next-env.d.ts
 
 venv
 
+# Python testing and coverage
+.coverage
+.coveragerc
+coverage.xml
+htmlcov/
+.pytest_cache/
+test_output.txt
+
 
 markdown.md
 
