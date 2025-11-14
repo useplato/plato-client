@@ -1,13 +1,18 @@
 """
-Convert openapi.json to yaml, filtering for only SDK-relevant routes.
+Generate TypeScript SDK from OpenAPI spec with improved function names.
 
 This script:
 1. Reads the openapi.json file
 2. Filters paths to only include routes used in Python/Go SDKs
 3. Improves operationIds to be more user-friendly for SDK function names
 4. Extracts all referenced schemas and their dependencies
-5. Converts to YAML format
-6. Outputs as plato.yaml
+5. Converts to YAML format (outputs as plato.yaml)
+6. Optionally regenerates the TypeScript SDK using Docker
+7. Optionally builds the TypeScript SDK with npm
+
+Usage:
+    cd sdk/openapi
+    python generate_sdk.py
 """
 
 import json
@@ -81,15 +86,14 @@ OPERATION_ID_MAPPINGS = {
     'get_active_session_api_env__job_group_id__active_session_get': 'getActiveSession',
     'score_session_api_env_session__session_id__score_post': 'scoreSession',
     'log_api_env__session_id__log_post': 'logToEnvironment',
-    'heartbeat_api_env__job_id__heartbeat_post': 'sendHeartbeat',
+    'send_heartbeat_api_env__job_id__heartbeat_post': 'sendHeartbeat',
     'get_simulators_api_env_simulators_get': 'getSimulators',
     'create_simulator_api_env_simulators_post': 'createSimulator',
     
     # VM/Public Build Operations
     'create_vm_api_public_build_vm_create_post': 'createVM',
     'keep_vm_alive_api_public_build_vm__public_id__keep_alive_post': 'keepVMAlive',
-    'close_vm_api_public_build_vm__public_id__close_post': 'closeVM',
-    'delete_vm_api_public_build_vm__public_id__delete': 'deleteVM',
+    'close_vm_api_public_build_vm__public_id__delete': 'closeVM',
     'setup_sandbox_api_public_build_vm__public_id__setup_sandbox_post': 'setupSandbox',
     'setup_root_password_api_public_build_vm__public_id__setup_root_access_post': 'setupRootPassword',
     'get_operation_events_api_public_build_events__correlation_id__get': 'getOperationEvents',
@@ -99,9 +103,9 @@ OPERATION_ID_MAPPINGS = {
     'start_worker_api_public_build_vm__public_id__start_worker_post': 'startWorker',
     
     # Simulator Operations  
-    'get_simulator_flows_api_simulator__artifact_id__flows_get': 'getSimulatorFlows',
+    'get_env_flows_api_simulator__artifact_id__flows_get': 'getSimulatorFlows',
+    'get_db_config_api_simulator__artifact_id__db_config_get': 'getSimulatorDbConfig',
     'get_simulator_versions_api_simulator__simulator_name__versions_get': 'getSimulatorVersions',
-    'get_simulator_db_config_api_simulator__artifact_id__db_config_get': 'getSimulatorDbConfig',
     
     # Gitea Operations
     'get_gitea_my_info_api_gitea_my_info_get': 'getGiteaMyInfo',
@@ -329,6 +333,9 @@ def fix_sse_endpoint(path_spec):
 
 
 def main():
+    import subprocess
+    import os
+    
     print("🔄 Converting openapi.json to plato.yaml...")
     
     # Read openapi.json
@@ -477,7 +484,107 @@ def main():
     print(f"   Paths: {len(clean_paths)}")
     print(f"   Methods: {sum(len(m) for m in clean_paths.values())}")
     print(f"   Schemas: {len(filtered_schemas)}")
-    print(f"\n✨ Done!")
+    
+    # Ask user if they want to regenerate the TypeScript SDK
+    print("\n" + "="*80)
+    print("🤔 Do you want to regenerate the TypeScript SDK now? (y/n)")
+    response = input().strip().lower()
+    
+    if response in ['y', 'yes']:
+        print("\n🚀 Regenerating TypeScript SDK...")
+        print("="*80)
+        
+        # Get the sdk directory (parent of openapi directory)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        sdk_dir = os.path.dirname(script_dir)
+        
+        # Docker command to regenerate SDK
+        docker_cmd = [
+            'docker', 'run', '--rm',
+            '-v', f'{script_dir}:/spec',
+            '-v', f'{sdk_dir}/typescript-sdk:/output',
+            'openapitools/openapi-generator-cli:latest', 'generate',
+            '-i', '/spec/plato.yaml',
+            '-g', 'typescript-fetch',
+            '-o', '/output',
+            '--additional-properties=npmName=@plato-ai/sdk,supportsES6=true,typescriptThreePlus=true'
+        ]
+        
+        print(f"Running: {' '.join(docker_cmd[:3])} ... generate ...")
+        
+        try:
+            result = subprocess.run(docker_cmd, check=True, capture_output=True, text=True)
+            print(result.stdout)
+            print("\n✅ TypeScript SDK regenerated successfully!")
+            
+            # Ask if they want to build the SDK
+            print("\n🤔 Do you want to build the TypeScript SDK now? (y/n)")
+            build_response = input().strip().lower()
+            
+            if build_response in ['y', 'yes']:
+                print("\n📦 Building TypeScript SDK...")
+                print("="*80)
+                
+                ts_sdk_dir = os.path.join(sdk_dir, 'typescript-sdk')
+                
+                # Run npm install
+                print("Running: npm install")
+                install_result = subprocess.run(
+                    ['npm', 'install'],
+                    cwd=ts_sdk_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                print("✅ Dependencies installed")
+                
+                # Run npm build
+                print("Running: npm run build")
+                build_result = subprocess.run(
+                    ['npm', 'run', 'build'],
+                    cwd=ts_sdk_dir,
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                print(build_result.stdout)
+                print("\n✅ TypeScript SDK built successfully!")
+                print(f"\n🎉 All done! SDK is ready at: {ts_sdk_dir}")
+            else:
+                print("\n💡 To build manually, run:")
+                print(f"   cd {sdk_dir}/typescript-sdk")
+                print("   npm install")
+                print("   npm run build")
+                
+        except subprocess.CalledProcessError as e:
+            print(f"\n❌ Error during SDK regeneration: {e}")
+            print(e.stderr)
+            sys.exit(1)
+        except FileNotFoundError:
+            print("\n❌ Error: Docker not found. Please install Docker to regenerate the SDK.")
+            print("\n💡 Or run manually:")
+            print("   cd sdk")
+            print("   docker run --rm \\")
+            print("     -v \"${PWD}/openapi:/spec\" \\")
+            print("     -v \"${PWD}/typescript-sdk:/output\" \\")
+            print("     openapitools/openapi-generator-cli:latest generate \\")
+            print("     -i /spec/plato.yaml \\")
+            print("     -g typescript-fetch \\")
+            print("     -o /output \\")
+            print("     --additional-properties=npmName=@plato-ai/sdk,supportsES6=true,typescriptThreePlus=true")
+    else:
+        print("\n💡 To regenerate the SDK manually later, run:")
+        print("   cd sdk")
+        print("   docker run --rm \\")
+        print("     -v \"${PWD}/openapi:/spec\" \\")
+        print("     -v \"${PWD}/typescript-sdk:/output\" \\")
+        print("     openapitools/openapi-generator-cli:latest generate \\")
+        print("     -i /spec/plato.yaml \\")
+        print("     -g typescript-fetch \\")
+        print("     -o /output \\")
+        print("     --additional-properties=npmName=@plato-ai/sdk,supportsES6=true,typescriptThreePlus=true")
+    
+    print("\n✨ Done!")
 
 
 if __name__ == '__main__':

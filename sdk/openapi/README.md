@@ -6,7 +6,7 @@ This directory contains scripts and configurations for managing the Plato API Op
 
 - **`openapi.json`** - Full OpenAPI spec exported from FastAPI backend
 - **`plato.yaml`** - Filtered SDK-only spec in YAML format (generated)
-- **`convert_openapi_to_yaml.py`** - Main conversion script
+- **`generate_sdk.py`** - Main SDK generation script
 
 ## Workflow
 
@@ -29,7 +29,7 @@ Run the conversion script to:
 
 ```bash
 cd sdk/openapi
-python convert_openapi_to_yaml.py
+python generate_sdk.py
 ```
 
 This will create `plato.yaml` with improved operation IDs like:
@@ -64,7 +64,7 @@ npm run build
 
 ## Customizing Operation IDs
 
-To add or modify SDK function names, edit the `OPERATION_ID_MAPPINGS` dictionary in `convert_openapi_to_yaml.py`:
+To add or modify SDK function names, edit the `OPERATION_ID_MAPPINGS` dictionary in `generate_sdk.py`:
 
 ```python
 OPERATION_ID_MAPPINGS = {

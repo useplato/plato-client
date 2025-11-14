@@ -37,3 +37,4 @@ package.json
 
 # Flow executor module - browser automation with Playwright
 src/flow/**
+src/index.ts

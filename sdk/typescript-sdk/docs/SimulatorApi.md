@@ -4,15 +4,15 @@ All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**getDbConfigApiSimulatorArtifactIdDbConfigGet**](SimulatorApi.md#getdbconfigapisimulatorartifactiddbconfigget) | **GET** /simulator/{artifact_id}/db_config | Get Db Config |
-| [**getEnvFlowsApiSimulatorArtifactIdFlowsGet**](SimulatorApi.md#getenvflowsapisimulatorartifactidflowsget) | **GET** /simulator/{artifact_id}/flows | Get Env Flows |
-| [**getSimulatorVersionsApiSimulatorSimulatorNameVersionsGet**](SimulatorApi.md#getsimulatorversionsapisimulatorsimulatornameversionsget) | **GET** /simulator/{simulator_name}/versions | Get Simulator Versions |
+| [**getSimulatorDbConfig**](SimulatorApi.md#getsimulatordbconfig) | **GET** /simulator/{artifact_id}/db_config | Get Db Config |
+| [**getSimulatorFlows**](SimulatorApi.md#getsimulatorflows) | **GET** /simulator/{artifact_id}/flows | Get Env Flows |
+| [**getSimulatorVersions**](SimulatorApi.md#getsimulatorversions) | **GET** /simulator/{simulator_name}/versions | Get Simulator Versions |
 
 
 
-## getDbConfigApiSimulatorArtifactIdDbConfigGet
+## getSimulatorDbConfig
 
-> DbConfigResponse getDbConfigApiSimulatorArtifactIdDbConfigGet(artifactId, authorization, xInternalService)
+> DbConfigResponse getSimulatorDbConfig(artifactId, authorization, xInternalService)
 
 Get Db Config
 
@@ -25,7 +25,7 @@ import {
   Configuration,
   SimulatorApi,
 } from '@plato-ai/sdk';
-import type { GetDbConfigApiSimulatorArtifactIdDbConfigGetRequest } from '@plato-ai/sdk';
+import type { GetSimulatorDbConfigRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -42,10 +42,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetDbConfigApiSimulatorArtifactIdDbConfigGetRequest;
+  } satisfies GetSimulatorDbConfigRequest;
 
   try {
-    const data = await api.getDbConfigApiSimulatorArtifactIdDbConfigGet(body);
+    const data = await api.getSimulatorDbConfig(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -88,9 +88,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getEnvFlowsApiSimulatorArtifactIdFlowsGet
+## getSimulatorFlows
 
-> any getEnvFlowsApiSimulatorArtifactIdFlowsGet(artifactId, authorization, xInternalService)
+> any getSimulatorFlows(artifactId, authorization, xInternalService)
 
 Get Env Flows
 
@@ -101,7 +101,7 @@ import {
   Configuration,
   SimulatorApi,
 } from '@plato-ai/sdk';
-import type { GetEnvFlowsApiSimulatorArtifactIdFlowsGetRequest } from '@plato-ai/sdk';
+import type { GetSimulatorFlowsRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -118,10 +118,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetEnvFlowsApiSimulatorArtifactIdFlowsGetRequest;
+  } satisfies GetSimulatorFlowsRequest;
 
   try {
-    const data = await api.getEnvFlowsApiSimulatorArtifactIdFlowsGet(body);
+    const data = await api.getSimulatorFlows(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -164,9 +164,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getSimulatorVersionsApiSimulatorSimulatorNameVersionsGet
+## getSimulatorVersions
 
-> SimulatorVersionsResponse getSimulatorVersionsApiSimulatorSimulatorNameVersionsGet(simulatorName, includeCheckpoints, authorization, xInternalService)
+> SimulatorVersionsResponse getSimulatorVersions(simulatorName, includeCheckpoints, authorization, xInternalService)
 
 Get Simulator Versions
 
@@ -179,7 +179,7 @@ import {
   Configuration,
   SimulatorApi,
 } from '@plato-ai/sdk';
-import type { GetSimulatorVersionsApiSimulatorSimulatorNameVersionsGetRequest } from '@plato-ai/sdk';
+import type { GetSimulatorVersionsRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -198,10 +198,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetSimulatorVersionsApiSimulatorSimulatorNameVersionsGetRequest;
+  } satisfies GetSimulatorVersionsRequest;
 
   try {
-    const data = await api.getSimulatorVersionsApiSimulatorSimulatorNameVersionsGet(body);
+    const data = await api.getSimulatorVersions(body);
     console.log(data);
   } catch (error) {
     console.error(error);

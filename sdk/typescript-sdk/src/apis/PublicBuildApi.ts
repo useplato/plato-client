@@ -19,7 +19,7 @@ import type {
   CreateSnapshotResponse,
   CreateVMRequest,
   CreateVMResponse,
-  GetOperationEventsApiPublicBuildEventsCorrelationIdGet200Response,
+  GetOperationEvents200Response,
   HTTPValidationError,
   SetupRootPasswordRequest,
   SetupSandboxRequest,
@@ -36,8 +36,8 @@ import {
     CreateVMRequestToJSON,
     CreateVMResponseFromJSON,
     CreateVMResponseToJSON,
-    GetOperationEventsApiPublicBuildEventsCorrelationIdGet200ResponseFromJSON,
-    GetOperationEventsApiPublicBuildEventsCorrelationIdGet200ResponseToJSON,
+    GetOperationEvents200ResponseFromJSON,
+    GetOperationEvents200ResponseToJSON,
     HTTPValidationErrorFromJSON,
     HTTPValidationErrorToJSON,
     SetupRootPasswordRequestFromJSON,
@@ -52,20 +52,20 @@ import {
     VMManagementResponseToJSON,
 } from '../models/index';
 
-export interface CheckpointVmApiPublicBuildVmPublicIdCheckpointPostRequest {
+export interface CheckpointVMRequest {
     publicId: string;
     createSnapshotRequest?: CreateSnapshotRequest;
 }
 
-export interface CloseVmApiPublicBuildVmPublicIdDeleteRequest {
+export interface CloseVMRequest {
     publicId: string;
 }
 
-export interface CreateVmApiPublicBuildVmCreatePostRequest {
+export interface CreateVMOperationRequest {
     createVMRequest: CreateVMRequest;
 }
 
-export interface GetOperationEventsApiPublicBuildEventsCorrelationIdGetRequest {
+export interface GetOperationEventsRequest {
     correlationId: string;
 }
 
@@ -79,12 +79,12 @@ export interface SetupRootAccessApiPublicBuildVmPublicIdSetupRootAccessPostReque
     setupRootPasswordRequest: SetupRootPasswordRequest;
 }
 
-export interface SetupSandboxApiPublicBuildVmPublicIdSetupSandboxPostRequest {
+export interface SetupSandboxOperationRequest {
     publicId: string;
     setupSandboxRequest: SetupSandboxRequest;
 }
 
-export interface StartWorkerApiPublicBuildVmPublicIdStartWorkerPostRequest {
+export interface StartWorkerRequest {
     publicId: string;
     vMManagementRequest: VMManagementRequest;
 }
@@ -98,11 +98,11 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Create a checkpoint snapshot of a VM.  This creates a blockdiff_checkpoint artifact type instead of a regular blockdiff. Optional parameters allow overriding artifact labels: - service: Simulator name (defaults to job\'s service) - git_hash: Git hash/version (defaults to job\'s version or \"unknown\") - dataset: Dataset name (defaults to job\'s dataset) 
      * Checkpoint Vm
      */
-    async checkpointVmApiPublicBuildVmPublicIdCheckpointPostRaw(requestParameters: CheckpointVmApiPublicBuildVmPublicIdCheckpointPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateSnapshotResponse>> {
+    async checkpointVMRaw(requestParameters: CheckpointVMRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateSnapshotResponse>> {
         if (requestParameters['publicId'] == null) {
             throw new runtime.RequiredError(
                 'publicId',
-                'Required parameter "publicId" was null or undefined when calling checkpointVmApiPublicBuildVmPublicIdCheckpointPost().'
+                'Required parameter "publicId" was null or undefined when calling checkpointVM().'
             );
         }
 
@@ -135,8 +135,8 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Create a checkpoint snapshot of a VM.  This creates a blockdiff_checkpoint artifact type instead of a regular blockdiff. Optional parameters allow overriding artifact labels: - service: Simulator name (defaults to job\'s service) - git_hash: Git hash/version (defaults to job\'s version or \"unknown\") - dataset: Dataset name (defaults to job\'s dataset) 
      * Checkpoint Vm
      */
-    async checkpointVmApiPublicBuildVmPublicIdCheckpointPost(requestParameters: CheckpointVmApiPublicBuildVmPublicIdCheckpointPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CreateSnapshotResponse> {
-        const response = await this.checkpointVmApiPublicBuildVmPublicIdCheckpointPostRaw(requestParameters, initOverrides);
+    async checkpointVM(requestParameters: CheckpointVMRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CreateSnapshotResponse> {
+        const response = await this.checkpointVMRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -144,11 +144,11 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Close and terminate a VM.
      * Close Vm
      */
-    async closeVmApiPublicBuildVmPublicIdDeleteRaw(requestParameters: CloseVmApiPublicBuildVmPublicIdDeleteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<VMManagementResponse>> {
+    async closeVMRaw(requestParameters: CloseVMRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<VMManagementResponse>> {
         if (requestParameters['publicId'] == null) {
             throw new runtime.RequiredError(
                 'publicId',
-                'Required parameter "publicId" was null or undefined when calling closeVmApiPublicBuildVmPublicIdDelete().'
+                'Required parameter "publicId" was null or undefined when calling closeVM().'
             );
         }
 
@@ -178,19 +178,19 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Close and terminate a VM.
      * Close Vm
      */
-    async closeVmApiPublicBuildVmPublicIdDelete(requestParameters: CloseVmApiPublicBuildVmPublicIdDeleteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<VMManagementResponse> {
-        const response = await this.closeVmApiPublicBuildVmPublicIdDeleteRaw(requestParameters, initOverrides);
+    async closeVM(requestParameters: CloseVMRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<VMManagementResponse> {
+        const response = await this.closeVMRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Create Vm
      */
-    async createVmApiPublicBuildVmCreatePostRaw(requestParameters: CreateVmApiPublicBuildVmCreatePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateVMResponse>> {
+    async createVMRaw(requestParameters: CreateVMOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateVMResponse>> {
         if (requestParameters['createVMRequest'] == null) {
             throw new runtime.RequiredError(
                 'createVMRequest',
-                'Required parameter "createVMRequest" was null or undefined when calling createVmApiPublicBuildVmCreatePost().'
+                'Required parameter "createVMRequest" was null or undefined when calling createVM().'
             );
         }
 
@@ -221,8 +221,8 @@ export class PublicBuildApi extends runtime.BaseAPI {
     /**
      * Create Vm
      */
-    async createVmApiPublicBuildVmCreatePost(requestParameters: CreateVmApiPublicBuildVmCreatePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CreateVMResponse> {
-        const response = await this.createVmApiPublicBuildVmCreatePostRaw(requestParameters, initOverrides);
+    async createVM(requestParameters: CreateVMOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CreateVMResponse> {
+        const response = await this.createVMRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -230,11 +230,11 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Stream operation results via Server-Sent Events (SSE) for public usage.  Returns a stream of events with the following format: - event: Event type (e.g., \"connected\", \"progress\", \"complete\", \"error\") - data: JSON payload with event details  Events: - connected: Initial connection established - progress: Operation progress update - complete: Operation completed successfully - error: Operation failed with error details 
      * Get Operation Events
      */
-    async getOperationEventsApiPublicBuildEventsCorrelationIdGetRaw(requestParameters: GetOperationEventsApiPublicBuildEventsCorrelationIdGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<GetOperationEventsApiPublicBuildEventsCorrelationIdGet200Response>> {
+    async getOperationEventsRaw(requestParameters: GetOperationEventsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<GetOperationEvents200Response>> {
         if (requestParameters['correlationId'] == null) {
             throw new runtime.RequiredError(
                 'correlationId',
-                'Required parameter "correlationId" was null or undefined when calling getOperationEventsApiPublicBuildEventsCorrelationIdGet().'
+                'Required parameter "correlationId" was null or undefined when calling getOperationEvents().'
             );
         }
 
@@ -257,15 +257,15 @@ export class PublicBuildApi extends runtime.BaseAPI {
             query: queryParameters,
         }, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => GetOperationEventsApiPublicBuildEventsCorrelationIdGet200ResponseFromJSON(jsonValue));
+        return new runtime.JSONApiResponse(response, (jsonValue) => GetOperationEvents200ResponseFromJSON(jsonValue));
     }
 
     /**
      * Stream operation results via Server-Sent Events (SSE) for public usage.  Returns a stream of events with the following format: - event: Event type (e.g., \"connected\", \"progress\", \"complete\", \"error\") - data: JSON payload with event details  Events: - connected: Initial connection established - progress: Operation progress update - complete: Operation completed successfully - error: Operation failed with error details 
      * Get Operation Events
      */
-    async getOperationEventsApiPublicBuildEventsCorrelationIdGet(requestParameters: GetOperationEventsApiPublicBuildEventsCorrelationIdGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<GetOperationEventsApiPublicBuildEventsCorrelationIdGet200Response> {
-        const response = await this.getOperationEventsApiPublicBuildEventsCorrelationIdGetRaw(requestParameters, initOverrides);
+    async getOperationEvents(requestParameters: GetOperationEventsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<GetOperationEvents200Response> {
+        const response = await this.getOperationEventsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -372,18 +372,18 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Setup sandbox development environment with git clone.
      * Setup Sandbox
      */
-    async setupSandboxApiPublicBuildVmPublicIdSetupSandboxPostRaw(requestParameters: SetupSandboxApiPublicBuildVmPublicIdSetupSandboxPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SetupSandboxResponse>> {
+    async setupSandboxRaw(requestParameters: SetupSandboxOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SetupSandboxResponse>> {
         if (requestParameters['publicId'] == null) {
             throw new runtime.RequiredError(
                 'publicId',
-                'Required parameter "publicId" was null or undefined when calling setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost().'
+                'Required parameter "publicId" was null or undefined when calling setupSandbox().'
             );
         }
 
         if (requestParameters['setupSandboxRequest'] == null) {
             throw new runtime.RequiredError(
                 'setupSandboxRequest',
-                'Required parameter "setupSandboxRequest" was null or undefined when calling setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost().'
+                'Required parameter "setupSandboxRequest" was null or undefined when calling setupSandbox().'
             );
         }
 
@@ -416,8 +416,8 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Setup sandbox development environment with git clone.
      * Setup Sandbox
      */
-    async setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost(requestParameters: SetupSandboxApiPublicBuildVmPublicIdSetupSandboxPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SetupSandboxResponse> {
-        const response = await this.setupSandboxApiPublicBuildVmPublicIdSetupSandboxPostRaw(requestParameters, initOverrides);
+    async setupSandbox(requestParameters: SetupSandboxOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SetupSandboxResponse> {
+        const response = await this.setupSandboxRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -425,18 +425,18 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Start listeners: write env.py and worker compose from dataset config, then restart worker.
      * Start Worker
      */
-    async startWorkerApiPublicBuildVmPublicIdStartWorkerPostRaw(requestParameters: StartWorkerApiPublicBuildVmPublicIdStartWorkerPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<VMManagementResponse>> {
+    async startWorkerRaw(requestParameters: StartWorkerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<VMManagementResponse>> {
         if (requestParameters['publicId'] == null) {
             throw new runtime.RequiredError(
                 'publicId',
-                'Required parameter "publicId" was null or undefined when calling startWorkerApiPublicBuildVmPublicIdStartWorkerPost().'
+                'Required parameter "publicId" was null or undefined when calling startWorker().'
             );
         }
 
         if (requestParameters['vMManagementRequest'] == null) {
             throw new runtime.RequiredError(
                 'vMManagementRequest',
-                'Required parameter "vMManagementRequest" was null or undefined when calling startWorkerApiPublicBuildVmPublicIdStartWorkerPost().'
+                'Required parameter "vMManagementRequest" was null or undefined when calling startWorker().'
             );
         }
 
@@ -469,8 +469,8 @@ export class PublicBuildApi extends runtime.BaseAPI {
      * Start listeners: write env.py and worker compose from dataset config, then restart worker.
      * Start Worker
      */
-    async startWorkerApiPublicBuildVmPublicIdStartWorkerPost(requestParameters: StartWorkerApiPublicBuildVmPublicIdStartWorkerPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<VMManagementResponse> {
-        const response = await this.startWorkerApiPublicBuildVmPublicIdStartWorkerPostRaw(requestParameters, initOverrides);
+    async startWorker(requestParameters: StartWorkerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<VMManagementResponse> {
+        const response = await this.startWorkerRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

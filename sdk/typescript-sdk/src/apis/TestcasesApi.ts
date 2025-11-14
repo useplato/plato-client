@@ -22,7 +22,7 @@ import {
     HTTPValidationErrorToJSON,
 } from '../models/index';
 
-export interface GetTestcasesApiTestcasesGetRequest {
+export interface GetTestcasesRequest {
     startPath?: string | null;
     testCaseSetIds?: string | null;
     name?: string | null;
@@ -48,7 +48,7 @@ export class TestcasesApi extends runtime.BaseAPI {
     /**
      * Get Testcases
      */
-    async getTestcasesApiTestcasesGetRaw(requestParameters: GetTestcasesApiTestcasesGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
+    async getTestcasesRaw(requestParameters: GetTestcasesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
         const queryParameters: any = {};
 
         if (requestParameters['startPath'] != null) {
@@ -137,8 +137,8 @@ export class TestcasesApi extends runtime.BaseAPI {
     /**
      * Get Testcases
      */
-    async getTestcasesApiTestcasesGet(requestParameters: GetTestcasesApiTestcasesGetRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
-        const response = await this.getTestcasesApiTestcasesGetRaw(requestParameters, initOverrides);
+    async getTestcases(requestParameters: GetTestcasesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
+        const response = await this.getTestcasesRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

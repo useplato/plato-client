@@ -28,19 +28,19 @@ import {
     SimulatorVersionsResponseToJSON,
 } from '../models/index';
 
-export interface GetDbConfigApiSimulatorArtifactIdDbConfigGetRequest {
+export interface GetSimulatorDbConfigRequest {
     artifactId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface GetEnvFlowsApiSimulatorArtifactIdFlowsGetRequest {
+export interface GetSimulatorFlowsRequest {
     artifactId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface GetSimulatorVersionsApiSimulatorSimulatorNameVersionsGetRequest {
+export interface GetSimulatorVersionsRequest {
     simulatorName: string;
     includeCheckpoints?: boolean;
     authorization?: string;
@@ -56,11 +56,11 @@ export class SimulatorApi extends runtime.BaseAPI {
      * Get database configuration from a simulator artifact\'s plato config.  Parses the YAML plato_config and extracts the database listener configuration. The plato_config contains a single dataset configuration (anchors are already resolved). 
      * Get Db Config
      */
-    async getDbConfigApiSimulatorArtifactIdDbConfigGetRaw(requestParameters: GetDbConfigApiSimulatorArtifactIdDbConfigGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<DbConfigResponse>> {
+    async getSimulatorDbConfigRaw(requestParameters: GetSimulatorDbConfigRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<DbConfigResponse>> {
         if (requestParameters['artifactId'] == null) {
             throw new runtime.RequiredError(
                 'artifactId',
-                'Required parameter "artifactId" was null or undefined when calling getDbConfigApiSimulatorArtifactIdDbConfigGet().'
+                'Required parameter "artifactId" was null or undefined when calling getSimulatorDbConfig().'
             );
         }
 
@@ -98,19 +98,19 @@ export class SimulatorApi extends runtime.BaseAPI {
      * Get database configuration from a simulator artifact\'s plato config.  Parses the YAML plato_config and extracts the database listener configuration. The plato_config contains a single dataset configuration (anchors are already resolved). 
      * Get Db Config
      */
-    async getDbConfigApiSimulatorArtifactIdDbConfigGet(requestParameters: GetDbConfigApiSimulatorArtifactIdDbConfigGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<DbConfigResponse> {
-        const response = await this.getDbConfigApiSimulatorArtifactIdDbConfigGetRaw(requestParameters, initOverrides);
+    async getSimulatorDbConfig(requestParameters: GetSimulatorDbConfigRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<DbConfigResponse> {
+        const response = await this.getSimulatorDbConfigRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Get Env Flows
      */
-    async getEnvFlowsApiSimulatorArtifactIdFlowsGetRaw(requestParameters: GetEnvFlowsApiSimulatorArtifactIdFlowsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
+    async getSimulatorFlowsRaw(requestParameters: GetSimulatorFlowsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<any>> {
         if (requestParameters['artifactId'] == null) {
             throw new runtime.RequiredError(
                 'artifactId',
-                'Required parameter "artifactId" was null or undefined when calling getEnvFlowsApiSimulatorArtifactIdFlowsGet().'
+                'Required parameter "artifactId" was null or undefined when calling getSimulatorFlows().'
             );
         }
 
@@ -151,8 +151,8 @@ export class SimulatorApi extends runtime.BaseAPI {
     /**
      * Get Env Flows
      */
-    async getEnvFlowsApiSimulatorArtifactIdFlowsGet(requestParameters: GetEnvFlowsApiSimulatorArtifactIdFlowsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
-        const response = await this.getEnvFlowsApiSimulatorArtifactIdFlowsGetRaw(requestParameters, initOverrides);
+    async getSimulatorFlows(requestParameters: GetSimulatorFlowsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<any> {
+        const response = await this.getSimulatorFlowsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -160,11 +160,11 @@ export class SimulatorApi extends runtime.BaseAPI {
      * Get all versions for a specific simulator across all datasets
      * Get Simulator Versions
      */
-    async getSimulatorVersionsApiSimulatorSimulatorNameVersionsGetRaw(requestParameters: GetSimulatorVersionsApiSimulatorSimulatorNameVersionsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SimulatorVersionsResponse>> {
+    async getSimulatorVersionsRaw(requestParameters: GetSimulatorVersionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SimulatorVersionsResponse>> {
         if (requestParameters['simulatorName'] == null) {
             throw new runtime.RequiredError(
                 'simulatorName',
-                'Required parameter "simulatorName" was null or undefined when calling getSimulatorVersionsApiSimulatorSimulatorNameVersionsGet().'
+                'Required parameter "simulatorName" was null or undefined when calling getSimulatorVersions().'
             );
         }
 
@@ -206,8 +206,8 @@ export class SimulatorApi extends runtime.BaseAPI {
      * Get all versions for a specific simulator across all datasets
      * Get Simulator Versions
      */
-    async getSimulatorVersionsApiSimulatorSimulatorNameVersionsGet(requestParameters: GetSimulatorVersionsApiSimulatorSimulatorNameVersionsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SimulatorVersionsResponse> {
-        const response = await this.getSimulatorVersionsApiSimulatorSimulatorNameVersionsGetRaw(requestParameters, initOverrides);
+    async getSimulatorVersions(requestParameters: GetSimulatorVersionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SimulatorVersionsResponse> {
+        const response = await this.getSimulatorVersionsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

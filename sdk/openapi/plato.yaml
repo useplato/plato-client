@@ -13,7 +13,7 @@ paths:
       tags:
         - env
       summary: Make Env
-      operationId: make_env_api_env_make2_post
+      operationId: makeEnvironment
       parameters:
         -
           name: authorization
@@ -55,7 +55,7 @@ paths:
         - env
       summary: Evaluate Session
       description: Evaluate the session.
-      operationId: evaluate_session_api_env_session__session_id__evaluate_post
+      operationId: evaluateSession
       parameters:
         -
           name: session_id
@@ -157,7 +157,7 @@ paths:
         - env
       summary: Get Simulators
       description: Get all simulators with optimized queries.
-      operationId: get_simulators_api_env_simulators_get
+      operationId: getSimulators
       parameters:
         -
           name: authorization
@@ -194,7 +194,7 @@ paths:
         - env
       summary: Create Simulator
       description: Create a new simulator.
-      operationId: create_simulator_api_env_simulators_post
+      operationId: createSimulator
       parameters:
         -
           name: authorization
@@ -236,7 +236,7 @@ paths:
         - env
       summary: Get Active Session
       description: Get the active session for a job group.
-      operationId: get_active_session_api_env__job_group_id__active_session_get
+      operationId: getActiveSession
       parameters:
         -
           name: job_group_id
@@ -279,7 +279,7 @@ paths:
         - env
       summary: Backup Env
       description: Create a backup of the environment.
-      operationId: backup_env_api_env__job_group_id__backup_post
+      operationId: backupEnvironment
       parameters:
         -
           name: job_group_id
@@ -322,7 +322,7 @@ paths:
         - env
       summary: Get Cdp Url
       description: Get the CDP URL for the environment.
-      operationId: get_cdp_url_api_env__job_group_id__cdp_url_get
+      operationId: getCdpUrl
       parameters:
         -
           name: job_group_id
@@ -364,7 +364,7 @@ paths:
       tags:
         - env
       summary: Close Env
-      operationId: close_env_api_env__job_group_id__close_post
+      operationId: closeEnvironment
       parameters:
         -
           name: job_group_id
@@ -407,7 +407,7 @@ paths:
         - env
       summary: Get Proxy Url
       description: Get the public URL for the environment.
-      operationId: get_proxy_url_api_env__job_group_id__proxy_url_get
+      operationId: getProxyUrl
       parameters:
         -
           name: job_group_id
@@ -450,7 +450,7 @@ paths:
         - env
       summary: Reset Env
       description: Reset the environment with an optional task.
-      operationId: reset_env_api_env__job_group_id__reset_post
+      operationId: resetEnvironment
       parameters:
         -
           name: job_group_id
@@ -498,7 +498,7 @@ paths:
       tags:
         - env
       summary: Get Env State
-      operationId: get_env_state_api_env__job_group_id__state_get
+      operationId: getEnvironmentState
       parameters:
         -
           name: job_group_id
@@ -540,7 +540,7 @@ paths:
       tags:
         - env
       summary: Get Job Status
-      operationId: get_job_status_api_env__job_group_id__status_get
+      operationId: getJobStatus
       parameters:
         -
           name: job_group_id
@@ -583,7 +583,7 @@ paths:
         - env
       summary: Send Heartbeat
       description: Send a heartbeat to keep the environment session alive.
-      operationId: send_heartbeat_api_env__job_id__heartbeat_post
+      operationId: sendHeartbeat
       parameters:
         -
           name: job_id
@@ -928,7 +928,7 @@ paths:
         - progress: Operation progress update
         - complete: Operation completed successfully
         - error: Operation failed with error details
-      operationId: get_operation_events_api_public_build_events__correlation_id__get
+      operationId: getOperationEvents
       parameters:
         -
           name: correlation_id
@@ -979,7 +979,7 @@ paths:
       tags:
         - public-build
       summary: Create Vm
-      operationId: create_vm_api_public_build_vm_create_post
+      operationId: createVM
       requestBody:
         content:
           application/json:
@@ -1006,7 +1006,7 @@ paths:
         - public-build
       summary: Close Vm
       description: Close and terminate a VM.
-      operationId: close_vm_api_public_build_vm__public_id__delete
+      operationId: closeVM
       parameters:
         -
           name: public_id
@@ -1042,7 +1042,7 @@ paths:
         - service: Simulator name (defaults to job's service)
         - git_hash: Git hash/version (defaults to job's version or "unknown")
         - dataset: Dataset name (defaults to job's dataset)
-      operationId: checkpoint_vm_api_public_build_vm__public_id__checkpoint_post
+      operationId: checkpointVM
       parameters:
         -
           name: public_id
@@ -1116,7 +1116,7 @@ paths:
         - public-build
       summary: Setup Sandbox
       description: Setup sandbox development environment with git clone.
-      operationId: setup_sandbox_api_public_build_vm__public_id__setup_sandbox_post
+      operationId: setupSandbox
       parameters:
         -
           name: public_id
@@ -1196,7 +1196,7 @@ paths:
         - public-build
       summary: Start Worker
       description: "Start listeners: write env.py and worker compose from dataset config, then restart worker."
-      operationId: start_worker_api_public_build_vm__public_id__start_worker_post
+      operationId: startWorker
       parameters:
         -
           name: public_id
@@ -1235,7 +1235,7 @@ paths:
         
         Parses the YAML plato_config and extracts the database listener configuration.
         The plato_config contains a single dataset configuration (anchors are already resolved).
-      operationId: get_db_config_api_simulator__artifact_id__db_config_get
+      operationId: getSimulatorDbConfig
       parameters:
         -
           name: artifact_id
@@ -1277,7 +1277,7 @@ paths:
       tags:
         - simulator
       summary: Get Env Flows
-      operationId: get_env_flows_api_simulator__artifact_id__flows_get
+      operationId: getSimulatorFlows
       parameters:
         -
           name: artifact_id
@@ -1319,7 +1319,7 @@ paths:
         - simulator
       summary: Get Simulator Versions
       description: Get all versions for a specific simulator across all datasets
-      operationId: get_simulator_versions_api_simulator__simulator_name__versions_get
+      operationId: getSimulatorVersions
       parameters:
         -
           name: simulator_name
@@ -1371,7 +1371,7 @@ paths:
       tags:
         - testcases
       summary: Get Testcases
-      operationId: get_testcases_api_testcases_get
+      operationId: getTestcases
       parameters:
         -
           name: start_path
@@ -2208,16 +2208,8 @@ components:
       title: MakeEnvRequest2
 
     MakeEnvResponse:
+      additionalProperties: true
       type: object
-      required:
-        - job_id
-      properties:
-        job_id:
-          type: string
-          description: The job ID for the created environment
-        status:
-          type: string
-          description: Current status of the environment
 
     ProxyUrlResponse:
       additionalProperties: true

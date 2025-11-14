@@ -5,13 +5,13 @@ TypeScript SDK for interacting with the Plato platform. Manage environments, VMs
 ## Installation
 
 ```bash
-npm install @plato-ai/sdk
+npm install plato-sandbox-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { PlatoClient } from '@plato-ai/sdk';
+import { PlatoClient } from 'plato-sandbox-sdk';
 
 // Initialize the client with your API key
 const client = new PlatoClient({
@@ -37,7 +37,7 @@ const env = await client.makeEnvironment({
 console.log('Environment created:', env.job_group_id);
 
 // Get environment status
-const status = await client.env.getJobStatusApiEnvJobGroupIdStatusGet({
+const status = await client.env.getJobStatus({
     jobGroupId: env.job_group_id
 });
 
@@ -73,7 +73,7 @@ try {
 }
 
 // Setup sandbox on the VM
-const setupResult = await client.publicBuild.setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost({
+const setupResult = await client.publicBuild.setupSandbox({
     publicId: vm.publicId,
     setupSandboxRequest: {
         // ... setup options
@@ -92,7 +92,7 @@ await client.closeVM(vm.publicId);
 Here's a complete example showing the typical workflow:
 
 ```typescript
-import { PlatoClient } from '@plato-ai/sdk';
+import { PlatoClient } from 'plato-sandbox-sdk';
 
 const client = new PlatoClient({
     apiKey: process.env.PLATO_API_KEY!,
@@ -116,7 +116,7 @@ async function runEnvironmentLifecycle() {
     console.log('Environment ready!');
 
     // 3. Reset environment with a task
-    await client.env.resetEnvApiEnvJobGroupIdResetPost({
+    await client.env.resetEnvironment({
         jobGroupId: env.jobId,
         resetEnvRequest: {
             taskId: '1a84e3d6-1900-40ba-bf00-beeca1748ad5',
@@ -124,30 +124,30 @@ async function runEnvironmentLifecycle() {
     });
 
     // 4. Get environment URLs
-    const publicUrl = await client.env.getProxyUrlApiEnvJobGroupIdProxyUrlGet({ 
+    const publicUrl = await client.env.getProxyUrl({ 
         jobGroupId: env.jobId 
     });
     console.log('Public URL:', publicUrl);
 
-    const cdpUrl = await client.env.getCdpUrlApiEnvJobGroupIdCdpUrlGet({ 
+    const cdpUrl = await client.env.getCdpUrl({ 
         jobGroupId: env.jobId 
     });
     console.log('CDP URL:', cdpUrl);
 
     // 5. Get environment state
-    const state = await client.env.getEnvStateApiEnvJobGroupIdStateGet({ 
+    const state = await client.env.getEnvironmentState({ 
         jobGroupId: env.jobId 
     });
     console.log('Environment state:', state);
 
     // 6. Get active session
-    const session = await client.env.getActiveSessionApiEnvJobGroupIdActiveSessionGet({ 
+    const session = await client.env.getActiveSession({ 
         jobGroupId: env.jobId 
     });
     const sessionId = (session as any).session_id;
 
     // 7. Evaluate the session
-    const evaluation = await client.env.evaluateSessionApiEnvSessionSessionIdEvaluatePost({
+    const evaluation = await client.env.evaluateSession({
         sessionId,
         evaluateRequest: {
             // Custom evaluation data
@@ -157,7 +157,7 @@ async function runEnvironmentLifecycle() {
     console.log('Evaluation result:', evaluation);
 
     // 8. Score the session
-    await client.env.scoreSessionApiEnvSessionSessionIdScorePost({
+    await client.env.scoreSession({
         sessionId,
         scoreRequest: {
             score: 0.95,
@@ -179,12 +179,12 @@ runEnvironmentLifecycle().catch(console.error);
 
 ```typescript
 // Get current state
-const state = await client.env.getEnvStateApiEnvJobGroupIdStateGet({
+const state = await client.env.getEnvironmentState({
     jobGroupId: 'job-123'
 });
 
 // Reset to a specific task
-await client.env.resetEnvApiEnvJobGroupIdResetPost({
+await client.env.resetEnvironment({
     jobGroupId: 'job-123',
     resetEnvRequest: {
         taskId: 'task-456',
@@ -194,7 +194,7 @@ await client.env.resetEnvApiEnvJobGroupIdResetPost({
 });
 
 // Backup current state
-await client.env.backupEnvApiEnvJobGroupIdBackupPost({
+await client.env.backupEnvironment({
     jobGroupId: 'job-123'
 });
 ```
@@ -203,12 +203,12 @@ await client.env.backupEnvApiEnvJobGroupIdBackupPost({
 
 ```typescript
 // Get active session
-const session = await client.env.getActiveSessionApiEnvJobGroupIdActiveSessionGet({
+const session = await client.env.getActiveSession({
     jobGroupId: 'job-123'
 });
 
 // Evaluate session
-const evaluation = await client.env.evaluateSessionApiEnvSessionSessionIdEvaluatePost({
+const evaluation = await client.env.evaluateSession({
     sessionId: session.session_id,
     evaluateRequest: {
         customData: { /* your evaluation data */ }
@@ -216,7 +216,7 @@ const evaluation = await client.env.evaluateSessionApiEnvSessionSessionIdEvaluat
 });
 
 // Score session
-await client.env.scoreSessionApiEnvSessionSessionIdScorePost({
+await client.env.scoreSession({
     sessionId: session.session_id,
     scoreRequest: {
         score: 0.85,
@@ -228,7 +228,7 @@ await client.env.scoreSessionApiEnvSessionSessionIdScorePost({
 });
 
 // Log session data
-await client.env.logApiEnvSessionIdLogPost({
+await client.env.logToEnvironment({
     sessionId: session.session_id,
     log: {
         level: 'info',
@@ -242,22 +242,28 @@ await client.env.logApiEnvSessionIdLogPost({
 
 ```typescript
 // List available simulators
-const simulators = await client.env.listSimulatorsApiEnvSimulatorsGet({});
+const simulators = await client.env.getSimulators({});
 
 // Get simulator versions
-const versions = await client.simulator.getSimulatorVersionsApiSimulatorSimulatorNameVersionsGet({
+const versions = await client.simulator.getSimulatorVersions({
     simulatorName: 'espocrm'
 });
 
 console.log('Available versions:', versions.versions);
 
 // Get database configuration for a simulator
-const dbConfig = await client.simulator.getDbConfigApiSimulatorArtifactIdDbConfigGetRaw({
+const dbConfig = await client.simulator.getSimulatorDbConfig({
     artifactId: '2ea954c0-7e5a-4a12-82fd-12cb46538827'
 });
 
+// Get available flows for a simulator
+const flows = await client.simulator.getSimulatorFlows({
+    artifactId: '2ea954c0-7e5a-4a12-82fd-12cb46538827'
+});
+console.log('Available flows:', flows);
+
 // Create a new simulator
-await client.env.createSimulatorApiEnvSimulatorsPost({
+await client.env.createSimulator({
     createSimulatorRequest: {
         name: 'my-simulator',
         description: 'Custom simulator',
@@ -270,25 +276,25 @@ await client.env.createSimulatorApiEnvSimulatorsPost({
 
 ```typescript
 // Get your Gitea info
-const myInfo = await client.gitea.getMyInfoApiGiteaMyInfoGet({});
+const myInfo = await client.gitea.getGiteaMyInfo({});
 console.log('Gitea user:', myInfo);
 
 // List simulator repositories
-const repos = await client.gitea.listSimulatorsApiGiteaSimulatorsGet({});
+const repos = await client.gitea.getGiteaSimulators({});
 
 // Get repository info for a specific simulator
-const repoInfo = await client.gitea.getRepoInfoApiGiteaSimulatorsSimulatorIdRepoGet({
+const repoInfo = await client.gitea.getGiteaSimulatorRepo({
     simulatorId: 'sim-123'
 });
 
 console.log('Repository:', repoInfo.url);
 
 // Get Gitea credentials (for cloning repos)
-const credentials = await client.gitea.getCredentialsApiGiteaCredentialsGet({});
+const credentials = await client.gitea.getGiteaCredentials({});
 console.log('Git credentials:', credentials);
 
 // Create a repository for a simulator
-await client.gitea.createRepoApiGiteaSimulatorsSimulatorIdRepoPost({
+await client.gitea.createGiteaSimulatorRepo({
     simulatorId: 'sim-123',
     body: {
         name: 'my-simulator-repo',
@@ -301,12 +307,12 @@ await client.gitea.createRepoApiGiteaSimulatorsSimulatorIdRepoPost({
 
 ```typescript
 // Get CDP (Chrome DevTools Protocol) URL for browser automation
-const cdpUrl = await client.env.getCdpUrlApiEnvJobGroupIdCdpUrlGet({
+const cdpUrl = await client.env.getCdpUrl({
     jobGroupId: 'job-123'
 });
 
 // Get proxy URL for accessing the application
-const proxyUrl = await client.env.getProxyUrlApiEnvJobGroupIdProxyUrlGet({
+const proxyUrl = await client.env.getProxyUrl({
     jobGroupId: 'job-123'
 });
 
@@ -356,13 +362,13 @@ const tasks = ['task-1', 'task-2', 'task-3'];
 
 for (const taskId of tasks) {
     // Reset to the task
-    await client.env.resetEnvApiEnvJobGroupIdResetPost({
+    await client.env.resetEnvironment({
         jobGroupId: env.jobId,
         resetEnvRequest: { taskId },
     });
     
     // Get the session
-    const session = await client.env.getActiveSessionApiEnvJobGroupIdActiveSessionGet({
+    const session = await client.env.getActiveSession({
         jobGroupId: env.jobId
     });
     
@@ -370,11 +376,11 @@ for (const taskId of tasks) {
     // await performTask(session);
     
     // Evaluate and score
-    await client.env.evaluateSessionApiEnvSessionSessionIdEvaluatePost({
+    await client.env.evaluateSession({
         sessionId: (session as any).session_id,
     });
     
-    await client.env.scoreSessionApiEnvSessionSessionIdScorePost({
+    await client.env.scoreSession({
         sessionId: (session as any).session_id,
         scoreRequest: { score: 1.0 },
     });
@@ -494,7 +500,7 @@ import {
     PlatoClient,
     OperationTimeoutError,
     OperationFailedError
-} from '@plato-ai/sdk';
+} from 'plato-sandbox-sdk';
 
 try {
     await client.monitorOperationSync(correlationId);
@@ -524,7 +530,7 @@ npm install playwright
 
 ```typescript
 import { chromium } from 'playwright';
-import { FlowExecutor, Flow } from '@plato-ai/sdk';
+import { FlowExecutor, Flow } from 'plato-sandbox-sdk';
 
 async function runFlow() {
   const browser = await chromium.launch();

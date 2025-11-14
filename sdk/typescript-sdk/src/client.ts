@@ -17,10 +17,9 @@ import {
 
 import type {
     MakeEnvRequest2,
-    MakeEnvResponse,
     CreateVMRequest,
     CreateVMResponse,
-    GetOperationEventsApiPublicBuildEventsCorrelationIdGet200Response,
+    GetOperationEvents200Response,
 } from './models/index';
 
 export interface PlatoClientOptions {
@@ -85,8 +84,8 @@ export class PlatoClient {
     /**
      * Create an environment with automatic heartbeat management.
      */
-    async makeEnvironment(request: MakeEnvRequest2): Promise<MakeEnvResponse> {
-        const response = await this.env.makeEnvApiEnvMake2Post({ makeEnvRequest2: request });
+    async makeEnvironment(request: MakeEnvRequest2): Promise<{ [key: string]: any; }> {
+        const response = await this.env.makeEnvironment({ makeEnvRequest2: request });
         
         // Start heartbeat using the job ID
         if (response.jobId) {
@@ -100,7 +99,7 @@ export class PlatoClient {
      * Create a sandbox VM with automatic heartbeat management.
      */
     async createSandbox(request: CreateVMRequest): Promise<CreateVMResponse> {
-        const response = await this.publicBuild.createVmApiPublicBuildVmCreatePost({ createVMRequest: request });
+        const response = await this.publicBuild.createVM({ createVMRequest: request });
         
         // Extract correlation_id for heartbeat
         if (response.correlationId) {
@@ -126,7 +125,7 @@ export class PlatoClient {
         const startTime = Date.now();
         
         while (true) {
-            const status = await this.env.getJobStatusApiEnvJobGroupIdStatusGet({ jobGroupId });
+            const status = await this.env.getJobStatus({ jobGroupId });
             
             if (status.status === 'ready') {
                 return;
@@ -149,7 +148,7 @@ export class PlatoClient {
      */
     async closeEnvironment(jobGroupId: string): Promise<any> {
         this.stopHeartbeat(jobGroupId);
-        return await this.env.closeEnvApiEnvJobGroupIdClosePost({ jobGroupId });
+        return await this.env.closeEnvironment({ jobGroupId });
     }
 
     /**
@@ -157,7 +156,7 @@ export class PlatoClient {
      */
     async closeVM(publicId: string): Promise<any> {
         this.stopHeartbeat(publicId);
-        return await this.publicBuild.closeVmApiPublicBuildVmPublicIdDelete({ publicId });
+        return await this.publicBuild.closeVM({ publicId });
     }
 
     /**
@@ -263,7 +262,7 @@ export class PlatoClient {
         // Start new heartbeat interval
         const timer = setInterval(async () => {
             try {
-                await this.env.sendHeartbeatApiEnvJobIdHeartbeatPost({ jobId: jobGroupId });
+                await this.env.sendHeartbeat({ jobId: jobGroupId });
             } catch (error) {
                 console.error(`Heartbeat failed for ${jobGroupId}:`, error);
             }

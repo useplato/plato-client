@@ -1,12 +1,13 @@
 {
-  "name": "@plato-ai/sdk",
-  "version": "1.0.0",
+  "name": "plato-sandbox-sdk",
+  "version": "1.1.8",
   "description": "TypeScript SDK for interacting with the Plato platform - manage environments, VMs, simulators, and more",
   "author": "Plato AI",
   "repository": {
     "type": "git",
-    "url": "https://github.com/plato-ai/plato-client.git"
+    "url": "https://github.com/useplato/plato-client.git"
   },
+  "readme": "README.md",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "module": "./dist/esm/index.js",

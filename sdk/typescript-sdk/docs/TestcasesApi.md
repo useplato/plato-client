@@ -4,13 +4,13 @@ All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**getTestcasesApiTestcasesGet**](TestcasesApi.md#gettestcasesapitestcasesget) | **GET** /testcases | Get Testcases |
+| [**getTestcases**](TestcasesApi.md#gettestcases) | **GET** /testcases | Get Testcases |
 
 
 
-## getTestcasesApiTestcasesGet
+## getTestcases
 
-> any getTestcasesApiTestcasesGet(startPath, testCaseSetIds, name, prompt, mode, page, pageSize, simulatorId, simulatorName, testCasePublicId, scoringConfigType, isAssigned, isSample, rejected, excludeAssignedToAnnotators)
+> any getTestcases(startPath, testCaseSetIds, name, prompt, mode, page, pageSize, simulatorId, simulatorName, testCasePublicId, scoringConfigType, isAssigned, isSample, rejected, excludeAssignedToAnnotators)
 
 Get Testcases
 
@@ -21,7 +21,7 @@ import {
   Configuration,
   TestcasesApi,
 } from '@plato-ai/sdk';
-import type { GetTestcasesApiTestcasesGetRequest } from '@plato-ai/sdk';
+import type { GetTestcasesRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -62,10 +62,10 @@ async function example() {
     rejected: true,
     // boolean (optional)
     excludeAssignedToAnnotators: true,
-  } satisfies GetTestcasesApiTestcasesGetRequest;
+  } satisfies GetTestcasesRequest;
 
   try {
-    const data = await api.getTestcasesApiTestcasesGet(body);
+    const data = await api.getTestcases(body);
     console.log(data);
   } catch (error) {
     console.error(error);

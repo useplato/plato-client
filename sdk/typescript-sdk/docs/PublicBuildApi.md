@@ -4,20 +4,20 @@ All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**checkpointVmApiPublicBuildVmPublicIdCheckpointPost**](PublicBuildApi.md#checkpointvmapipublicbuildvmpublicidcheckpointpost) | **POST** /public-build/vm/{public_id}/checkpoint | Checkpoint Vm |
-| [**closeVmApiPublicBuildVmPublicIdDelete**](PublicBuildApi.md#closevmapipublicbuildvmpubliciddelete) | **DELETE** /public-build/vm/{public_id} | Close Vm |
-| [**createVmApiPublicBuildVmCreatePost**](PublicBuildApi.md#createvmapipublicbuildvmcreatepost) | **POST** /public-build/vm/create | Create Vm |
-| [**getOperationEventsApiPublicBuildEventsCorrelationIdGet**](PublicBuildApi.md#getoperationeventsapipublicbuildeventscorrelationidget) | **GET** /public-build/events/{correlation_id} | Get Operation Events |
+| [**checkpointVM**](PublicBuildApi.md#checkpointvm) | **POST** /public-build/vm/{public_id}/checkpoint | Checkpoint Vm |
+| [**closeVM**](PublicBuildApi.md#closevm) | **DELETE** /public-build/vm/{public_id} | Close Vm |
+| [**createVM**](PublicBuildApi.md#createvmoperation) | **POST** /public-build/vm/create | Create Vm |
+| [**getOperationEvents**](PublicBuildApi.md#getoperationevents) | **GET** /public-build/events/{correlation_id} | Get Operation Events |
 | [**saveVmSnapshotApiPublicBuildVmPublicIdSnapshotPost**](PublicBuildApi.md#savevmsnapshotapipublicbuildvmpublicidsnapshotpost) | **POST** /public-build/vm/{public_id}/snapshot | Save Vm Snapshot |
 | [**setupRootAccessApiPublicBuildVmPublicIdSetupRootAccessPost**](PublicBuildApi.md#setuprootaccessapipublicbuildvmpublicidsetuprootaccesspost) | **POST** /public-build/vm/{public_id}/setup-root-access | Setup Root Access |
-| [**setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost**](PublicBuildApi.md#setupsandboxapipublicbuildvmpublicidsetupsandboxpost) | **POST** /public-build/vm/{public_id}/setup-sandbox | Setup Sandbox |
-| [**startWorkerApiPublicBuildVmPublicIdStartWorkerPost**](PublicBuildApi.md#startworkerapipublicbuildvmpublicidstartworkerpost) | **POST** /public-build/vm/{public_id}/start-worker | Start Worker |
+| [**setupSandbox**](PublicBuildApi.md#setupsandboxoperation) | **POST** /public-build/vm/{public_id}/setup-sandbox | Setup Sandbox |
+| [**startWorker**](PublicBuildApi.md#startworker) | **POST** /public-build/vm/{public_id}/start-worker | Start Worker |
 
 
 
-## checkpointVmApiPublicBuildVmPublicIdCheckpointPost
+## checkpointVM
 
-> CreateSnapshotResponse checkpointVmApiPublicBuildVmPublicIdCheckpointPost(publicId, createSnapshotRequest)
+> CreateSnapshotResponse checkpointVM(publicId, createSnapshotRequest)
 
 Checkpoint Vm
 
@@ -30,7 +30,7 @@ import {
   Configuration,
   PublicBuildApi,
 } from '@plato-ai/sdk';
-import type { CheckpointVmApiPublicBuildVmPublicIdCheckpointPostRequest } from '@plato-ai/sdk';
+import type { CheckpointVMRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -45,10 +45,10 @@ async function example() {
     publicId: publicId_example,
     // CreateSnapshotRequest (optional)
     createSnapshotRequest: ...,
-  } satisfies CheckpointVmApiPublicBuildVmPublicIdCheckpointPostRequest;
+  } satisfies CheckpointVMRequest;
 
   try {
-    const data = await api.checkpointVmApiPublicBuildVmPublicIdCheckpointPost(body);
+    const data = await api.checkpointVM(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -90,9 +90,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## closeVmApiPublicBuildVmPublicIdDelete
+## closeVM
 
-> VMManagementResponse closeVmApiPublicBuildVmPublicIdDelete(publicId)
+> VMManagementResponse closeVM(publicId)
 
 Close Vm
 
@@ -105,7 +105,7 @@ import {
   Configuration,
   PublicBuildApi,
 } from '@plato-ai/sdk';
-import type { CloseVmApiPublicBuildVmPublicIdDeleteRequest } from '@plato-ai/sdk';
+import type { CloseVMRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -118,10 +118,10 @@ async function example() {
   const body = {
     // string
     publicId: publicId_example,
-  } satisfies CloseVmApiPublicBuildVmPublicIdDeleteRequest;
+  } satisfies CloseVMRequest;
 
   try {
-    const data = await api.closeVmApiPublicBuildVmPublicIdDelete(body);
+    const data = await api.closeVM(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -162,9 +162,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## createVmApiPublicBuildVmCreatePost
+## createVM
 
-> CreateVMResponse createVmApiPublicBuildVmCreatePost(createVMRequest)
+> CreateVMResponse createVM(createVMRequest)
 
 Create Vm
 
@@ -175,7 +175,7 @@ import {
   Configuration,
   PublicBuildApi,
 } from '@plato-ai/sdk';
-import type { CreateVmApiPublicBuildVmCreatePostRequest } from '@plato-ai/sdk';
+import type { CreateVMOperationRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -188,10 +188,10 @@ async function example() {
   const body = {
     // CreateVMRequest
     createVMRequest: ...,
-  } satisfies CreateVmApiPublicBuildVmCreatePostRequest;
+  } satisfies CreateVMOperationRequest;
 
   try {
-    const data = await api.createVmApiPublicBuildVmCreatePost(body);
+    const data = await api.createVM(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -232,9 +232,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getOperationEventsApiPublicBuildEventsCorrelationIdGet
+## getOperationEvents
 
-> GetOperationEventsApiPublicBuildEventsCorrelationIdGet200Response getOperationEventsApiPublicBuildEventsCorrelationIdGet(correlationId)
+> GetOperationEvents200Response getOperationEvents(correlationId)
 
 Get Operation Events
 
@@ -247,7 +247,7 @@ import {
   Configuration,
   PublicBuildApi,
 } from '@plato-ai/sdk';
-import type { GetOperationEventsApiPublicBuildEventsCorrelationIdGetRequest } from '@plato-ai/sdk';
+import type { GetOperationEventsRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -260,10 +260,10 @@ async function example() {
   const body = {
     // string
     correlationId: correlationId_example,
-  } satisfies GetOperationEventsApiPublicBuildEventsCorrelationIdGetRequest;
+  } satisfies GetOperationEventsRequest;
 
   try {
-    const data = await api.getOperationEventsApiPublicBuildEventsCorrelationIdGet(body);
+    const data = await api.getOperationEvents(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -283,7 +283,7 @@ example().catch(console.error);
 
 ### Return type
 
-[**GetOperationEventsApiPublicBuildEventsCorrelationIdGet200Response**](GetOperationEventsApiPublicBuildEventsCorrelationIdGet200Response.md)
+[**GetOperationEvents200Response**](GetOperationEvents200Response.md)
 
 ### Authorization
 
@@ -454,9 +454,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost
+## setupSandbox
 
-> SetupSandboxResponse setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost(publicId, setupSandboxRequest)
+> SetupSandboxResponse setupSandbox(publicId, setupSandboxRequest)
 
 Setup Sandbox
 
@@ -469,7 +469,7 @@ import {
   Configuration,
   PublicBuildApi,
 } from '@plato-ai/sdk';
-import type { SetupSandboxApiPublicBuildVmPublicIdSetupSandboxPostRequest } from '@plato-ai/sdk';
+import type { SetupSandboxOperationRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -484,10 +484,10 @@ async function example() {
     publicId: publicId_example,
     // SetupSandboxRequest
     setupSandboxRequest: ...,
-  } satisfies SetupSandboxApiPublicBuildVmPublicIdSetupSandboxPostRequest;
+  } satisfies SetupSandboxOperationRequest;
 
   try {
-    const data = await api.setupSandboxApiPublicBuildVmPublicIdSetupSandboxPost(body);
+    const data = await api.setupSandbox(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -529,9 +529,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## startWorkerApiPublicBuildVmPublicIdStartWorkerPost
+## startWorker
 
-> VMManagementResponse startWorkerApiPublicBuildVmPublicIdStartWorkerPost(publicId, vMManagementRequest)
+> VMManagementResponse startWorker(publicId, vMManagementRequest)
 
 Start Worker
 
@@ -544,7 +544,7 @@ import {
   Configuration,
   PublicBuildApi,
 } from '@plato-ai/sdk';
-import type { StartWorkerApiPublicBuildVmPublicIdStartWorkerPostRequest } from '@plato-ai/sdk';
+import type { StartWorkerRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -559,10 +559,10 @@ async function example() {
     publicId: publicId_example,
     // VMManagementRequest
     vMManagementRequest: ...,
-  } satisfies StartWorkerApiPublicBuildVmPublicIdStartWorkerPostRequest;
+  } satisfies StartWorkerRequest;
 
   try {
-    const data = await api.startWorkerApiPublicBuildVmPublicIdStartWorkerPost(body);
+    const data = await api.startWorker(body);
     console.log(data);
   } catch (error) {
     console.error(error);

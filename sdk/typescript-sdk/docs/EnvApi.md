@@ -4,28 +4,28 @@ All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**backupEnvApiEnvJobGroupIdBackupPost**](EnvApi.md#backupenvapienvjobgroupidbackuppost) | **POST** /env/{job_group_id}/backup | Backup Env |
-| [**closeEnvApiEnvJobGroupIdClosePost**](EnvApi.md#closeenvapienvjobgroupidclosepost) | **POST** /env/{job_group_id}/close | Close Env |
-| [**createSimulatorApiEnvSimulatorsPost**](EnvApi.md#createsimulatorapienvsimulatorspost) | **POST** /env/simulators | Create Simulator |
-| [**evaluateSessionApiEnvSessionSessionIdEvaluatePost**](EnvApi.md#evaluatesessionapienvsessionsessionidevaluatepost) | **POST** /env/session/{session_id}/evaluate | Evaluate Session |
-| [**getActiveSessionApiEnvJobGroupIdActiveSessionGet**](EnvApi.md#getactivesessionapienvjobgroupidactivesessionget) | **GET** /env/{job_group_id}/active_session | Get Active Session |
-| [**getCdpUrlApiEnvJobGroupIdCdpUrlGet**](EnvApi.md#getcdpurlapienvjobgroupidcdpurlget) | **GET** /env/{job_group_id}/cdp_url | Get Cdp Url |
-| [**getEnvStateApiEnvJobGroupIdStateGet**](EnvApi.md#getenvstateapienvjobgroupidstateget) | **GET** /env/{job_group_id}/state | Get Env State |
-| [**getJobStatusApiEnvJobGroupIdStatusGet**](EnvApi.md#getjobstatusapienvjobgroupidstatusget) | **GET** /env/{job_group_id}/status | Get Job Status |
-| [**getProxyUrlApiEnvJobGroupIdProxyUrlGet**](EnvApi.md#getproxyurlapienvjobgroupidproxyurlget) | **GET** /env/{job_group_id}/proxy_url | Get Proxy Url |
-| [**getSimulatorsApiEnvSimulatorsGet**](EnvApi.md#getsimulatorsapienvsimulatorsget) | **GET** /env/simulators | Get Simulators |
+| [**backupEnvironment**](EnvApi.md#backupenvironment) | **POST** /env/{job_group_id}/backup | Backup Env |
+| [**closeEnvironment**](EnvApi.md#closeenvironment) | **POST** /env/{job_group_id}/close | Close Env |
+| [**createSimulator**](EnvApi.md#createsimulatoroperation) | **POST** /env/simulators | Create Simulator |
+| [**evaluateSession**](EnvApi.md#evaluatesession) | **POST** /env/session/{session_id}/evaluate | Evaluate Session |
+| [**getActiveSession**](EnvApi.md#getactivesession) | **GET** /env/{job_group_id}/active_session | Get Active Session |
+| [**getCdpUrl**](EnvApi.md#getcdpurl) | **GET** /env/{job_group_id}/cdp_url | Get Cdp Url |
+| [**getEnvironmentState**](EnvApi.md#getenvironmentstate) | **GET** /env/{job_group_id}/state | Get Env State |
+| [**getJobStatus**](EnvApi.md#getjobstatus) | **GET** /env/{job_group_id}/status | Get Job Status |
+| [**getProxyUrl**](EnvApi.md#getproxyurl) | **GET** /env/{job_group_id}/proxy_url | Get Proxy Url |
+| [**getSimulators**](EnvApi.md#getsimulators) | **GET** /env/simulators | Get Simulators |
 | [**getWorkerReadyApiEnvJobIdWorkerReadyGet**](EnvApi.md#getworkerreadyapienvjobidworkerreadyget) | **GET** /env/{job_id}/worker_ready | Get Worker Ready |
 | [**logStateMutationApiEnvSessionIdLogPost**](EnvApi.md#logstatemutationapienvsessionidlogpost) | **POST** /env/{session_id}/log | Log State Mutation |
-| [**makeEnvApiEnvMake2Post**](EnvApi.md#makeenvapienvmake2post) | **POST** /env/make2 | Make Env |
-| [**resetEnvApiEnvJobGroupIdResetPost**](EnvApi.md#resetenvapienvjobgroupidresetpost) | **POST** /env/{job_group_id}/reset | Reset Env |
+| [**makeEnvironment**](EnvApi.md#makeenvironment) | **POST** /env/make2 | Make Env |
+| [**resetEnvironment**](EnvApi.md#resetenvironment) | **POST** /env/{job_group_id}/reset | Reset Env |
 | [**scoreEnvApiEnvSessionSessionIdScorePost**](EnvApi.md#scoreenvapienvsessionsessionidscorepost) | **POST** /env/session/{session_id}/score | Score Env |
-| [**sendHeartbeatApiEnvJobIdHeartbeatPost**](EnvApi.md#sendheartbeatapienvjobidheartbeatpost) | **POST** /env/{job_id}/heartbeat | Send Heartbeat |
+| [**sendHeartbeat**](EnvApi.md#sendheartbeat) | **POST** /env/{job_id}/heartbeat | Send Heartbeat |
 
 
 
-## backupEnvApiEnvJobGroupIdBackupPost
+## backupEnvironment
 
-> { [key: string]: any; } backupEnvApiEnvJobGroupIdBackupPost(jobGroupId, authorization, xInternalService)
+> { [key: string]: any; } backupEnvironment(jobGroupId, authorization, xInternalService)
 
 Backup Env
 
@@ -38,7 +38,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { BackupEnvApiEnvJobGroupIdBackupPostRequest } from '@plato-ai/sdk';
+import type { BackupEnvironmentRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -55,10 +55,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies BackupEnvApiEnvJobGroupIdBackupPostRequest;
+  } satisfies BackupEnvironmentRequest;
 
   try {
-    const data = await api.backupEnvApiEnvJobGroupIdBackupPost(body);
+    const data = await api.backupEnvironment(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -101,9 +101,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## closeEnvApiEnvJobGroupIdClosePost
+## closeEnvironment
 
-> { [key: string]: any; } closeEnvApiEnvJobGroupIdClosePost(jobGroupId, authorization, xInternalService)
+> { [key: string]: any; } closeEnvironment(jobGroupId, authorization, xInternalService)
 
 Close Env
 
@@ -114,7 +114,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { CloseEnvApiEnvJobGroupIdClosePostRequest } from '@plato-ai/sdk';
+import type { CloseEnvironmentRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -131,10 +131,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies CloseEnvApiEnvJobGroupIdClosePostRequest;
+  } satisfies CloseEnvironmentRequest;
 
   try {
-    const data = await api.closeEnvApiEnvJobGroupIdClosePost(body);
+    const data = await api.closeEnvironment(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -177,9 +177,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## createSimulatorApiEnvSimulatorsPost
+## createSimulator
 
-> { [key: string]: any; } createSimulatorApiEnvSimulatorsPost(createSimulatorRequest, authorization, xInternalService)
+> { [key: string]: any; } createSimulator(createSimulatorRequest, authorization, xInternalService)
 
 Create Simulator
 
@@ -192,7 +192,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { CreateSimulatorApiEnvSimulatorsPostRequest } from '@plato-ai/sdk';
+import type { CreateSimulatorOperationRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -209,10 +209,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies CreateSimulatorApiEnvSimulatorsPostRequest;
+  } satisfies CreateSimulatorOperationRequest;
 
   try {
-    const data = await api.createSimulatorApiEnvSimulatorsPost(body);
+    const data = await api.createSimulator(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -255,9 +255,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## evaluateSessionApiEnvSessionSessionIdEvaluatePost
+## evaluateSession
 
-> { [key: string]: any; } evaluateSessionApiEnvSessionSessionIdEvaluatePost(sessionId, authorization, xInternalService, evaluateRequest)
+> { [key: string]: any; } evaluateSession(sessionId, authorization, xInternalService, evaluateRequest)
 
 Evaluate Session
 
@@ -270,7 +270,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { EvaluateSessionApiEnvSessionSessionIdEvaluatePostRequest } from '@plato-ai/sdk';
+import type { EvaluateSessionRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -289,10 +289,10 @@ async function example() {
     xInternalService: xInternalService_example,
     // EvaluateRequest (optional)
     evaluateRequest: ...,
-  } satisfies EvaluateSessionApiEnvSessionSessionIdEvaluatePostRequest;
+  } satisfies EvaluateSessionRequest;
 
   try {
-    const data = await api.evaluateSessionApiEnvSessionSessionIdEvaluatePost(body);
+    const data = await api.evaluateSession(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -336,9 +336,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getActiveSessionApiEnvJobGroupIdActiveSessionGet
+## getActiveSession
 
-> { [key: string]: any; } getActiveSessionApiEnvJobGroupIdActiveSessionGet(jobGroupId, authorization, xInternalService)
+> { [key: string]: any; } getActiveSession(jobGroupId, authorization, xInternalService)
 
 Get Active Session
 
@@ -351,7 +351,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { GetActiveSessionApiEnvJobGroupIdActiveSessionGetRequest } from '@plato-ai/sdk';
+import type { GetActiveSessionRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -368,10 +368,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetActiveSessionApiEnvJobGroupIdActiveSessionGetRequest;
+  } satisfies GetActiveSessionRequest;
 
   try {
-    const data = await api.getActiveSessionApiEnvJobGroupIdActiveSessionGet(body);
+    const data = await api.getActiveSession(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -414,9 +414,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getCdpUrlApiEnvJobGroupIdCdpUrlGet
+## getCdpUrl
 
-> { [key: string]: any; } getCdpUrlApiEnvJobGroupIdCdpUrlGet(jobGroupId, authorization, xInternalService)
+> { [key: string]: any; } getCdpUrl(jobGroupId, authorization, xInternalService)
 
 Get Cdp Url
 
@@ -429,7 +429,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { GetCdpUrlApiEnvJobGroupIdCdpUrlGetRequest } from '@plato-ai/sdk';
+import type { GetCdpUrlRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -446,10 +446,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetCdpUrlApiEnvJobGroupIdCdpUrlGetRequest;
+  } satisfies GetCdpUrlRequest;
 
   try {
-    const data = await api.getCdpUrlApiEnvJobGroupIdCdpUrlGet(body);
+    const data = await api.getCdpUrl(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -492,9 +492,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getEnvStateApiEnvJobGroupIdStateGet
+## getEnvironmentState
 
-> { [key: string]: any; } getEnvStateApiEnvJobGroupIdStateGet(jobGroupId, authorization, xInternalService)
+> { [key: string]: any; } getEnvironmentState(jobGroupId, authorization, xInternalService)
 
 Get Env State
 
@@ -505,7 +505,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { GetEnvStateApiEnvJobGroupIdStateGetRequest } from '@plato-ai/sdk';
+import type { GetEnvironmentStateRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -522,10 +522,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetEnvStateApiEnvJobGroupIdStateGetRequest;
+  } satisfies GetEnvironmentStateRequest;
 
   try {
-    const data = await api.getEnvStateApiEnvJobGroupIdStateGet(body);
+    const data = await api.getEnvironmentState(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -568,9 +568,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getJobStatusApiEnvJobGroupIdStatusGet
+## getJobStatus
 
-> JobStatusResponse getJobStatusApiEnvJobGroupIdStatusGet(jobGroupId, authorization, xInternalService)
+> JobStatusResponse getJobStatus(jobGroupId, authorization, xInternalService)
 
 Get Job Status
 
@@ -581,7 +581,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { GetJobStatusApiEnvJobGroupIdStatusGetRequest } from '@plato-ai/sdk';
+import type { GetJobStatusRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -598,10 +598,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetJobStatusApiEnvJobGroupIdStatusGetRequest;
+  } satisfies GetJobStatusRequest;
 
   try {
-    const data = await api.getJobStatusApiEnvJobGroupIdStatusGet(body);
+    const data = await api.getJobStatus(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -644,9 +644,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getProxyUrlApiEnvJobGroupIdProxyUrlGet
+## getProxyUrl
 
-> { [key: string]: any; } getProxyUrlApiEnvJobGroupIdProxyUrlGet(jobGroupId, authorization, xInternalService)
+> { [key: string]: any; } getProxyUrl(jobGroupId, authorization, xInternalService)
 
 Get Proxy Url
 
@@ -659,7 +659,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { GetProxyUrlApiEnvJobGroupIdProxyUrlGetRequest } from '@plato-ai/sdk';
+import type { GetProxyUrlRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -676,10 +676,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetProxyUrlApiEnvJobGroupIdProxyUrlGetRequest;
+  } satisfies GetProxyUrlRequest;
 
   try {
-    const data = await api.getProxyUrlApiEnvJobGroupIdProxyUrlGet(body);
+    const data = await api.getProxyUrl(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -722,9 +722,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## getSimulatorsApiEnvSimulatorsGet
+## getSimulators
 
-> Array&lt;{ [key: string]: any; }&gt; getSimulatorsApiEnvSimulatorsGet(authorization, xInternalService)
+> Array&lt;{ [key: string]: any; }&gt; getSimulators(authorization, xInternalService)
 
 Get Simulators
 
@@ -737,7 +737,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { GetSimulatorsApiEnvSimulatorsGetRequest } from '@plato-ai/sdk';
+import type { GetSimulatorsRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -752,10 +752,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies GetSimulatorsApiEnvSimulatorsGetRequest;
+  } satisfies GetSimulatorsRequest;
 
   try {
-    const data = await api.getSimulatorsApiEnvSimulatorsGet(body);
+    const data = await api.getSimulators(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -953,9 +953,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## makeEnvApiEnvMake2Post
+## makeEnvironment
 
-> MakeEnvResponse makeEnvApiEnvMake2Post(makeEnvRequest2, authorization, xInternalService)
+> { [key: string]: any; } makeEnvironment(makeEnvRequest2, authorization, xInternalService)
 
 Make Env
 
@@ -966,7 +966,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { MakeEnvApiEnvMake2PostRequest } from '@plato-ai/sdk';
+import type { MakeEnvironmentRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -983,10 +983,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies MakeEnvApiEnvMake2PostRequest;
+  } satisfies MakeEnvironmentRequest;
 
   try {
-    const data = await api.makeEnvApiEnvMake2Post(body);
+    const data = await api.makeEnvironment(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -1008,7 +1008,7 @@ example().catch(console.error);
 
 ### Return type
 
-[**MakeEnvResponse**](MakeEnvResponse.md)
+**{ [key: string]: any; }**
 
 ### Authorization
 
@@ -1029,9 +1029,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## resetEnvApiEnvJobGroupIdResetPost
+## resetEnvironment
 
-> { [key: string]: any; } resetEnvApiEnvJobGroupIdResetPost(jobGroupId, resetEnvRequest, authorization, xInternalService)
+> { [key: string]: any; } resetEnvironment(jobGroupId, resetEnvRequest, authorization, xInternalService)
 
 Reset Env
 
@@ -1044,7 +1044,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { ResetEnvApiEnvJobGroupIdResetPostRequest } from '@plato-ai/sdk';
+import type { ResetEnvironmentRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -1063,10 +1063,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies ResetEnvApiEnvJobGroupIdResetPostRequest;
+  } satisfies ResetEnvironmentRequest;
 
   try {
-    const data = await api.resetEnvApiEnvJobGroupIdResetPost(body);
+    const data = await api.resetEnvironment(body);
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -1191,9 +1191,9 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## sendHeartbeatApiEnvJobIdHeartbeatPost
+## sendHeartbeat
 
-> { [key: string]: any; } sendHeartbeatApiEnvJobIdHeartbeatPost(jobId, authorization, xInternalService)
+> { [key: string]: any; } sendHeartbeat(jobId, authorization, xInternalService)
 
 Send Heartbeat
 
@@ -1206,7 +1206,7 @@ import {
   Configuration,
   EnvApi,
 } from '@plato-ai/sdk';
-import type { SendHeartbeatApiEnvJobIdHeartbeatPostRequest } from '@plato-ai/sdk';
+import type { SendHeartbeatRequest } from '@plato-ai/sdk';
 
 async function example() {
   console.log("🚀 Testing @plato-ai/sdk SDK...");
@@ -1223,10 +1223,10 @@ async function example() {
     authorization: authorization_example,
     // string (optional)
     xInternalService: xInternalService_example,
-  } satisfies SendHeartbeatApiEnvJobIdHeartbeatPostRequest;
+  } satisfies SendHeartbeatRequest;
 
   try {
-    const data = await api.sendHeartbeatApiEnvJobIdHeartbeatPost(body);
+    const data = await api.sendHeartbeat(body);
     console.log(data);
   } catch (error) {
     console.error(error);

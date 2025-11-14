@@ -21,7 +21,6 @@ import type {
   JobStatusResponse,
   Log,
   MakeEnvRequest2,
-  MakeEnvResponse,
   ResetEnvRequest,
   ScoreRequest,
   WorkerReadyResponse,
@@ -39,8 +38,6 @@ import {
     LogToJSON,
     MakeEnvRequest2FromJSON,
     MakeEnvRequest2ToJSON,
-    MakeEnvResponseFromJSON,
-    MakeEnvResponseToJSON,
     ResetEnvRequestFromJSON,
     ResetEnvRequestToJSON,
     ScoreRequestFromJSON,
@@ -49,62 +46,62 @@ import {
     WorkerReadyResponseToJSON,
 } from '../models/index';
 
-export interface BackupEnvApiEnvJobGroupIdBackupPostRequest {
+export interface BackupEnvironmentRequest {
     jobGroupId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface CloseEnvApiEnvJobGroupIdClosePostRequest {
+export interface CloseEnvironmentRequest {
     jobGroupId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface CreateSimulatorApiEnvSimulatorsPostRequest {
+export interface CreateSimulatorOperationRequest {
     createSimulatorRequest: CreateSimulatorRequest;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface EvaluateSessionApiEnvSessionSessionIdEvaluatePostRequest {
+export interface EvaluateSessionRequest {
     sessionId: string;
     authorization?: string;
     xInternalService?: string;
     evaluateRequest?: EvaluateRequest;
 }
 
-export interface GetActiveSessionApiEnvJobGroupIdActiveSessionGetRequest {
+export interface GetActiveSessionRequest {
     jobGroupId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface GetCdpUrlApiEnvJobGroupIdCdpUrlGetRequest {
+export interface GetCdpUrlRequest {
     jobGroupId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface GetEnvStateApiEnvJobGroupIdStateGetRequest {
+export interface GetEnvironmentStateRequest {
     jobGroupId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface GetJobStatusApiEnvJobGroupIdStatusGetRequest {
+export interface GetJobStatusRequest {
     jobGroupId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface GetProxyUrlApiEnvJobGroupIdProxyUrlGetRequest {
+export interface GetProxyUrlRequest {
     jobGroupId: string;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface GetSimulatorsApiEnvSimulatorsGetRequest {
+export interface GetSimulatorsRequest {
     authorization?: string;
     xInternalService?: string;
 }
@@ -121,13 +118,13 @@ export interface LogStateMutationApiEnvSessionIdLogPostRequest {
     log: Log;
 }
 
-export interface MakeEnvApiEnvMake2PostRequest {
+export interface MakeEnvironmentRequest {
     makeEnvRequest2: MakeEnvRequest2;
     authorization?: string;
     xInternalService?: string;
 }
 
-export interface ResetEnvApiEnvJobGroupIdResetPostRequest {
+export interface ResetEnvironmentRequest {
     jobGroupId: string;
     resetEnvRequest: ResetEnvRequest;
     authorization?: string;
@@ -141,7 +138,7 @@ export interface ScoreEnvApiEnvSessionSessionIdScorePostRequest {
     xInternalService?: string;
 }
 
-export interface SendHeartbeatApiEnvJobIdHeartbeatPostRequest {
+export interface SendHeartbeatRequest {
     jobId: string;
     authorization?: string;
     xInternalService?: string;
@@ -156,11 +153,11 @@ export class EnvApi extends runtime.BaseAPI {
      * Create a backup of the environment.
      * Backup Env
      */
-    async backupEnvApiEnvJobGroupIdBackupPostRaw(requestParameters: BackupEnvApiEnvJobGroupIdBackupPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async backupEnvironmentRaw(requestParameters: BackupEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling backupEnvApiEnvJobGroupIdBackupPost().'
+                'Required parameter "jobGroupId" was null or undefined when calling backupEnvironment().'
             );
         }
 
@@ -198,19 +195,19 @@ export class EnvApi extends runtime.BaseAPI {
      * Create a backup of the environment.
      * Backup Env
      */
-    async backupEnvApiEnvJobGroupIdBackupPost(requestParameters: BackupEnvApiEnvJobGroupIdBackupPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.backupEnvApiEnvJobGroupIdBackupPostRaw(requestParameters, initOverrides);
+    async backupEnvironment(requestParameters: BackupEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.backupEnvironmentRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Close Env
      */
-    async closeEnvApiEnvJobGroupIdClosePostRaw(requestParameters: CloseEnvApiEnvJobGroupIdClosePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async closeEnvironmentRaw(requestParameters: CloseEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling closeEnvApiEnvJobGroupIdClosePost().'
+                'Required parameter "jobGroupId" was null or undefined when calling closeEnvironment().'
             );
         }
 
@@ -247,8 +244,8 @@ export class EnvApi extends runtime.BaseAPI {
     /**
      * Close Env
      */
-    async closeEnvApiEnvJobGroupIdClosePost(requestParameters: CloseEnvApiEnvJobGroupIdClosePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.closeEnvApiEnvJobGroupIdClosePostRaw(requestParameters, initOverrides);
+    async closeEnvironment(requestParameters: CloseEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.closeEnvironmentRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -256,11 +253,11 @@ export class EnvApi extends runtime.BaseAPI {
      * Create a new simulator.
      * Create Simulator
      */
-    async createSimulatorApiEnvSimulatorsPostRaw(requestParameters: CreateSimulatorApiEnvSimulatorsPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async createSimulatorRaw(requestParameters: CreateSimulatorOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['createSimulatorRequest'] == null) {
             throw new runtime.RequiredError(
                 'createSimulatorRequest',
-                'Required parameter "createSimulatorRequest" was null or undefined when calling createSimulatorApiEnvSimulatorsPost().'
+                'Required parameter "createSimulatorRequest" was null or undefined when calling createSimulator().'
             );
         }
 
@@ -300,8 +297,8 @@ export class EnvApi extends runtime.BaseAPI {
      * Create a new simulator.
      * Create Simulator
      */
-    async createSimulatorApiEnvSimulatorsPost(requestParameters: CreateSimulatorApiEnvSimulatorsPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.createSimulatorApiEnvSimulatorsPostRaw(requestParameters, initOverrides);
+    async createSimulator(requestParameters: CreateSimulatorOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.createSimulatorRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -309,11 +306,11 @@ export class EnvApi extends runtime.BaseAPI {
      * Evaluate the session.
      * Evaluate Session
      */
-    async evaluateSessionApiEnvSessionSessionIdEvaluatePostRaw(requestParameters: EvaluateSessionApiEnvSessionSessionIdEvaluatePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async evaluateSessionRaw(requestParameters: EvaluateSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['sessionId'] == null) {
             throw new runtime.RequiredError(
                 'sessionId',
-                'Required parameter "sessionId" was null or undefined when calling evaluateSessionApiEnvSessionSessionIdEvaluatePost().'
+                'Required parameter "sessionId" was null or undefined when calling evaluateSession().'
             );
         }
 
@@ -354,8 +351,8 @@ export class EnvApi extends runtime.BaseAPI {
      * Evaluate the session.
      * Evaluate Session
      */
-    async evaluateSessionApiEnvSessionSessionIdEvaluatePost(requestParameters: EvaluateSessionApiEnvSessionSessionIdEvaluatePostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.evaluateSessionApiEnvSessionSessionIdEvaluatePostRaw(requestParameters, initOverrides);
+    async evaluateSession(requestParameters: EvaluateSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.evaluateSessionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -363,11 +360,11 @@ export class EnvApi extends runtime.BaseAPI {
      * Get the active session for a job group.
      * Get Active Session
      */
-    async getActiveSessionApiEnvJobGroupIdActiveSessionGetRaw(requestParameters: GetActiveSessionApiEnvJobGroupIdActiveSessionGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async getActiveSessionRaw(requestParameters: GetActiveSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling getActiveSessionApiEnvJobGroupIdActiveSessionGet().'
+                'Required parameter "jobGroupId" was null or undefined when calling getActiveSession().'
             );
         }
 
@@ -405,8 +402,8 @@ export class EnvApi extends runtime.BaseAPI {
      * Get the active session for a job group.
      * Get Active Session
      */
-    async getActiveSessionApiEnvJobGroupIdActiveSessionGet(requestParameters: GetActiveSessionApiEnvJobGroupIdActiveSessionGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.getActiveSessionApiEnvJobGroupIdActiveSessionGetRaw(requestParameters, initOverrides);
+    async getActiveSession(requestParameters: GetActiveSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.getActiveSessionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -414,11 +411,11 @@ export class EnvApi extends runtime.BaseAPI {
      * Get the CDP URL for the environment.
      * Get Cdp Url
      */
-    async getCdpUrlApiEnvJobGroupIdCdpUrlGetRaw(requestParameters: GetCdpUrlApiEnvJobGroupIdCdpUrlGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async getCdpUrlRaw(requestParameters: GetCdpUrlRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling getCdpUrlApiEnvJobGroupIdCdpUrlGet().'
+                'Required parameter "jobGroupId" was null or undefined when calling getCdpUrl().'
             );
         }
 
@@ -456,19 +453,19 @@ export class EnvApi extends runtime.BaseAPI {
      * Get the CDP URL for the environment.
      * Get Cdp Url
      */
-    async getCdpUrlApiEnvJobGroupIdCdpUrlGet(requestParameters: GetCdpUrlApiEnvJobGroupIdCdpUrlGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.getCdpUrlApiEnvJobGroupIdCdpUrlGetRaw(requestParameters, initOverrides);
+    async getCdpUrl(requestParameters: GetCdpUrlRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.getCdpUrlRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Get Env State
      */
-    async getEnvStateApiEnvJobGroupIdStateGetRaw(requestParameters: GetEnvStateApiEnvJobGroupIdStateGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async getEnvironmentStateRaw(requestParameters: GetEnvironmentStateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling getEnvStateApiEnvJobGroupIdStateGet().'
+                'Required parameter "jobGroupId" was null or undefined when calling getEnvironmentState().'
             );
         }
 
@@ -505,19 +502,19 @@ export class EnvApi extends runtime.BaseAPI {
     /**
      * Get Env State
      */
-    async getEnvStateApiEnvJobGroupIdStateGet(requestParameters: GetEnvStateApiEnvJobGroupIdStateGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.getEnvStateApiEnvJobGroupIdStateGetRaw(requestParameters, initOverrides);
+    async getEnvironmentState(requestParameters: GetEnvironmentStateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.getEnvironmentStateRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
     /**
      * Get Job Status
      */
-    async getJobStatusApiEnvJobGroupIdStatusGetRaw(requestParameters: GetJobStatusApiEnvJobGroupIdStatusGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<JobStatusResponse>> {
+    async getJobStatusRaw(requestParameters: GetJobStatusRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<JobStatusResponse>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling getJobStatusApiEnvJobGroupIdStatusGet().'
+                'Required parameter "jobGroupId" was null or undefined when calling getJobStatus().'
             );
         }
 
@@ -554,8 +551,8 @@ export class EnvApi extends runtime.BaseAPI {
     /**
      * Get Job Status
      */
-    async getJobStatusApiEnvJobGroupIdStatusGet(requestParameters: GetJobStatusApiEnvJobGroupIdStatusGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<JobStatusResponse> {
-        const response = await this.getJobStatusApiEnvJobGroupIdStatusGetRaw(requestParameters, initOverrides);
+    async getJobStatus(requestParameters: GetJobStatusRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<JobStatusResponse> {
+        const response = await this.getJobStatusRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -563,11 +560,11 @@ export class EnvApi extends runtime.BaseAPI {
      * Get the public URL for the environment.
      * Get Proxy Url
      */
-    async getProxyUrlApiEnvJobGroupIdProxyUrlGetRaw(requestParameters: GetProxyUrlApiEnvJobGroupIdProxyUrlGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async getProxyUrlRaw(requestParameters: GetProxyUrlRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling getProxyUrlApiEnvJobGroupIdProxyUrlGet().'
+                'Required parameter "jobGroupId" was null or undefined when calling getProxyUrl().'
             );
         }
 
@@ -605,8 +602,8 @@ export class EnvApi extends runtime.BaseAPI {
      * Get the public URL for the environment.
      * Get Proxy Url
      */
-    async getProxyUrlApiEnvJobGroupIdProxyUrlGet(requestParameters: GetProxyUrlApiEnvJobGroupIdProxyUrlGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.getProxyUrlApiEnvJobGroupIdProxyUrlGetRaw(requestParameters, initOverrides);
+    async getProxyUrl(requestParameters: GetProxyUrlRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.getProxyUrlRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -614,7 +611,7 @@ export class EnvApi extends runtime.BaseAPI {
      * Get all simulators with optimized queries.
      * Get Simulators
      */
-    async getSimulatorsApiEnvSimulatorsGetRaw(requestParameters: GetSimulatorsApiEnvSimulatorsGetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<{ [key: string]: any; }>>> {
+    async getSimulatorsRaw(requestParameters: GetSimulatorsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<{ [key: string]: any; }>>> {
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
@@ -648,8 +645,8 @@ export class EnvApi extends runtime.BaseAPI {
      * Get all simulators with optimized queries.
      * Get Simulators
      */
-    async getSimulatorsApiEnvSimulatorsGet(requestParameters: GetSimulatorsApiEnvSimulatorsGetRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<{ [key: string]: any; }>> {
-        const response = await this.getSimulatorsApiEnvSimulatorsGetRaw(requestParameters, initOverrides);
+    async getSimulators(requestParameters: GetSimulatorsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<{ [key: string]: any; }>> {
+        const response = await this.getSimulatorsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -764,11 +761,11 @@ export class EnvApi extends runtime.BaseAPI {
     /**
      * Make Env
      */
-    async makeEnvApiEnvMake2PostRaw(requestParameters: MakeEnvApiEnvMake2PostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MakeEnvResponse>> {
+    async makeEnvironmentRaw(requestParameters: MakeEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['makeEnvRequest2'] == null) {
             throw new runtime.RequiredError(
                 'makeEnvRequest2',
-                'Required parameter "makeEnvRequest2" was null or undefined when calling makeEnvApiEnvMake2Post().'
+                'Required parameter "makeEnvRequest2" was null or undefined when calling makeEnvironment().'
             );
         }
 
@@ -801,14 +798,14 @@ export class EnvApi extends runtime.BaseAPI {
             body: MakeEnvRequest2ToJSON(requestParameters['makeEnvRequest2']),
         }, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => MakeEnvResponseFromJSON(jsonValue));
+        return new runtime.JSONApiResponse<any>(response);
     }
 
     /**
      * Make Env
      */
-    async makeEnvApiEnvMake2Post(requestParameters: MakeEnvApiEnvMake2PostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MakeEnvResponse> {
-        const response = await this.makeEnvApiEnvMake2PostRaw(requestParameters, initOverrides);
+    async makeEnvironment(requestParameters: MakeEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.makeEnvironmentRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -816,18 +813,18 @@ export class EnvApi extends runtime.BaseAPI {
      * Reset the environment with an optional task.
      * Reset Env
      */
-    async resetEnvApiEnvJobGroupIdResetPostRaw(requestParameters: ResetEnvApiEnvJobGroupIdResetPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async resetEnvironmentRaw(requestParameters: ResetEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobGroupId'] == null) {
             throw new runtime.RequiredError(
                 'jobGroupId',
-                'Required parameter "jobGroupId" was null or undefined when calling resetEnvApiEnvJobGroupIdResetPost().'
+                'Required parameter "jobGroupId" was null or undefined when calling resetEnvironment().'
             );
         }
 
         if (requestParameters['resetEnvRequest'] == null) {
             throw new runtime.RequiredError(
                 'resetEnvRequest',
-                'Required parameter "resetEnvRequest" was null or undefined when calling resetEnvApiEnvJobGroupIdResetPost().'
+                'Required parameter "resetEnvRequest" was null or undefined when calling resetEnvironment().'
             );
         }
 
@@ -868,8 +865,8 @@ export class EnvApi extends runtime.BaseAPI {
      * Reset the environment with an optional task.
      * Reset Env
      */
-    async resetEnvApiEnvJobGroupIdResetPost(requestParameters: ResetEnvApiEnvJobGroupIdResetPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.resetEnvApiEnvJobGroupIdResetPostRaw(requestParameters, initOverrides);
+    async resetEnvironment(requestParameters: ResetEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.resetEnvironmentRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -938,11 +935,11 @@ export class EnvApi extends runtime.BaseAPI {
      * Send a heartbeat to keep the environment session alive.
      * Send Heartbeat
      */
-    async sendHeartbeatApiEnvJobIdHeartbeatPostRaw(requestParameters: SendHeartbeatApiEnvJobIdHeartbeatPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
+    async sendHeartbeatRaw(requestParameters: SendHeartbeatRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{ [key: string]: any; }>> {
         if (requestParameters['jobId'] == null) {
             throw new runtime.RequiredError(
                 'jobId',
-                'Required parameter "jobId" was null or undefined when calling sendHeartbeatApiEnvJobIdHeartbeatPost().'
+                'Required parameter "jobId" was null or undefined when calling sendHeartbeat().'
             );
         }
 
@@ -980,8 +977,8 @@ export class EnvApi extends runtime.BaseAPI {
      * Send a heartbeat to keep the environment session alive.
      * Send Heartbeat
      */
-    async sendHeartbeatApiEnvJobIdHeartbeatPost(requestParameters: SendHeartbeatApiEnvJobIdHeartbeatPostRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
-        const response = await this.sendHeartbeatApiEnvJobIdHeartbeatPostRaw(requestParameters, initOverrides);
+    async sendHeartbeat(requestParameters: SendHeartbeatRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<{ [key: string]: any; }> {
+        const response = await this.sendHeartbeatRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
