@@ -1,27 +1,40 @@
 name: Unit Tests
 
 on:
-  workflow_dispatch:
+
   push:
-    branches:
-      - main
-    paths:
-      - "python/**"
-      # - "cli/**"
-      # - "javascript/**"
-      - ".github/workflows/unit-tests.yml"
+    branches: [main, dev]
   pull_request:
-    paths:
-      - "python/**"
-      # - "cli/**"
-      # - "javascript/**"
-      - ".github/workflows/unit-tests.yml"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            python:
+              - 'python/**'
+            workflows:
+              - '.github/workflows/**'
+
   python-lint:
+    needs: changes
+    if: ${{ needs.changes.outputs.python == 'true' || needs.changes.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -54,8 +67,9 @@ jobs:
           uv run ruff check src/ tests/ || echo "⚠️  Linting found issues but continuing workflow"
 
   python-tests:
+    needs: changes
+    if: ${{ needs.changes.outputs.python == 'true' || needs.changes.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
-    needs: python-lint
     timeout-minutes: 15
 
     steps:
