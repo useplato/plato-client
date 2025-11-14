@@ -128,6 +128,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vmInfo.sshPrivateKeyPath = navMsg.sshPrivateKeyPath
 		m.vmInfo = vmInfo
 		m.currentView = ViewVMInfo
+
+		// Write .sandbox.yaml file to current working directory
+		// Get path to plato-config.yml
+		platoConfigPath := ""
+		if configDir, err := GetPlatoConfigDir(); err == nil {
+			platoConfigPath = filepath.Join(configDir, "plato-config.yml")
+		}
+
+		if err := WriteSandboxFile(navMsg.sandbox, navMsg.dataset, platoConfigPath, navMsg.artifactID, navMsg.version, navMsg.sshHost, navMsg.sshConfigPath, navMsg.sshPrivateKeyPath); err != nil {
+			utils.LogDebug("Failed to write .sandbox.yaml: %v", err)
+			// Non-fatal error, just log it
+		} else {
+			utils.LogDebug("Successfully wrote .sandbox.yaml for VM: %s", navMsg.sandbox.PublicId)
+		}
+
 		return m, m.vmInfo.Init()
 	}
 

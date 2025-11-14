@@ -1846,6 +1846,14 @@ func (m VMInfoModel) handleAction(action vmAction) (VMInfoModel, tea.Cmd) {
 				utils.LogDebug("Successfully cleaned up SSH key pair: %s", m.sshPrivateKeyPath)
 			}
 		}
+
+		// Remove .sandbox.yaml file from current working directory
+		if err := RemoveSandboxFile(); err != nil {
+			utils.LogDebug("Error removing .sandbox.yaml: %v", err)
+		} else {
+			utils.LogDebug("Successfully removed .sandbox.yaml")
+		}
+
 		// Call VM cleanup API
 		return m, func() tea.Msg {
 			// Use a timeout context to prevent hanging
