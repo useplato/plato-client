@@ -35,6 +35,7 @@ docs/SimConfigService.md
 docs/SimStatusHistory.md
 docs/SimulatorApi.md
 docs/SimulatorConfig.md
+docs/SimulatorListItem.md
 docs/SimulatorVersionDetails.md
 docs/SimulatorVersionsResponse.md
 docs/TestcasesApi.md
@@ -81,6 +82,7 @@ src/models/SimConfigMetadata.ts
 src/models/SimConfigService.ts
 src/models/SimStatusHistory.ts
 src/models/SimulatorConfig.ts
+src/models/SimulatorListItem.ts
 src/models/SimulatorVersionDetails.ts
 src/models/SimulatorVersionsResponse.ts
 src/models/VMManagementRequest.ts

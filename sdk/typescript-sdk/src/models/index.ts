@@ -31,6 +31,7 @@ export * from './SimConfigMetadata';
 export * from './SimConfigService';
 export * from './SimStatusHistory';
 export * from './SimulatorConfig';
+export * from './SimulatorListItem';
 export * from './SimulatorVersionDetails';
 export * from './SimulatorVersionsResponse';
 export * from './VMManagementRequest';

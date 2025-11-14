@@ -1225,6 +1225,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
 
+  /simulator/list:
+    get:
+      tags:
+        - simulator
+      summary: List Simulators
+      description: Get list of all simulators from database
+      operationId: listSimulators
+      responses:
+        200:
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/SimulatorListItem"
+                type: array
+                title: Response List Simulators Api Simulator List Get
+
   /simulator/{artifact_id}/db_config:
     get:
       tags:
@@ -2756,6 +2774,67 @@ components:
       required:
         - type
       title: SimulatorConfig
+
+    SimulatorListItem:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+            -
+              type: string
+            -
+              type: "null"
+          title: Description
+        img_url:
+          anyOf:
+            -
+              type: string
+            -
+              type: "null"
+          title: Img Url
+        enabled:
+          type: boolean
+          title: Enabled
+        sim_type:
+          type: string
+          title: Sim Type
+        job_name:
+          anyOf:
+            -
+              type: string
+            -
+              type: "null"
+          title: Job Name
+        internal_app_port:
+          anyOf:
+            -
+              type: integer
+            -
+              type: "null"
+          title: Internal App Port
+        version_tag:
+          type: string
+          title: Version Tag
+        image_uri:
+          anyOf:
+            -
+              type: string
+            -
+              type: "null"
+          title: Image Uri
+      type: object
+      required:
+        - id
+        - name
+        - enabled
+        - sim_type
+        - version_tag
+      title: SimulatorListItem
 
     SimulatorRepositoryResponse:
       additionalProperties: true

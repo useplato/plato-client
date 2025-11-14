@@ -17,6 +17,7 @@ import * as runtime from '../runtime';
 import type {
   DbConfigResponse,
   HTTPValidationError,
+  SimulatorListItem,
   SimulatorVersionsResponse,
 } from '../models/index';
 import {
@@ -24,6 +25,8 @@ import {
     DbConfigResponseToJSON,
     HTTPValidationErrorFromJSON,
     HTTPValidationErrorToJSON,
+    SimulatorListItemFromJSON,
+    SimulatorListItemToJSON,
     SimulatorVersionsResponseFromJSON,
     SimulatorVersionsResponseToJSON,
 } from '../models/index';
@@ -208,6 +211,41 @@ export class SimulatorApi extends runtime.BaseAPI {
      */
     async getSimulatorVersions(requestParameters: GetSimulatorVersionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SimulatorVersionsResponse> {
         const response = await this.getSimulatorVersionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Get list of all simulators from database
+     * List Simulators
+     */
+    async listSimulatorsRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<SimulatorListItem>>> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.apiKey) {
+            headerParameters["X-Api-Key"] = await this.configuration.apiKey("X-Api-Key"); // ApiKeyAuth authentication
+        }
+
+
+        let urlPath = `/simulator/list`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(SimulatorListItemFromJSON));
+    }
+
+    /**
+     * Get list of all simulators from database
+     * List Simulators
+     */
+    async listSimulators(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<SimulatorListItem>> {
+        const response = await this.listSimulatorsRaw(initOverrides);
         return await response.value();
     }
 

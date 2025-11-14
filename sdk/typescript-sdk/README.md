@@ -262,6 +262,10 @@ const flows = await client.simulator.getSimulatorFlows({
 });
 console.log('Available flows:', flows);
 
+// List all available simulators
+const allSimulators = await client.simulator.listSimulators();
+console.log('All simulators:', allSimulators);
+
 // Create a new simulator
 await client.env.createSimulator({
     createSimulatorRequest: {

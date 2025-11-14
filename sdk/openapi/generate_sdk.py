@@ -41,6 +41,7 @@ ROUTES_TO_INCLUDE = {
     "/api/simulator/{artifact_id}/flows": ["get"],
     "/api/simulator/{simulator_name}/versions": ["get"],
     "/api/simulator/{artifact_id}/db_config": ["get"],
+    "/api/simulator/list": ["get"],
     
     # Python SDK - Gitea Routes
     "/api/gitea/my-info": ["get"],
@@ -106,6 +107,7 @@ OPERATION_ID_MAPPINGS = {
     'get_env_flows_api_simulator__artifact_id__flows_get': 'getSimulatorFlows',
     'get_db_config_api_simulator__artifact_id__db_config_get': 'getSimulatorDbConfig',
     'get_simulator_versions_api_simulator__simulator_name__versions_get': 'getSimulatorVersions',
+    'list_simulators_api_simulator_list_get': 'listSimulators',
     
     # Gitea Operations
     'get_gitea_my_info_api_gitea_my_info_get': 'getGiteaMyInfo',

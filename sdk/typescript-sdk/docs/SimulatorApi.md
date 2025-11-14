@@ -7,6 +7,7 @@ All URIs are relative to *http://localhost*
 | [**getSimulatorDbConfig**](SimulatorApi.md#getsimulatordbconfig) | **GET** /simulator/{artifact_id}/db_config | Get Db Config |
 | [**getSimulatorFlows**](SimulatorApi.md#getsimulatorflows) | **GET** /simulator/{artifact_id}/flows | Get Env Flows |
 | [**getSimulatorVersions**](SimulatorApi.md#getsimulatorversions) | **GET** /simulator/{simulator_name}/versions | Get Simulator Versions |
+| [**listSimulators**](SimulatorApi.md#listsimulators) | **GET** /simulator/list | List Simulators |
 
 
 
@@ -241,6 +242,69 @@ example().catch(console.error);
 |-------------|-------------|------------------|
 | **200** | Successful Response |  -  |
 | **422** | Validation Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## listSimulators
+
+> Array&lt;SimulatorListItem&gt; listSimulators()
+
+List Simulators
+
+Get list of all simulators from database
+
+### Example
+
+```ts
+import {
+  Configuration,
+  SimulatorApi,
+} from '@plato-ai/sdk';
+import type { ListSimulatorsRequest } from '@plato-ai/sdk';
+
+async function example() {
+  console.log("🚀 Testing @plato-ai/sdk SDK...");
+  const config = new Configuration({ 
+    // To configure API key authorization: ApiKeyAuth
+    apiKey: "YOUR API KEY",
+  });
+  const api = new SimulatorApi(config);
+
+  try {
+    const data = await api.listSimulators();
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+This endpoint does not need any parameter.
+
+### Return type
+
+[**Array&lt;SimulatorListItem&gt;**](SimulatorListItem.md)
+
+### Authorization
+
+[ApiKeyAuth](../README.md#ApiKeyAuth)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Successful Response |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
