@@ -132,7 +132,7 @@ class TestPlatoHttpSession:
             assert session.closed
         finally:
             # Clean up if needed
-            if not client._http_session.closed:
+            if client._http_session is not None and not client._http_session.closed:
                 await client.close()
 
 

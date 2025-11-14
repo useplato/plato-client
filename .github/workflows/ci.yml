@@ -101,7 +101,8 @@ jobs:
             --cov-config=.coveragerc \
             --cov-report=term-missing \
             --cov-report=html \
-            --cov-report=xml
+            --cov-report=xml \
+            --junitxml=test-results.xml
 
       - name: Upload Python test results
         if: always()

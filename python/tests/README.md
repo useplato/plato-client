@@ -134,11 +134,11 @@ uv run pytest tests/unit/ --cov=src/plato --cov-report=term-missing --cov-report
 
 ## Coverage Thresholds
 
-The tests are configured to **fail if coverage drops below 80%**. You can adjust this in `pytest.ini`:
+The tests are configured to **fail if coverage drops below 85%**. You can adjust this in `pytest.ini`:
 
 ```ini
 addopts =
-    --cov-fail-under=80  # Change this value
+    --cov-fail-under=85  # Change this value
 ```
 
 ## Test Coverage Statistics
