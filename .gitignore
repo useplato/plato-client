@@ -54,6 +54,7 @@ coverage.xml
 htmlcov/
 .pytest_cache/
 test_output.txt
+test-results.xml
 
 
 markdown.md
