@@ -1,0 +1,40 @@
+{
+  "name": "plato-sandbox-sdk",
+  "version": "1.1.10",
+  "description": "TypeScript SDK for interacting with the Plato platform - manage environments, VMs, simulators, and more",
+  "author": "Plato AI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/useplato/plato-client.git"
+  },
+  "readme": "README.md",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "module": "./dist/esm/index.js",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc && tsc -p tsconfig.esm.json",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^4.0 || ^5.0"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.0",
+    "playwright": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "plato",
+    "sdk",
+    "api",
+    "client",
+    "typescript",
+    "openapi"
+  ]
+}

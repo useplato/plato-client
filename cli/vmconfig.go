@@ -7,7 +7,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -76,6 +78,23 @@ type statusUpdateMsg struct {
 func createSandbox(client *plato.PlatoClient, config models.SimConfigDataset, dataset string, statusChan chan<- string, artifactID *string, service string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
+
+		// Debug: Log the exact config being sent
+		configJSON, _ := json.Marshal(config)
+		statusChan <- "=== CREATE SANDBOX CONFIG ==="
+		statusChan <- fmt.Sprintf("Dataset: %s", dataset)
+		if artifactID != nil {
+			statusChan <- fmt.Sprintf("Artifact ID: %s", *artifactID)
+		}
+		
+		// Pretty-print the config JSON
+		var prettyJSON bytes.Buffer
+		if err := json.Indent(&prettyJSON, configJSON, "", "  "); err == nil {
+			statusChan <- fmt.Sprintf("Config:\n%s", prettyJSON.String())
+		} else {
+			statusChan <- fmt.Sprintf("Config JSON: %s", string(configJSON))
+		}
+		statusChan <- "============================="
 
 		// Create the sandbox
 		statusChan <- "Creating VM via API..."
@@ -267,7 +286,7 @@ func NewVMConfigModelFromConfig(client *plato.PlatoClient, datasetName string, d
 		datasetConfig:  datasetConfig,
 		creating:       true,
 		started:        true,
-		statusChan:     make(chan string, 10),
+		statusChan:     make(chan string, 50), // Larger buffer for debug messages
 	}
 	m.lg = lipgloss.DefaultRenderer()
 
@@ -316,7 +335,7 @@ func NewVMConfigModel(client *plato.PlatoClient, simulator *models.SimulatorList
 		m.creating = true
 		m.started = true
 		m.statusMessages = []string{fmt.Sprintf("Starting VM creation for %s...", simulator.Name)}
-		m.statusChan = make(chan string, 10)
+		m.statusChan = make(chan string, 50) // Larger buffer for debug messages
 		m.datasetConfig = m.buildConfig(1, 512, 10240)
 	}
 
@@ -515,7 +534,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		// If artifact ID is present, skip sandbox setup and just configure SSH (without root password)
 		if m.artifactID != nil {
 			m.settingUp = true
-			m.statusChan = make(chan string, 10)
+			m.statusChan = make(chan string, 50) // Larger buffer for debug messages
 			return m, tea.Batch(
 				setupSSHForArtifact(m.client, msg.sandbox, m.statusChan),
 				waitForStatusUpdates(m.statusChan),
@@ -524,7 +543,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 
 		// For blank VMs, run full sandbox setup
 		m.settingUp = true
-		m.statusChan = make(chan string, 10)
+		m.statusChan = make(chan string, 50) // Larger buffer for debug messages
 		return m, tea.Batch(
 			setupSandboxFromConfig(m.client, msg.sandbox, m.datasetConfig, m.dataset, m.statusChan),
 			waitForStatusUpdates(m.statusChan),
@@ -669,7 +688,7 @@ func (m VMConfigModel) Update(msg tea.Msg) (VMConfigModel, tea.Cmd) {
 		m.dataset = datasetVal
 		m.datasetConfig = datasetConfig // Store the config for later use in setup
 		m.statusMessages = []string{"Starting VM creation..."}
-		m.statusChan = make(chan string, 10)
+		m.statusChan = make(chan string, 50) // Larger buffer for debug messages
 
 		cmds = append(cmds, m.spinner.Tick)
 		cmds = append(cmds, m.stopwatch.Start())
@@ -709,16 +728,29 @@ func (m VMConfigModel) View() string {
 			content += timeStyle.Render(fmt.Sprintf("  ⏱  %s elapsed", m.stopwatch.View())) + "\n\n"
 		}
 
+		// Style for debug/config messages
+		debugStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFD700")). // Gold color for visibility
+			MarginLeft(4)
+
 		// Show all status messages with spinner on the latest one
 		for i, msg := range m.statusMessages {
 			// Check if this is an error message
 			isError := strings.HasPrefix(msg, "❌")
+			// Check if this is a debug/config message
+			isDebug := strings.HasPrefix(msg, "===") || 
+				strings.HasPrefix(msg, "Dataset:") || 
+				strings.HasPrefix(msg, "Artifact ID:") ||
+				strings.Contains(msg, "Config:")
 
 			if i == len(m.statusMessages)-1 {
 				// Latest message with spinner
 				if isError {
 					// Wrap error messages to prevent truncation
 					content += errorStyle.Render(fmt.Sprintf("  %s", msg)) + "\n"
+				} else if isDebug {
+					// Show debug messages without spinner in gold
+					content += debugStyle.Render(fmt.Sprintf("  %s", msg)) + "\n"
 				} else {
 					content += style.Render(fmt.Sprintf("  %s %s", m.spinner.View(), msg)) + "\n"
 				}
@@ -727,6 +759,9 @@ func (m VMConfigModel) View() string {
 				if isError {
 					// Show errors without checkmark with wrapping
 					content += errorStyle.Render(fmt.Sprintf("  %s", msg)) + "\n"
+				} else if isDebug {
+					// Show debug messages in gold without checkmark
+					content += debugStyle.Render(fmt.Sprintf("  %s", msg)) + "\n"
 				} else {
 					content += statusStyle.Render(fmt.Sprintf("  ✓ %s", msg)) + "\n"
 				}
