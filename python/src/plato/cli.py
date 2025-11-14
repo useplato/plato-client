@@ -1,41 +1,21 @@
-#!/usr/bin/env python3
-"""
-Plato CLI - Command line interface for Plato services
-
-This CLI orchestrates the various Plato services:
-- Hub Service: Repository and project management
-- Sandbox Service: Development environment management
-- SDK: Core API communication
-
-The CLI handles user interaction, command routing, and error display,
-while delegating business logic to the appropriate services.
-
-Test change: Version bump test
-"""
-
 import asyncio
+import json
+import logging
 import os
-import sys
-from pathlib import Path
-from typing import Optional
-
-import typer
-from rich.console import Console
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
-
-from plato.sdk import Plato
-# from plato.hub import Hub  # Not used
-# from plato.sandbox import Sandbox  # Not used
-# from plato.sandbox_sdk import PlatoSandboxSDK  # Deprecated, use PlatoSandboxClient
-from dotenv import load_dotenv
 import platform
 import shutil
 import subprocess
+from pathlib import Path
 
-import json
+import typer
+import yaml
+from dotenv import load_dotenv
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from plato.sdk import Plato
 
 # Initialize Rich console
 console = Console()
@@ -43,8 +23,16 @@ app = typer.Typer(
     help="[bold blue]Plato CLI[/bold blue] - Manage Plato environments and simulators."
 )
 
+# Set up Rich logging handler for FlowExecutor
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    handlers=[RichHandler(console=console, show_time=False, show_path=False)],
+)
+flow_logger = logging.getLogger("plato.flow")
 
-def _find_bundled_cli() -> Optional[str]:
+
+def _find_bundled_cli() -> str | None:
     """
     Find the bundled Plato CLI binary.
 
@@ -64,6 +52,7 @@ def _find_bundled_cli() -> Optional[str]:
         return str(binary_path)
 
     return None
+
 
 # Load environment variables
 load_dotenv()
@@ -94,14 +83,12 @@ def handle_async(coro):
 
 @app.command()
 def make(
-    env_name: str = typer.Argument(
-        ..., help="Environment name (e.g., 'espocrm', 'doordash')"
-    ),
+    env_name: str = typer.Argument(..., help="Environment name (e.g., 'espocrm', 'doordash')"),
     interface_type: str = typer.Option("browser", help="Interface type"),
     width: int = typer.Option(1920, help="Viewport width"),
     height: int = typer.Option(1080, help="Viewport height"),
     keepalive: bool = typer.Option(False, "--keepalive", help="Disable timeout"),
-    alias: Optional[str] = typer.Option(None, help="Job group alias"),
+    alias: str | None = typer.Option(None, help="Job group alias"),
     open_page: bool = typer.Option(False, "--open-page", help="Open page on start"),
 ):
     """Create a new Plato environment."""
@@ -111,9 +98,7 @@ def make(
         try:
             console.print(f"[cyan]Creating environment '{env_name}'...[/cyan]")
 
-            with console.status(
-                "[bold green]Initializing environment...", spinner="dots"
-            ):
+            with console.status("[bold green]Initializing environment...", spinner="dots"):
                 env = await sdk.make_environment(
                     env_id=env_name,
                     interface_type="browser",
@@ -128,11 +113,7 @@ def make(
             success_panel = Panel.fit(
                 f"[green]Environment created successfully![/green]\n"
                 f"[cyan]Environment ID:[/cyan] [bold]{env.id}[/bold]\n"
-                + (
-                    f"[cyan]Alias:[/cyan] [bold]{env.alias}[/bold]\n"
-                    if env.alias
-                    else ""
-                ),
+                + (f"[cyan]Alias:[/cyan] [bold]{env.alias}[/bold]\n" if env.alias else ""),
                 title="[bold green]✅ Success[/bold green]",
                 border_style="green",
             )
@@ -166,406 +147,6 @@ def make(
     handle_async(_make())
 
 
-
-
-async def run_interactive_sandbox_menu(sandbox):
-    """Interactive sandbox menu - handles all user interaction."""
-
-    if not sandbox.sandbox_info:
-        console.print("[red]❌ Sandbox not properly initialized[/red]")
-        return
-
-    console.print(
-        Panel.fit(
-            "[bold green]Sandbox is ready![/bold green] Choose an action:",
-            title="[bold blue]🚀 Interactive Sandbox[/bold blue]",
-            border_style="blue",
-        )
-    )
-
-    while True:
-        # Display menu
-        menu_table = Table(title="[bold cyan]📋 Sandbox Menu[/bold cyan]")
-        menu_table.add_column("Option", style="cyan", no_wrap=True)
-        menu_table.add_column("Action", style="white")
-        menu_table.add_row("0", "Display Sandbox Info")
-        menu_table.add_row("1", "Run Services (submit + health loop)")
-        menu_table.add_row("2", "Run Worker (submit + health loop)")
-        menu_table.add_row("3", "Sim Backup")
-        menu_table.add_row("4", "Sim Reset")
-        menu_table.add_row("5", "Create VM snapshot")
-
-        console.print("\n")
-        console.print(menu_table)
-
-        try:
-            raw = input("Choose an action (0-5 or q to quit): ")
-        except KeyboardInterrupt:
-            return
-        except EOFError:
-            return
-
-        raw = (raw or "").strip()
-        if not raw:
-            continue
-        if raw.lower() in {"q", "x", "quit", "exit"}:
-            break
-        try:
-            choice = int(raw)
-        except ValueError:
-            console.print("[red]❌ Invalid choice. Please enter a number.[/red]")
-            continue
-
-        if choice == 0:
-            await handle_display_sandbox_info(sandbox)
-        elif choice == 1:
-            await handle_run_services(sandbox)
-        elif choice == 2:
-            await handle_run_worker(sandbox)
-        elif choice == 3:
-            await handle_sim_backup(sandbox)
-        elif choice == 4:
-            await handle_sim_reset(sandbox)
-        elif choice == 5:
-            await handle_create_snapshot(sandbox)
-        else:
-            console.print("[red]❌ Invalid choice. Please enter 0-5.[/red]")
-
-
-async def handle_run_all(sandbox):
-    # Deprecated; kept for compatibility but directs users to new commands
-    console.print(
-        "[yellow]⚠️ 'Run All' is deprecated. Use 'Run Services' then 'Run Worker'.[/yellow]"
-    )
-
-
-async def handle_display_sandbox_info(sandbox):
-    """Handle displaying sandbox information."""
-    if not sandbox.sandbox_info:
-        console.print("[red]❌ Sandbox not properly initialized[/red]")
-        return
-
-    info = sandbox.sandbox_info
-
-    # Create formatted info panel (adapted for platohub SandboxInfo structure)
-    info_content = (
-        f"[cyan]🔗 SSH Connection:[/cyan]\n"
-        f"  [bold green]ssh {info.ssh_host}[/bold green]\n\n"
-        f"[cyan]🌐 VM URL:[/cyan]\n"
-        f"  [blue]{info.url}[/blue]\n\n"
-        f"[cyan]🔌 SSH URL:[/cyan]\n"
-        f"  [blue]{info.ssh_url}[/blue]\n\n"
-        f"[cyan]🔧 Service:[/cyan]\n"
-        f"  [bold]{info.service}[/bold]\n\n"
-        f"[cyan]📊 Dataset:[/cyan]\n"
-        f"  [bold]{info.dataset}[/bold]\n\n"
-        f"[cyan]🔑 Public ID:[/cyan]\n"
-        f"  [dim]{info.public_id}[/dim]\n\n"
-        f"[cyan]🏷️  Job Group ID:[/cyan]\n"
-        f"  [dim]{info.job_group_id}[/dim]\n\n"
-        f"[cyan]💾 Commit Hash:[/cyan]\n"
-        f"  [dim]{info.commit_hash[:12]}...[/dim]\n\n"
-        f"[cyan]🔌 Local Port:[/cyan]\n"
-        f"  [bold]{info.local_port}[/bold]"
-    )
-
-    info_panel = Panel.fit(
-        info_content,
-        title="[bold blue]📋 Sandbox Information[/bold blue]",
-        border_style="blue",
-    )
-    console.print(info_panel)
-
-
-async def handle_sim_backup(sandbox):
-    if not sandbox.sandbox_info:
-        console.print("[red]❌ Sandbox not properly initialized[/red]")
-        return
-
-    console.print("[cyan]💾 Creating simulator backup...[/cyan]")
-
-    try:
-        await sandbox.client.backup_environment(sandbox.sandbox_info.public_id)
-    except Exception as e:
-        console.print(f"[red]❌ Error creating backup: {e}[/red]")
-
-
-async def handle_sim_reset(sandbox):
-    if not sandbox.sandbox_info:
-        console.print("[red]❌ Sandbox not properly initialized[/red]")
-        return
-
-    console.print("[cyan]🔄 Resetting simulator environment...[/cyan]")
-
-    try:
-        await sandbox.client.reset_environment(sandbox.sandbox_info.public_id)
-    except Exception as e:
-        console.print(f"[red]❌ Error resetting simulator: {e}[/red]")
-
-
-async def handle_run_services(sandbox):
-    """Submit start-services and loop on healthy-services with progress."""
-    if not sandbox.sandbox_info:
-        console.print("[red]❌ Sandbox not properly initialized[/red]")
-        return
-
-    # Helper to parse last JSON line from stdout
-    def _parse_last_json(stdout: str) -> dict | None:
-        if not stdout:
-            return None
-        for line in reversed(stdout.strip().split("\n")):
-            try:
-                obj = json.loads(line)
-                if isinstance(obj, dict) and "status" in obj:
-                    return obj
-            except Exception:
-                continue
-        return None
-
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Submitting start-services...", total=None)
-
-            submit = await sandbox.sandbox_sdk.start_services(
-                public_id=sandbox.sandbox_info.public_id,
-                dataset=sandbox.sandbox_info.dataset,
-                dataset_config=sandbox.sandbox_info.dataset_config,
-            )
-
-            start_result = await sandbox._monitor_sse_stream_with_data(
-                sandbox.client,
-                submit.correlation_id,
-                "Start Services",
-                timeout=900,
-            )
-            if not start_result.success:
-                progress.update(task, description="[red]Start-services failed[/red]")
-                console.print(
-                    f"[red]❌ Error starting services: {start_result.error or 'unknown error'}[/red]"
-                )
-                return
-            progress.update(task, description="[green]Start-services submitted[/green]")
-
-            # Poll health until success or timeout
-            service_timeout = 900
-            max_retries = 60
-            delay_s = 5
-            attempts = 0
-            start_time = asyncio.get_event_loop().time()
-            while attempts < max_retries:
-                attempts += 1
-                progress.update(
-                    task, description=f"[cyan]Health check attempt {attempts}...[/cyan]"
-                )
-                health_submit = await sandbox.sandbox_sdk.healthy_services(
-                    public_id=sandbox.sandbox_info.public_id,
-                    dataset=sandbox.sandbox_info.dataset,
-                    dataset_config=sandbox.sandbox_info.dataset_config,
-                )
-                health_result = await sandbox._monitor_sse_stream_with_data(
-                    sandbox.client,
-                    health_submit.correlation_id,
-                    "Services Health",
-                    timeout=60,
-                )
-                obj = _parse_last_json(health_result.stdout or "")
-                status = (obj or {}).get("status", "unknown")
-                message = (obj or {}).get("message", "")
-                progress.update(
-                    task, description=f"[cyan]Health: {status} - {message}[/cyan]"
-                )
-                if status == "success":
-                    progress.update(task, description="[green]Services healthy[/green]")
-                    console.print("[green]✅ Services are healthy![/green]")
-                    return
-                if (asyncio.get_event_loop().time() - start_time) > service_timeout:
-                    break
-                await asyncio.sleep(delay_s)
-
-            progress.update(
-                task,
-                description="[yellow]Timed out waiting for healthy services[/yellow]",
-            )
-            console.print(
-                "[yellow]⚠️ Services did not become healthy within timeout[/yellow]"
-            )
-
-    except KeyboardInterrupt:
-        console.print(
-            "[yellow]⏹ Cancelled run-services; services may continue starting in the background[/yellow]"
-        )
-        return
-    except Exception as e:
-        console.print(f"[red]❌ Error running services: {e}[/red]")
-
-
-async def handle_run_worker(sandbox):
-    """Submit start-worker and loop on healthy-worker with progress."""
-    if not sandbox.sandbox_info:
-        console.print("[red]❌ Sandbox not properly initialized[/red]")
-        return
-
-    # Helper to parse last JSON line from stdout
-    def _parse_last_json(stdout: str) -> dict | None:
-        if not stdout:
-            return None
-        for line in reversed(stdout.strip().split("\n")):
-            try:
-                obj = json.loads(line)
-                if isinstance(obj, dict) and "status" in obj:
-                    return obj
-            except Exception:
-                continue
-        return None
-
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Submitting start-worker...", total=None)
-
-            submit = await sandbox.sandbox_sdk.start_worker(
-                public_id=sandbox.sandbox_info.public_id,
-                dataset=sandbox.sandbox_info.dataset,
-                dataset_config=sandbox.sandbox_info.dataset_config,
-            )
-            start_result = await sandbox._monitor_sse_stream_with_data(
-                sandbox.client,
-                submit.correlation_id,
-                "Start Worker",
-                timeout=600,
-            )
-            start_obj = _parse_last_json(start_result.stdout or "")
-            if (
-                not start_result.success
-                or not start_obj
-                or start_obj.get("status") == "error"
-            ):
-                progress.update(task, description="[red]Start-worker failed[/red]")
-                breakpoint()
-                console.print(
-                    f"[red]❌ Error starting worker: {(start_result.error or (start_obj or {}).get('message') or 'unknown error')}[/red]"
-                )
-                return
-            progress.update(task, description="[green]Start-worker submitted[/green]")
-
-            # Poll worker health until success or timeout
-            worker_timeout = 600
-            max_retries = 60
-            delay_s = 5
-            attempts = 0
-            start_time = asyncio.get_event_loop().time()
-            while attempts < max_retries:
-                attempts += 1
-                progress.update(
-                    task,
-                    description=f"[cyan]Worker health attempt {attempts}...[/cyan]",
-                )
-                submit_h = await sandbox.sandbox_sdk.healthy_worker(
-                    public_id=sandbox.sandbox_info.public_id
-                )
-                result_h = await sandbox._monitor_sse_stream_with_data(
-                    sandbox.client,
-                    submit_h.correlation_id,
-                    "Worker Health",
-                    timeout=60,
-                )
-                obj = _parse_last_json(result_h.stdout or "")
-
-                # Better error handling for parsing
-                if obj:
-                    status = obj.get("status", "unknown")
-                    message = obj.get("message", "")
-                else:
-                    # If parsing failed, show raw output for debugging
-                    status = "parse_error"
-                    message = f"Could not parse: {(result_h.stdout or '')[:100]}"
-
-                # Clean up the message (remove any trailing newlines/unknowns)
-                message = message.strip()
-
-                progress.update(task, description=f"[cyan]Worker: {message}[/cyan]")
-                if status == "success":
-                    progress.update(task, description="[green]Worker healthy[/green]")
-                    console.print("[green]✅ Worker is healthy![/green]")
-                    return
-                if (asyncio.get_event_loop().time() - start_time) > worker_timeout:
-                    break
-                await asyncio.sleep(delay_s)
-
-            progress.update(
-                task,
-                description="[yellow]Timed out waiting for healthy worker[/yellow]",
-            )
-            console.print(
-                "[yellow]⚠️ Worker did not become healthy within timeout[/yellow]"
-            )
-
-    except KeyboardInterrupt:
-        console.print(
-            "[yellow]⏹ Cancelled run-worker; worker may continue starting in the background[/yellow]"
-        )
-        return
-    except Exception as e:
-        console.print(f"[red]❌ Error running worker: {e}[/red]")
-
-
-async def handle_create_snapshot(sandbox):
-    if not sandbox.sandbox_info:
-        console.print("[red]❌ Sandbox not properly initialized[/red]")
-        return
-
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Submitting snapshot request...", total=None)
-
-            # Submit snapshot request
-            submit = await sandbox.sandbox_sdk.snapshot(sandbox.sandbox_info.public_id)
-
-            # Monitor snapshot creation
-            progress.update(task, description="[cyan]Creating VM snapshot...[/cyan]")
-            result = await sandbox._monitor_sse_stream_with_data(
-                sandbox.client,
-                submit.correlation_id,
-                "VM Snapshot",
-                timeout=1800,  # 30 minutes for snapshot creation
-            )
-
-            if result.success:
-                progress.update(
-                    task, description="[green]Snapshot created successfully![/green]"
-                )
-                console.print("[green]✅ VM snapshot created successfully![/green]")
-                if result.snapshot_s3_uri:
-                    console.print(f"[cyan]📦 S3 URI: {result.snapshot_s3_uri}[/cyan]")
-                if result.snapshot_dir:
-                    console.print(
-                        f"[cyan]📁 Snapshot directory: {result.snapshot_dir}[/cyan]"
-                    )
-            else:
-                progress.update(task, description="[red]Snapshot failed[/red]")
-                error_msg = result.error or "Unknown error"
-                console.print(f"[red]❌ Error creating snapshot: {error_msg}[/red]")
-                if result.stderr:
-                    console.print(f"[red]📤 Error details: {result.stderr}[/red]")
-                console.print(
-                    "[yellow]💡 Tip: Snapshots work best after services are running. Try starting services first.[/yellow]"
-                )
-
-    except Exception as e:
-        console.print(f"[red]❌ Error creating snapshot: {e}[/red]")
-
-
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def hub(
     ctx: typer.Context,
@@ -591,7 +172,9 @@ def hub(
 
     if not plato_bin:
         console.print("[red]❌ Plato CLI binary not found in package[/red]")
-        console.print("\n[yellow]The bundled CLI binary was not found in this installation.[/yellow]")
+        console.print(
+            "\n[yellow]The bundled CLI binary was not found in this installation.[/yellow]"
+        )
         console.print("This indicates an installation issue with the plato-sdk package.")
         console.print("\n[yellow]💡 Try reinstalling the package:[/yellow]")
         console.print("   pip install --upgrade --force-reinstall plato-sdk")
@@ -600,7 +183,7 @@ def hub(
         raise typer.Exit(1)
 
     # Get any additional arguments passed after 'hub'
-    args = ctx.args if hasattr(ctx, 'args') else []
+    args = ctx.args if hasattr(ctx, "args") else []
 
     try:
         # Launch the Go CLI, passing through all arguments
@@ -609,6 +192,488 @@ def hub(
     except Exception as e:
         console.print(f"[red]❌ Failed to launch Plato Hub: {e}[/red]")
         raise typer.Exit(1)
+
+
+# =============================================================================
+# SYNC COMMAND
+# =============================================================================
+
+
+@app.command()
+def sync():
+    """
+    Sync local code to a remote Plato VM using rsync.
+
+    Reads .sandbox.yaml to get ssh_host and service name.
+    Syncs to /home/plato/worktree/<service-name>.
+
+    Example:
+        plato sync
+    """
+    # Check if rsync is available
+    if not shutil.which("rsync"):
+        console.print("[red]❌ rsync is not installed[/red]")
+        console.print("\n[yellow]Please install rsync:[/yellow]")
+        console.print("  macOS:   brew install rsync")
+        console.print("  Linux:   apt-get install rsync or yum install rsync")
+        raise typer.Exit(1)
+
+    # Read .sandbox.yaml
+    sandbox_file = Path.cwd() / ".sandbox.yaml"
+
+    if not sandbox_file.exists():
+        console.print("[red]❌ .sandbox.yaml not found[/red]")
+        console.print("\n[yellow]Create a sandbox with: [bold]plato hub[/bold][/yellow]")
+        raise typer.Exit(1)
+
+    try:
+        with open(sandbox_file) as f:
+            sandbox_data = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"[red]❌ Error reading .sandbox.yaml: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    # Get required fields
+    ssh_host = sandbox_data.get("ssh_host")
+    plato_config_path = sandbox_data.get("plato_config_path")
+
+    if not ssh_host:
+        console.print("[red]❌ .sandbox.yaml missing 'ssh_host'[/red]")
+        raise typer.Exit(1)
+
+    if not plato_config_path:
+        console.print("[red]❌ .sandbox.yaml missing 'plato_config_path'[/red]")
+        raise typer.Exit(1)
+
+    # Load plato-config.yml to get service name
+    try:
+        with open(plato_config_path) as f:
+            plato_config = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"[red]❌ Could not read plato-config.yml: {e}[/red]")
+        raise typer.Exit(1)
+
+    service = plato_config.get("service")
+    if not service:
+        console.print("[red]❌ plato-config.yml missing 'service'[/red]")
+        raise typer.Exit(1)
+
+    # Build remote path
+    remote_path = f"/home/plato/worktree/{service}"
+
+    console.print(f"[cyan]SSH host: {ssh_host}[/cyan]")
+    console.print(f"[cyan]Service: {service}[/cyan]")
+    console.print(f"[cyan]Remote path: {remote_path}[/cyan]")
+
+    # Build rsync command
+    local_path = Path.cwd()
+
+    # Hardcoded excludes
+    excludes = [
+        "__pycache__",
+        "*.pyc",
+        ".git",
+        ".venv",
+        ".sandbox.yaml",
+    ]
+
+    cmd = ["rsync", "-avz", "--delete", "--info=progress2"]
+
+    # Add excludes
+    for pattern in excludes:
+        cmd.extend(["--exclude", pattern])
+
+    # Use SSH with config file
+    ssh_config_file = Path.home() / ".ssh" / "config"
+    cmd.extend(["-e", f"ssh -F {ssh_config_file}"])
+
+    # Add source and destination
+    source = str(local_path) + "/"
+    destination = f"{ssh_host}:{remote_path}/"
+    cmd.extend([source, destination])
+
+    # Display info
+    console.print(f"\n[bold]Syncing {local_path} to {ssh_host}:{remote_path}[/bold]\n")
+
+    # Execute rsync
+    try:
+        result = subprocess.run(cmd)
+        if result.returncode == 0:
+            console.print(f"\n[green]✓ Successfully synced to {ssh_host}[/green]")
+        else:
+            console.print(f"\n[red]✗ Sync failed with exit code {result.returncode}[/red]")
+            raise typer.Exit(result.returncode)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Sync interrupted by user[/yellow]")
+        raise typer.Exit(130)
+    except Exception as e:
+        console.print(f"[red]❌ Error running rsync: {e}[/red]")
+        raise typer.Exit(1)
+
+
+# =============================================================================
+# ENV-REVIEW COMMAND
+# =============================================================================
+
+
+@app.command()
+def review():
+    """
+    Review a Plato environment with an artifact ID.
+
+    Prompts for simulator name and artifact ID.
+
+    Example:
+        plato review
+    """
+    console.print("[bold cyan]🚀 Plato Environment Review[/bold cyan]")
+    console.print("=" * 40)
+
+    # Get API key
+    api_key = os.getenv("PLATO_API_KEY")
+    if not api_key:
+        console.print("[yellow]📝 API Key not found in environment.[/yellow]")
+        api_key = typer.prompt("Enter your Plato API key", hide_input=True)
+    else:
+        console.print("[green]✅ Using API key from environment[/green]")
+
+    # Get artifact ID
+    artifact_id = typer.prompt("\n📦 Enter artifact ID").strip()
+    if not artifact_id:
+        console.print("[red]❌ Error: Artifact ID is required[/red]")
+        raise typer.Exit(1)
+
+    # Get simulator name
+    simulator = typer.prompt("🖥️  Enter simulator name").strip()
+    if not simulator:
+        console.print("[red]❌ Error: Simulator name is required[/red]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print(
+        f"[cyan]🚀 Creating {simulator} environment with artifact ID: {artifact_id}[/cyan]"
+    )
+    console.print("[cyan]🌍 Using production environment: https://plato.so/api[/cyan]")
+
+    async def _spin_up_environment():
+        base_url = "https://plato.so/api"
+        client = Plato(base_url=base_url, api_key=api_key)
+        environment = None
+        playwright = None
+        browser = None
+        page = None
+
+        try:
+            # Create the environment
+            console.print("[cyan]📦 Creating environment...[/cyan]")
+            environment = await client.make_environment(simulator, artifact_id=artifact_id)
+            console.print(f"[green]✅ Environment created with ID: {environment.id}[/green]")
+
+            # Wait for the environment to be ready
+            console.print(
+                "[cyan]⏳ Waiting for environment to be ready (timeout: 2 minutes)...[/cyan]"
+            )
+            await environment.wait_for_ready(timeout=120.0)
+            console.print("[green]✅ Environment is ready![/green]")
+
+            # Reset the environment
+            console.print("[cyan]🔄 Resetting environment to clean state...[/cyan]")
+            await environment.reset()
+            console.print("[green]✅ Environment reset complete![/green]")
+
+            # Get the public URL
+            console.print("[cyan]🔗 Fetching public URL...[/cyan]")
+            public_url = await environment.get_public_url()
+
+            # Display success information
+            console.print("\n" + "=" * 80)
+            console.print("[bold green]🎉 ENVIRONMENT READY![/bold green]")
+            console.print("=" * 80)
+            console.print(f"[cyan]Simulator:[/cyan]      {simulator}")
+            console.print(f"[cyan]Artifact ID:[/cyan]    {artifact_id}")
+            console.print(f"[cyan]Environment ID:[/cyan] {environment.id}")
+            console.print(f"[cyan]Public URL:[/cyan]     {public_url}")
+            console.print("=" * 80)
+            console.print()
+
+            # Optionally spin up a Playwright browser
+            try:
+                from playwright.async_api import async_playwright
+
+                console.print(
+                    "[cyan]🧭 Launching Playwright browser for environment login...[/cyan]"
+                )
+                playwright = await async_playwright().start()
+                browser = await playwright.chromium.launch(headless=False)
+                page = await browser.new_page()
+                await page.goto(public_url)
+                try:
+                    await environment.login(page, from_api=True, throw_on_login_error=True)
+                    console.print(
+                        "[green]✅ Successfully logged into environment via Playwright[/green]"
+                    )
+                except Exception as e:
+                    console.print(f"[red]❌ Error during Playwright env.login: {e}[/red]")
+            except ImportError:
+                console.print(
+                    "[yellow]⚠️  Playwright is not installed; skipping browser launch[/yellow]"
+                )
+            except Exception as e:
+                console.print(f"[red]❌ Failed to start Playwright browser: {e}[/red]")
+
+            # Interactive loop
+            console.print(
+                "[cyan]🔗 Environment is running and accessible via the public URL above.[/cyan]"
+            )
+            console.print("\n[bold]📋 Available commands:[/bold]")
+            console.print("  - 'state' or 's': Get current environment state")
+            console.print("  - 'end' or 'e': Shut down the environment")
+            console.print()
+
+            while True:
+                try:
+                    command = input("Enter command: ").strip().lower()
+
+                    if command in ["end", "e"]:
+                        console.print("[yellow]👋 Shutting down environment...[/yellow]")
+                        break
+                    elif command in ["state", "s"]:
+                        console.print("\n[cyan]🔍 Getting environment state...[/cyan]")
+                        try:
+                            state = await environment.get_state()
+                            console.print("\n[bold]📊 Current Environment State:[/bold]")
+                            console.print("-" * 40)
+                            if isinstance(state, dict):
+                                console.print(json.dumps(state, indent=2))
+                            else:
+                                console.print(state)
+                            console.print("-" * 40)
+                            console.print()
+                        except Exception as e:
+                            console.print(f"[red]❌ Error getting state: {e}[/red]")
+                    else:
+                        console.print("[yellow]❓ Unknown command. Use 'state' or 'end'[/yellow]")
+
+                except KeyboardInterrupt:
+                    console.print("\n[yellow]⚠️  Interrupted! Shutting down environment...[/yellow]")
+                    break
+
+        except Exception as e:
+            console.print(f"[red]❌ Error creating or managing environment: {e}[/red]")
+            raise
+
+        finally:
+            # Clean up the Playwright browser
+            try:
+                if page is not None:
+                    await page.close()
+                if browser is not None:
+                    await browser.close()
+                if playwright is not None:
+                    await playwright.stop()
+            except Exception as e:
+                console.print(f"[yellow]⚠️  Error during Playwright cleanup: {e}[/yellow]")
+
+            # Clean up the environment
+            if environment:
+                try:
+                    console.print("[cyan]🧹 Shutting down environment...[/cyan]")
+                    await environment.close()
+                    console.print("[green]✅ Environment shut down successfully[/green]")
+                except Exception as e:
+                    console.print(f"[yellow]⚠️  Error during cleanup: {e}[/yellow]")
+
+            # Close the client
+            try:
+                await client.close()
+                console.print("[green]✅ Client closed[/green]")
+            except Exception as e:
+                console.print(f"[yellow]⚠️  Error closing client: {e}[/yellow]")
+
+    handle_async(_spin_up_environment())
+
+
+@app.command()
+def flow(
+    flow_name: str = typer.Option("login", "--flow-name", "-f", help="Name of the flow to execute"),
+):
+    """
+    Execute a test flow against a simulator environment.
+
+    Reads .sandbox.yaml to get the URL. Auto-detects flow file
+    (flows.yaml, flows.yml, flow.yaml, flow.yml). Uses "login" as default flow name.
+
+    Example:
+        plato run-flow
+    """
+    from playwright.async_api import async_playwright
+
+    from plato.flow_executor import FlowExecutor
+    from plato.models.flow import Flow
+
+    sandbox_file = Path.cwd() / ".sandbox.yaml"
+    if not sandbox_file.exists():
+        console.print("[red]❌ .sandbox.yaml not found[/red]")
+        console.print("\n[yellow]Create a sandbox with: [bold]plato hub[/bold][/yellow]")
+        raise typer.Exit(1)
+    try:
+        with open(sandbox_file) as f:
+            sandbox_data = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"[red]❌ Error reading .sandbox.yaml: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    url = sandbox_data.get("url")
+    dataset = sandbox_data.get("dataset")
+    if not url:
+        console.print("[red]❌ .sandbox.yaml missing 'url'[/red]")
+        raise typer.Exit(1)
+    if not dataset:
+        console.print("[red]❌ .sandbox.yaml missing 'dataset'[/red]")
+        raise typer.Exit(1)
+
+    plato_config_path = sandbox_data.get("plato_config_path")
+    if not plato_config_path:
+        console.print("[red]❌ .sandbox.yaml missing 'plato_config_path'[/red]")
+        raise typer.Exit(1)
+    try:
+        with open(plato_config_path) as f:
+            plato_config = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"[red]❌ Could not read plato-config.yml: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    flow_file = None
+    if dataset and "datasets" in plato_config:
+        dataset_config = plato_config["datasets"].get(dataset, {})
+        metadata = dataset_config.get("metadata", {})
+        flows_path = metadata.get("flows_path")
+
+        if flows_path:
+            if not Path(flows_path).is_absolute():
+                config_dir = Path(plato_config_path).parent
+                flow_file = str(config_dir / flows_path)
+            else:
+                flow_file = flows_path
+    if not flow_file or not Path(flow_file).exists():
+        console.print("[red]❌ Flow file not found in plato-config[/red]")
+        console.print(
+            f"[yellow]Dataset '{dataset}' missing metadata.flows_path in plato-config.yml[/yellow]"
+        )
+        raise typer.Exit(1)
+    with open(flow_file) as f:
+        flow_dict = yaml.safe_load(f)
+
+    console.print(f"[cyan]Flow file: {flow_file}[/cyan]")
+    console.print(f"[cyan]URL: {url}[/cyan]")
+    console.print(f"[cyan]Flow name: {flow_name}[/cyan]")
+
+    flow = next(
+        (
+            Flow.model_validate(flow)
+            for flow in flow_dict.get("flows", [])
+            if flow.get("name") == flow_name
+        ),
+        None,
+    )
+    if not flow:
+        console.print(f"[red]❌ Flow named '{flow_name}' not found in {flow_file}[/red]")
+        raise typer.Exit(1)
+
+    screenshots_dir = Path(flow_file).parent / "screenshots"
+
+    async def _run():
+        browser = None
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=False)
+                page = await browser.new_page()
+                await page.goto(url)
+                executor = FlowExecutor(page, flow, screenshots_dir, logger=flow_logger)
+                result = await executor.execute_flow()
+                console.print("[green]✅ Flow executed successfully[/green]")
+                return result
+        except Exception as e:
+            console.print(f"[red]❌ Flow execution failed: {e}[/red]")
+            raise typer.Exit(1) from e
+        finally:
+            if browser:
+                await browser.close()
+
+    handle_async(_run())
+
+
+@app.command()
+def state():
+    """Get the current state of the simulator environment (reads .sandbox.yaml)."""
+    # Read .sandbox.yaml
+    sandbox_file = Path.cwd() / ".sandbox.yaml"
+    if not sandbox_file.exists():
+        console.print("[red]❌ No .sandbox.yaml - run: plato hub[/red]")
+        raise typer.Exit(1)
+
+    with open(sandbox_file) as f:
+        data = yaml.safe_load(f)
+
+    job_group_id = data.get("job_group_id")
+    if not job_group_id:
+        console.print("[red]❌ .sandbox.yaml missing job_group_id[/red]")
+        raise typer.Exit(1)
+
+    # Get API key
+    api_key = os.getenv("PLATO_API_KEY")
+    if not api_key:
+        console.print("[red]❌ PLATO_API_KEY not set[/red]")
+        raise typer.Exit(1)
+
+    async def _get_state():
+        client = Plato(api_key=api_key)
+        try:
+            console.print(f"[cyan]Getting state for job_group_id: {job_group_id}[/cyan]")
+            state = await client.get_environment_state(job_group_id, merge_mutations=False)
+
+            console.print("\n[bold]Environment State:[/bold]")
+            console.print(json.dumps(state, indent=2))
+        finally:
+            await client.close()
+
+    handle_async(_get_state())
+
+
+@app.command()
+def audit_ui():
+    """
+    Launch Streamlit UI for auditing database ignore rules.
+
+    Note: Requires streamlit to be installed:
+        pip install streamlit psycopg2-binary pymysql
+
+    Examples:
+        plato audit-ui
+    """
+    # Check if streamlit is installed
+    if not shutil.which("streamlit"):
+        console.print("[red]❌ streamlit is not installed[/red]")
+        console.print("\n[yellow]Install with:[/yellow]")
+        console.print("  pip install streamlit psycopg2-binary pymysql")
+        raise typer.Exit(1)
+
+    # Find the audit_ui.py file
+    package_dir = Path(__file__).resolve().parent
+    ui_file = package_dir / "audit_ui.py"
+
+    if not ui_file.exists():
+        console.print(f"[red]❌ UI file not found: {ui_file}[/red]")
+        raise typer.Exit(1)
+
+    console.print("[cyan]Launching Streamlit UI...[/cyan]")
+
+    try:
+        # Launch streamlit
+        os.execvp("streamlit", ["streamlit", "run", str(ui_file)])
+    except Exception as e:
+        console.print(f"[red]❌ Failed to launch Streamlit: {e}[/red]")
+        raise typer.Exit(1) from e
 
 
 def main():
