@@ -50,7 +50,6 @@ venv
 
 # Python testing and coverage
 .coverage
-.coveragerc
 coverage.xml
 htmlcov/
 .pytest_cache/
