@@ -450,6 +450,7 @@ jobs:
           if [[ "${{ matrix.platform }}" == "linux-amd64" ]]; then
             export GOOS=linux
             export GOARCH=amd64
+            export CGO_ENABLED=1
           elif [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
             export GOOS=linux
             export GOARCH=arm64
@@ -459,12 +460,24 @@ jobs:
           elif [[ "${{ matrix.platform }}" == "macos-x86_64" ]]; then
             export GOOS=darwin
             export GOARCH=amd64
+            export CGO_ENABLED=1
           elif [[ "${{ matrix.platform }}" == "macos-arm64" ]]; then
             export GOOS=darwin
             export GOARCH=arm64
+            export CGO_ENABLED=1
           fi
           
-          echo "Building for platform: GOOS=$GOOS GOARCH=$GOARCH"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Build Configuration:"
+          echo "  Target Platform: ${{ matrix.platform }}"
+          echo "  GOOS: $GOOS"
+          echo "  GOARCH: $GOARCH"
+          echo "  CGO_ENABLED: ${CGO_ENABLED:-0}"
+          echo "  CC: ${CC:-default}"
+          echo "  Runner OS: $(uname -s) $(uname -m)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
           ./scripts/build-python.sh
         shell: bash
 
@@ -474,69 +487,110 @@ jobs:
           EXPECTED_VERSION="${{ needs.release.outputs.cli_version }}"
           CLI_BIN="python/src/plato/bin/plato-cli"
           
-          if [ -f "$CLI_BIN" ]; then
-            echo "✅ CLI binary found at: $CLI_BIN"
-            
-            # Check binary file type
-            file "$CLI_BIN" || true
-            
-            # Verify it's for the correct platform
-            if [[ "${{ matrix.platform }}" == "linux-amd64" ]]; then
-              if file "$CLI_BIN" | grep -q "ELF.*x86-64"; then
-                echo "✅ Binary is correctly built for Linux x86-64"
-              else
-                echo "❌ ERROR: Binary is not for Linux x86-64"
-                file "$CLI_BIN"
-                exit 1
-              fi
-            elif [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
-              if file "$CLI_BIN" | grep -qE "ELF.*(aarch64|ARM aarch64)"; then
-                echo "✅ Binary is correctly built for Linux ARM64"
-              else
-                echo "❌ ERROR: Binary is not for Linux ARM64"
-                file "$CLI_BIN"
-                exit 1
-              fi
-            elif [[ "${{ matrix.platform }}" == "macos-x86_64" ]]; then
-              if file "$CLI_BIN" | grep -q "Mach-O.*x86_64"; then
-                echo "✅ Binary is correctly built for macOS x86-64"
-              else
-                echo "❌ ERROR: Binary is not for macOS x86-64"
-                file "$CLI_BIN"
-                exit 1
-              fi
-            elif [[ "${{ matrix.platform }}" == "macos-arm64" ]]; then
-              if file "$CLI_BIN" | grep -q "Mach-O.*arm64"; then
-                echo "✅ Binary is correctly built for macOS ARM64"
-              else
-                echo "❌ ERROR: Binary is not for macOS ARM64"
-                file "$CLI_BIN"
-                exit 1
-              fi
-            fi
-            
-            # Check library file too
-            if [[ "${{ matrix.platform }}" == "linux-amd64" ]] || [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
-              LIB_FILE="python/src/plato/libplato.so"
-            else
-              LIB_FILE="python/src/plato/libplato.dylib"
-            fi
-            
-            if [ -f "$LIB_FILE" ]; then
-              echo ""
-              echo "Library file type:"
-              file "$LIB_FILE"
-            fi
-            
-            # Try to get version from the binary (if it has a --version flag)
-            echo ""
-            if $CLI_BIN --version 2>/dev/null | head -1 || echo "Version check not available"; then
-              echo "Expected version: $EXPECTED_VERSION"
-            fi
-          else
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Verification for platform: ${{ matrix.platform }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          
+          if [ ! -f "$CLI_BIN" ]; then
             echo "❌ ERROR: CLI binary not found at $CLI_BIN"
+            echo "Contents of python/src/plato/bin/:"
+            ls -la python/src/plato/bin/ || echo "Directory does not exist"
             exit 1
           fi
+          
+          echo "✅ CLI binary found at: $CLI_BIN"
+          echo ""
+          
+          # Check binary file type
+          echo "Binary file type:"
+          file "$CLI_BIN"
+          echo ""
+          
+          # Verify it's for the correct platform
+          PLATFORM_OK=false
+          
+          if [[ "${{ matrix.platform }}" == "linux-amd64" ]]; then
+            if file "$CLI_BIN" | grep -q "ELF.*x86-64"; then
+              echo "✅ Binary is correctly built for Linux x86-64"
+              PLATFORM_OK=true
+            else
+              echo "❌ ERROR: Binary is not for Linux x86-64"
+            fi
+          elif [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+            if file "$CLI_BIN" | grep -qE "ELF.*(aarch64|ARM aarch64)"; then
+              echo "✅ Binary is correctly built for Linux ARM64"
+              PLATFORM_OK=true
+            else
+              echo "❌ ERROR: Binary is not for Linux ARM64"
+            fi
+          elif [[ "${{ matrix.platform }}" == "macos-x86_64" ]]; then
+            if file "$CLI_BIN" | grep -q "Mach-O.*x86_64"; then
+              echo "✅ Binary is correctly built for macOS x86-64"
+              PLATFORM_OK=true
+            else
+              echo "❌ ERROR: Binary is not for macOS x86-64"
+            fi
+          elif [[ "${{ matrix.platform }}" == "macos-arm64" ]]; then
+            if file "$CLI_BIN" | grep -q "Mach-O.*arm64"; then
+              echo "✅ Binary is correctly built for macOS ARM64"
+              PLATFORM_OK=true
+            else
+              echo "❌ ERROR: Binary is not for macOS ARM64"
+            fi
+          fi
+          
+          if [ "$PLATFORM_OK" = false ]; then
+            echo ""
+            echo "Expected platform: ${{ matrix.platform }}"
+            echo "Actual binary type: $(file "$CLI_BIN")"
+            exit 1
+          fi
+          
+          # Check library file too
+          echo ""
+          if [[ "${{ matrix.platform }}" == "linux-amd64" ]] || [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+            LIB_FILE="python/src/plato/libplato.so"
+            EXPECTED_LIB_TYPE="ELF"
+          else
+            LIB_FILE="python/src/plato/libplato.dylib"
+            EXPECTED_LIB_TYPE="Mach-O"
+          fi
+          
+          if [ -f "$LIB_FILE" ]; then
+            echo "Library file type:"
+            LIB_TYPE=$(file "$LIB_FILE")
+            echo "$LIB_TYPE"
+            
+            if echo "$LIB_TYPE" | grep -q "$EXPECTED_LIB_TYPE"; then
+              echo "✅ Library has correct file type"
+            else
+              echo "❌ ERROR: Library has wrong file type (expected $EXPECTED_LIB_TYPE)"
+              exit 1
+            fi
+          else
+            echo "⚠️  Warning: Library file not found at $LIB_FILE"
+          fi
+          
+          # Try to get version from the binary (if it runs on this platform)
+          echo ""
+          echo "Version check:"
+          if [[ "$(uname -s)" == "Darwin" ]] && [[ "${{ matrix.platform }}" == macos-* ]]; then
+            # Can run on macOS
+            if $CLI_BIN --version 2>/dev/null | head -1; then
+              echo "Expected version: $EXPECTED_VERSION"
+            fi
+          elif [[ "$(uname -s)" == "Linux" ]] && [[ "${{ matrix.platform }}" == linux-* ]]; then
+            # Can run on Linux (but might be wrong arch)
+            echo "Skipping execution test (might be wrong architecture for runner)"
+          else
+            echo "Skipping execution test (cross-compiled binary)"
+          fi
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Platform verification passed"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         shell: bash
 
       - name: Verify Python SDK version
