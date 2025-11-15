@@ -35,18 +35,34 @@ if [ ! -f "go.mod" ]; then
 fi
 
 # Detect platform and set library name
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    LIB_NAME="libplato.dylib"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    LIB_NAME="libplato.so"
-else
-    LIB_NAME="libplato.dll"
+# Respect GOOS if set (for cross-compilation), otherwise use OSTYPE
+TARGET_OS="${GOOS:-}"
+if [ -z "$TARGET_OS" ]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        TARGET_OS="darwin"
+    else
+        TARGET_OS="linux"
+    fi
 fi
 
-echo "📦 Building $LIB_NAME..."
+if [[ "$TARGET_OS" == "darwin" ]]; then
+    LIB_NAME="libplato.dylib"
+else
+    LIB_NAME="libplato.so"
+fi
+
+echo "📦 Building $LIB_NAME for $TARGET_OS ${GOARCH:-native}..."
+
+# Build with explicit GOOS/GOARCH if set
+BUILD_CMD="go build -buildmode=c-shared -o $LIB_NAME sandbox.go"
 if go build -buildmode=c-shared -o "$LIB_NAME" sandbox.go; then
     LIB_SIZE=$(du -h "$LIB_NAME" | cut -f1)
     echo "✅ Built $LIB_NAME ($LIB_SIZE)"
+    
+    # Verify binary architecture if 'file' command is available
+    if command -v file &> /dev/null; then
+        echo "📋 Binary info: $(file "$LIB_NAME")"
+    fi
 else
     echo "❌ Build failed"
     exit 1
@@ -75,11 +91,6 @@ fi
 # Use a consistent binary name for the bundled CLI
 BINARY_NAME="plato-cli"
 
-# Add .exe extension for Windows
-if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
-    BINARY_NAME="plato-cli.exe"
-fi
-
 # Read version from VERSION file at project root
 VERSION="dev"
 if [ -f "$PROJECT_ROOT/VERSION" ]; then
@@ -96,10 +107,15 @@ BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 # Build with version information
 LDFLAGS="-X 'plato-cli/internal/ui/components.Version=${VERSION}' -X 'plato-cli/internal/ui/components.GitCommit=${GIT_COMMIT}' -X 'plato-cli/internal/ui/components.BuildTime=${BUILD_TIME}'"
 
-echo "📦 Building CLI binary: $BINARY_NAME..."
+echo "📦 Building CLI binary: $BINARY_NAME for ${GOOS:-native} ${GOARCH:-native}..."
 if go build -ldflags="${LDFLAGS}" -o "$BINARY_NAME" .; then
     CLI_SIZE=$(du -h "$BINARY_NAME" | cut -f1)
     echo "✅ Built $BINARY_NAME ($CLI_SIZE)"
+    
+    # Verify binary architecture if 'file' command is available
+    if command -v file &> /dev/null; then
+        echo "📋 Binary info: $(file "$BINARY_NAME")"
+    fi
 
     # Copy to Python package
     mkdir -p "$PYTHON_PKG_DIR/bin"
