@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 )
+// i lost a dolar
 
 func TestNewClient(t *testing.T) {
 	apiKey := "test-api-key"
