@@ -74,8 +74,8 @@ async def run_browseruse_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
     )
     page = await agent.browser_context.get_current_page()
     # # page = await playwright_browser.new_page()
-    await page.goto(start_url)
-    await page.wait_for_load_state("networkidle")
+    # await page.goto(start_url)
+    # await page.wait_for_load_state("networkidle")
     try:
         await env.login(page)
     except Exception as e:
@@ -88,7 +88,7 @@ async def run_openai_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironment)
         agent = OpenAIAgent(
             computer=computer,
         )
-        await computer.goto(start_url)
+        #await computer.goto(start_url)
         page = computer._page
         try:
           await env.login(page)
@@ -110,7 +110,7 @@ async def run_anthropic_cua_task(cdp_url, prompt, start_url, env: PlatoEnvironme
             api_key=os.getenv("ANTHROPIC_API_KEY") or "",
         )
         page = computer._page
-        await computer.goto(start_url)
+        #await computer.goto(start_url)
         try:
           await env.login(page)
         except Exception as e:
@@ -348,21 +348,50 @@ async def main():
     concurrency_semaphores = await create_concurrency_controllers(concurrency)
 
     try:
-        # Create tasks
+        first_task_completed = False
+        
+        # Process the first task synchronously to create agent artifact AND complete the task
+        if tests_to_run and num_runs > 0:
+            print(f"🔒 Processing first task synchronously to create agent artifact: {agent_version}")
+            first_task = tests_to_run[0]
+            
+            try:
+                # Run the complete task for the first test (this creates the agent artifact)
+                await run_task(client, first_task, agent_version=agent_version, task_set=selected_simulator_name.lower())
+                print(f"✅ First task processed successfully, agent artifact created")
+                first_task_completed = True
+            except Exception as e:
+                logger.error(f"Error processing first task {first_task.name}: {e}", exc_info=True)
+                print(f"❌ First task failed, but agent artifact may still be created")
+        
+        # Create remaining tasks to run concurrently (avoid duplicate processing)
         async_tasks = []
+        
+        # Calculate which tasks/runs to process
+        tasks_to_process = []
         for i, task in enumerate(tests_to_run):
             for run_num in range(num_runs):
-                # Distribute tasks across available semaphores for better concurrency
-                semaphore_index = (i * num_runs + run_num) % len(concurrency_semaphores)
-                async_tasks.append(
-                    run_with_concurrency_limit(
-                        concurrency_semaphores[semaphore_index], client, task, agent_version=agent_version, task_set=selected_simulator_name.lower()
-                    )
+                # Skip the first run of the first task if it was already processed
+                if i == 0 and run_num == 0 and first_task_completed:
+                    continue
+                tasks_to_process.append((i, task, run_num))
+        
+        # Create async tasks for remaining work
+        for i, task, run_num in tasks_to_process:
+            # Distribute tasks across available semaphores for better concurrency
+            semaphore_index = (i * num_runs + run_num) % len(concurrency_semaphores)
+            async_tasks.append(
+                run_with_concurrency_limit(
+                    concurrency_semaphores[semaphore_index], client, task, agent_version=agent_version, task_set=selected_simulator_name.lower()
                 )
+            )
 
-        # Run tasks
-        print(f"\nRunning {len(async_tasks)} tasks with agent: {agent_version}")
-        await asyncio.gather(*async_tasks)
+        # Run remaining tasks concurrently
+        if async_tasks:
+            print(f"✅ Agent artifact created, now running {len(async_tasks)} remaining tasks concurrently with agent: {agent_version}")
+            await asyncio.gather(*async_tasks)
+        else:
+            print(f"✅ Only one task to run, completed synchronously")
 
         print("\nAll tasks completed!")
     finally:
